@@ -14,6 +14,8 @@
     "@mantine/core": "^9.8.2",
     "@mantine/hooks": "^9.8.2",
     "@tanstack/react-query": "^5.108.2",
+    "@tanstack/react-router": "^1.170.46",
+    "better-auth": "^1.7.27",
     "hono": "^4.13.19",
     "i18next": "^27.2.2",
     "i18next-icu": "^2.7.1",

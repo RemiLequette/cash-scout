@@ -3,11 +3,69 @@
     "title": "cash-scout",
     "tagline": "Plan, project forward, control and analyse your money."
   },
+  "language": "Language",
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "delete": "Delete",
+    "error": "Something went wrong: {message}"
+  },
+  "nav": {
+    "books": "Books",
+    "admin": "Users",
+    "signOut": "Sign out"
+  },
+  "signIn": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "failed": "Wrong email or password."
+  },
+  "roles": {
+    "owner": "Owner",
+    "editor": "Editor",
+    "viewer": "Viewer"
+  },
+  "books": {
+    "title": "Books",
+    "empty": "You are not a member of any book yet. Create one to start.",
+    "create": "New book",
+    "name": "Name",
+    "currency": "Currency",
+    "currencyHint": "Currency of the book's totals. It cannot be changed later.",
+    "defaultLanguage": "Default language",
+    "defaultLanguageHint": "Language of the categories when no translation exists.",
+    "role": "Your role",
+    "open": "Open"
+  },
+  "book": {
+    "settings": "Settings",
+    "members": "Members",
+    "addMember": "Add a member",
+    "memberEmail": "Email of an existing user",
+    "remove": "Remove",
+    "leave": "Leave this book",
+    "deleteBook": "Delete this book",
+    "deleteConfirm": "Delete the book {name} and all its data? This cannot be undone.",
+    "you": "you"
+  },
+  "admin": {
+    "title": "Users",
+    "intro": "As super user, you create the users. You see a book's data only if you are a member of it.",
+    "create": "New user",
+    "name": "Name",
+    "email": "Email",
+    "password": "Initial password",
+    "passwordHint": "At least 10 characters. Give it to the user, who can change it later.",
+    "superUser": "Super user",
+    "removeConfirm": "Remove the user {email}? Their memberships are removed too.",
+    "forbidden": "Only the super user can manage users."
+  },
+  "notFound": "Page not found.",
   "health": {
     "title": "Server status",
-    "checking": "Checking…",
-    "ok": "API and database are running.",
     "error": "The database cannot be reached."
-  },
-  "language": "Language"
+  }
 }

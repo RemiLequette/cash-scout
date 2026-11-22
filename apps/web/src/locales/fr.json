@@ -3,11 +3,69 @@
     "title": "cash-scout",
     "tagline": "Planifier, anticiper, contrôler et analyser votre argent."
   },
+  "language": "Langue",
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "delete": "Supprimer",
+    "error": "Une erreur est survenue : {message}"
+  },
+  "nav": {
+    "books": "Livres",
+    "admin": "Utilisateurs",
+    "signOut": "Se déconnecter"
+  },
+  "signIn": {
+    "title": "Connexion",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "submit": "Se connecter",
+    "failed": "E-mail ou mot de passe incorrect."
+  },
+  "roles": {
+    "owner": "Propriétaire",
+    "editor": "Éditeur",
+    "viewer": "Lecteur"
+  },
+  "books": {
+    "title": "Livres",
+    "empty": "Vous n'êtes membre d'aucun livre. Créez-en un pour commencer.",
+    "create": "Nouveau livre",
+    "name": "Nom",
+    "currency": "Devise",
+    "currencyHint": "Devise des totaux du livre. Elle ne peut plus être changée ensuite.",
+    "defaultLanguage": "Langue par défaut",
+    "defaultLanguageHint": "Langue des catégories quand aucune traduction n'existe.",
+    "role": "Votre rôle",
+    "open": "Ouvrir"
+  },
+  "book": {
+    "settings": "Paramètres",
+    "members": "Membres",
+    "addMember": "Ajouter un membre",
+    "memberEmail": "E-mail d'un utilisateur existant",
+    "remove": "Retirer",
+    "leave": "Quitter ce livre",
+    "deleteBook": "Supprimer ce livre",
+    "deleteConfirm": "Supprimer le livre {name} et toutes ses données ? Cette action est définitive.",
+    "you": "vous"
+  },
+  "admin": {
+    "title": "Utilisateurs",
+    "intro": "En tant que super utilisateur, vous créez les utilisateurs. Vous ne voyez les données d'un livre que si vous en êtes membre.",
+    "create": "Nouvel utilisateur",
+    "name": "Nom",
+    "email": "E-mail",
+    "password": "Mot de passe initial",
+    "passwordHint": "Au moins 10 caractères. Communiquez-le à l'utilisateur, qui pourra le changer.",
+    "superUser": "Super utilisateur",
+    "removeConfirm": "Supprimer l'utilisateur {email} ? Ses accès aux livres sont supprimés aussi.",
+    "forbidden": "Seul le super utilisateur gère les utilisateurs."
+  },
+  "notFound": "Page introuvable.",
   "health": {
     "title": "État du serveur",
-    "checking": "Vérification…",
-    "ok": "L'API et la base de données fonctionnent.",
     "error": "La base de données est injoignable."
-  },
-  "language": "Langue"
+  }
 }

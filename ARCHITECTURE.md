@@ -32,7 +32,7 @@ A pnpm workspace, TypeScript everywhere:
 
 - **Hono** for the HTTP API: very light, and its typed client gives the front end the API's types without code generation.
 - **Drizzle ORM** on **PostgreSQL**: schema and migrations in TypeScript, SQL kept visible for reporting queries.
-- **better-auth** for authentication: local accounts, secure session cookies, password hashing. OIDC can be added later. The super user is created at first start.
+- **better-auth** for authentication: local accounts, secure session cookies, password hashing. OIDC can be added later. There is no public sign-up: the super user, created at first start from `SUPERUSER_*` variables, creates the users (better-auth admin plugin).
 - **Audit log**: who created, changed or deleted what, per book, so members of a shared book can follow changes.
 
 ### Book isolation
@@ -40,7 +40,15 @@ A pnpm workspace, TypeScript everywhere:
 Books are fully separate (see the README). Isolation is enforced twice:
 
 1. **In the API**: every request names a book; the API checks the user's membership and role before anything else.
-2. **In the database**: every book-owned table carries `book_id`, and PostgreSQL **row-level security** allows a session to see only the books set for the request. A query that forgets a filter still cannot read another book.
+2. **In the database**: every book-owned table carries `book_id`, and PostgreSQL **row-level security** lets a request see only its user's books. A query that forgets a filter still cannot read another book.
+
+How the database side works:
+
+- Migrations run as the database owner. The API then runs every query as the role `cashscout_app`, which is not the table owner and cannot bypass row-level security.
+- Each request touching book data runs in a transaction that sets `app.user_id` (`withUser` in `apps/api/src/db/client.ts`). Without it, no book row is visible.
+- Policies call `app_book_ids(min_role)`, the books of the current user with at least a role. Reading needs membership; changing a book or its members needs the owner role.
+- Every new book-owned table gets the same policies, with `editor` for writes.
+- Tests check it directly: unfiltered queries, and writes into another user's book that bypass the API.
 
 Linked entries between two books are written in one transaction, after checking editor rights on both books.
 
@@ -86,6 +94,7 @@ Everything runs on the developer's machine before any server exists. Two modes, 
 
 - **Requirements**: Node 22 LTS, pnpm (through `corepack enable`), Docker Desktop (WSL 2 on Windows).
 - **Configuration**: `.env.example` is versioned; each developer copies it to `.env`, which is ignored.
+- **Tests**: `pnpm test` runs the API tests against a `<database>_test` database on the same server, recreated at each run; CI does the same with a PostgreSQL service.
 - **Demo data**: `pnpm seed` creates fictitious users and books (a private book, a household book, linked entries, schedules, budgets in two currencies), so every screen can be tried without real data.
 - **Real data stays out of the repository**: imports of real books, dumps and the local restic repository go to `local/`, which is ignored by Git. Tests and examples use fictitious data only.
 - **Backup in local**: the `backup` service writes dumps to `local/backups` and its off-site copy to a restic repository in `local/offsite`, so the full backup and restore cycle is tested before a real destination is chosen.
