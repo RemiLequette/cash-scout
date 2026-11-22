@@ -11,12 +11,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { eq } from "drizzle-orm";
-import { APP_ROLE, createDb, withUser } from "../db/client.js";
-import { user } from "../db/schema.js";
-import { loadEnv } from "../env.js";
-import { requireRole } from "../routes/access.js";
-import { ImportError, importReference } from "./reference.js";
+import { importReference } from "./reference.js";
+import { runImport } from "./run.js";
 
 const { values } = parseArgs({
   options: {
@@ -46,26 +42,10 @@ if (!csv.categories && !csv.accounts && !csv.paymentTypes) {
   process.exit(2);
 }
 
-const env = loadEnv();
-const { db, sql } = createDb(env.databaseUrl, { role: APP_ROLE });
-try {
-  const [found] = await db
-    .select({ id: user.id })
-    .from(user)
-    .where(eq(user.email, values.user.toLowerCase()));
-  if (!found) {
-    throw new ImportError(`No user with the email ${values.user}`);
-  }
-  const bookId = values.book;
-  const summary = await withUser(db, found.id, async (tx) => {
-    await requireRole(tx, bookId, found.id, "editor");
-    return importReference(tx, bookId, csv);
-  });
+const summary = await runImport(values.user, values.book, (tx) =>
+  importReference(tx, values.book!, csv),
+);
+if (summary) {
   console.log("Created:", summary.created);
   console.log("Already there:", summary.existing);
-} catch (error) {
-  console.error(`Import failed, nothing was imported: ${(error as Error).message}`);
-  process.exitCode = 1;
-} finally {
-  await sql.end();
 }

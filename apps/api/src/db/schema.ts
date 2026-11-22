@@ -1,12 +1,16 @@
 import type { Names } from "@cash-scout/domain";
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
   char,
+  check,
+  date,
   foreignKey,
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -233,4 +237,63 @@ export const bookAccount = pgTable(
     archivedAt: archivedAt(),
   },
   (t) => [unique().on(t.id, t.bookId), index("book_account_book_idx").on(t.bookId)],
+);
+
+// ---------------------------------------------------------------------------
+// Journal (see README, Journal). One entry per transaction, past or future.
+// Year, month, category, group and direction are derived, never stored.
+// ---------------------------------------------------------------------------
+
+export const journalEntry = pgTable(
+  "journal_entry",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    date: date("date", { mode: "string" }).notNull(),
+    accountId: uuid("account_id").notNull(),
+    subCategoryId: uuid("sub_category_id").notNull(),
+    description: text("description").notNull().default(""),
+    paymentTypeId: uuid("payment_type_id"),
+    /** Signed, in minor units of the account currency, as entered. */
+    amount: bigint("amount", { mode: "bigint" }).notNull(),
+    /** The amount when the entry was created; never changed. Variance = amount − planned. */
+    plannedAmount: bigint("planned_amount", { mode: "bigint" }).notNull(),
+    /** 1 unit of the account currency = rate units of the book currency, fixed when saved. */
+    exchangeRate: numeric("exchange_rate").notNull(),
+    /** The amount in minor units of the book currency, at the exchange rate. */
+    bookAmount: bigint("book_amount", { mode: "bigint" }).notNull(),
+    /** For information only: the amount and currency actually paid. */
+    originalAmount: bigint("original_amount", { mode: "bigint" }),
+    originalCurrency: char("original_currency", { length: 3 }),
+    /** Matched with the bank statement; an unreconciled entry is a forecast. */
+    reconciled: boolean("reconciled").notNull().default(false),
+    /** Schedule that generated the entry (schedules come in a later version). */
+    scheduleId: uuid("schedule_id"),
+    /** Matching entry in another book (linked entries come in a later version). */
+    linkId: uuid("link_id"),
+    ...timestamps,
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.accountId, t.bookId],
+      foreignColumns: [bookAccount.id, bookAccount.bookId],
+    }),
+    foreignKey({
+      columns: [t.subCategoryId, t.bookId],
+      foreignColumns: [subCategory.id, subCategory.bookId],
+    }),
+    foreignKey({
+      columns: [t.paymentTypeId, t.bookId],
+      foreignColumns: [paymentType.id, paymentType.bookId],
+    }),
+    check(
+      "journal_entry_original_check",
+      sql`(${t.originalAmount} IS NULL) = (${t.originalCurrency} IS NULL)`,
+    ),
+    check("journal_entry_rate_check", sql`${t.exchangeRate} > 0`),
+    index("journal_entry_book_date_idx").on(t.bookId, t.date),
+    index("journal_entry_account_idx").on(t.accountId),
+    index("journal_entry_sub_category_idx").on(t.subCategoryId),
+    index("journal_entry_payment_type_idx").on(t.paymentTypeId),
+  ],
 );
