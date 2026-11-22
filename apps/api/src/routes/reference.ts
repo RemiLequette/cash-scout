@@ -7,6 +7,7 @@ import {
   checkNames,
   groupInputSchema,
   groupUpdateSchema,
+  mergeSchema,
   money,
   parseThreshold,
   paymentTypeInputSchema,
@@ -16,12 +17,19 @@ import {
   toDecimalString,
   type Names,
 } from "@cash-scout/domain";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
-import { bookAccount, category, categoryGroup, paymentType, subCategory } from "../db/schema.js";
+import {
+  bookAccount,
+  category,
+  categoryGroup,
+  journalEntry,
+  paymentType,
+  subCategory,
+} from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, languagesOf, requireRole } from "./access.js";
 
@@ -305,6 +313,39 @@ export function referenceRoutes(db: Db) {
       .delete("/sub-categories/:id", async (c) =>
         deleteItem(c, db, subCategory, idOf(c.req.param("id"), "Item")),
       )
+      // Moves every entry of a sub-category to another one, then deletes it.
+      .post("/sub-categories/:id/merge", zValidator("json", mergeSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Item");
+        const { targetId } = c.req.valid("json");
+        if (targetId === id) {
+          throw new HTTPException(400, { message: "A sub-category cannot merge into itself" });
+        }
+        const moved = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const found = await tx
+            .select({ id: subCategory.id })
+            .from(subCategory)
+            .where(and(eq(subCategory.bookId, bookId), inArray(subCategory.id, [id, targetId])));
+          if (!found.some((s) => s.id === id)) {
+            throw new HTTPException(404, { message: "Item not found" });
+          }
+          if (!found.some((s) => s.id === targetId)) {
+            throw new HTTPException(400, { message: "Unknown target sub-category" });
+          }
+          const entries = await tx
+            .update(journalEntry)
+            .set({ subCategoryId: targetId })
+            .where(and(eq(journalEntry.bookId, bookId), eq(journalEntry.subCategoryId, id)))
+            .returning({ id: journalEntry.id });
+          await tx
+            .delete(subCategory)
+            .where(and(eq(subCategory.id, id), eq(subCategory.bookId, bookId)));
+          return entries.length;
+        });
+        return c.json({ moved });
+      })
 
       // Payment types ----------------------------------------------------------
       .post("/payment-types", zValidator("json", paymentTypeInputSchema), async (c) => {
@@ -405,7 +446,7 @@ export function referenceRoutes(db: Db) {
 }
 
 /**
- * Deletes an item. An item still used (a group with categories, later a
+ * Deletes an item. An item still used (a group with categories, a
  * sub-category with entries) is refused by its foreign keys: archive it instead.
  */
 async function deleteItem(

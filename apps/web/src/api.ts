@@ -33,8 +33,12 @@ export async function unwrap<R extends AnyResponse>(response: Promise<R>): Promi
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) message = body.error;
+      const body = (await res.json()) as {
+        error?: string | { issues?: { message: string }[] };
+      };
+      // Validation errors carry zod issues instead of a message.
+      if (typeof body.error === "string") message = body.error;
+      else if (body.error?.issues?.[0]) message = body.error.issues[0].message;
     } catch {
       // No JSON body.
     }

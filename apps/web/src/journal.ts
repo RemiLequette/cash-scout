@@ -1,0 +1,98 @@
+import type { EntryInput, EntryUpdate } from "@cash-scout/domain";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { InferResponseType } from "hono/client";
+import { api, unwrap } from "./api";
+
+const journal = api.books[":bookId"].journal;
+export type JournalPage = InferResponseType<typeof journal.$get, 200>;
+export type Entry = JournalPage["entries"][number];
+export type Balance = InferResponseType<typeof journal.balances.$get, 200>[number];
+
+/** Filters of the journal list, as query parameters. */
+export interface JournalFilters {
+  from?: string;
+  to?: string;
+  accountId?: string;
+  categoryId?: string;
+  subCategoryId?: string;
+  reconciled?: "true" | "false";
+  q?: string;
+  limit: number;
+  offset: number;
+}
+
+export function useJournal(bookId: string, filters: JournalFilters) {
+  const query = Object.fromEntries(
+    Object.entries(filters)
+      .filter(([, value]) => value !== undefined && value !== "")
+      .map(([key, value]) => [key, String(value)]),
+  );
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "list", query],
+    queryFn: () => unwrap(journal.$get({ param: { bookId }, query })),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useBalances(bookId: string) {
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "balances"],
+    queryFn: () => unwrap(journal.balances.$get({ param: { bookId } })),
+  });
+}
+
+export type JournalChange =
+  | { action: "create"; body: EntryInput }
+  | { action: "update"; id: string; body: EntryUpdate }
+  | { action: "delete"; id: string }
+  | { action: "reconcile"; ids: string[]; reconciled: boolean };
+
+/** Changes to the journal; the list and balances are reloaded after each. */
+export function useJournalChange(bookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (change: JournalChange) => {
+      const param = { bookId };
+      switch (change.action) {
+        case "create":
+          await unwrap(journal.$post({ param, json: change.body }));
+          return;
+        case "update":
+          await unwrap(
+            journal[":id"].$patch({ param: { ...param, id: change.id }, json: change.body }),
+          );
+          return;
+        case "delete":
+          await unwrap(journal[":id"].$delete({ param: { ...param, id: change.id } }));
+          return;
+        case "reconcile":
+          await unwrap(
+            journal.reconcile.$post({
+              param,
+              json: { ids: change.ids, reconciled: change.reconciled },
+            }),
+          );
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId, "journal"] }),
+  });
+}
+
+/** Today's date in the user's time zone, as "2026-11-22". */
+export function today(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/** Formats a calendar date ("2026-11-22") for a locale, without time zone shifts. */
+export function formatDate(date: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
+    new Date(`${date}T00:00:00Z`),
+  );
+}
+
+/** Accepts a decimal comma as typed in French: "-12,50" → "-12.50". */
+export function decimalInput(text: string): string {
+  return text.trim().replace(/\s/g, "").replace(",", ".");
+}
