@@ -21,7 +21,9 @@
     "email": "E-mail",
     "password": "Mot de passe",
     "submit": "Se connecter",
-    "failed": "E-mail ou mot de passe incorrect."
+    "failed": "E-mail ou mot de passe incorrect.",
+    "stay": "Rester connecté",
+    "stayHint": "Pendant 30 jours sur cet appareil. Ne cochez pas sur un ordinateur partagé."
   },
   "roles": {
     "owner": "Propriétaire",

@@ -21,7 +21,9 @@
     "email": "Email",
     "password": "Password",
     "submit": "Sign in",
-    "failed": "Wrong email or password."
+    "failed": "Wrong email or password.",
+    "stay": "Stay signed in",
+    "stayHint": "For 30 days on this device. Leave it unticked on a shared computer."
   },
   "roles": {
     "owner": "Owner",

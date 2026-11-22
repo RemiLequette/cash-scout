@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Center,
+  Checkbox,
   Paper,
   PasswordInput,
   Stack,
@@ -18,11 +19,14 @@ export function SignIn() {
   const [password, setPassword] = useState("");
   const [failed, setFailed] = useState(false);
   const [pending, setPending] = useState(false);
+  // The last choice is kept on this device; it holds no secret.
+  const [stay, setStay] = useState(() => localStorage.getItem("staySignedIn") === "true");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setPending(true);
-    const { error } = await authClient.signIn.email({ email, password });
+    localStorage.setItem("staySignedIn", String(stay));
+    const { error } = await authClient.signIn.email({ email, password, rememberMe: stay });
     setPending(false);
     setFailed(!!error);
   }
@@ -47,6 +51,12 @@ export function SignIn() {
             required
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
+          />
+          <Checkbox
+            label={t("signIn.stay")}
+            description={t("signIn.stayHint")}
+            checked={stay}
+            onChange={(e) => setStay(e.currentTarget.checked)}
           />
           <Button type="submit" loading={pending}>
             {t("signIn.submit")}
