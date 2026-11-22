@@ -129,215 +129,313 @@ function outEntry(row: EntryRow, currency: string, bookCurrency: string) {
  * Members read; editors and owners write.
  */
 export function journalRoutes(db: Db) {
-  return new Hono<AppEnv>()
-    .get("/", zValidator("query", journalQuerySchema), async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const query = c.req.valid("query");
-      const result = await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "viewer");
-        const filters: SQL[] = [eq(journalEntry.bookId, bookId)];
-        if (query.from) filters.push(gte(journalEntry.date, query.from));
-        if (query.to) filters.push(lte(journalEntry.date, query.to));
-        if (query.accountId) filters.push(eq(journalEntry.accountId, query.accountId));
-        if (query.subCategoryId) {
-          filters.push(eq(journalEntry.subCategoryId, query.subCategoryId));
-        }
-        if (query.categoryId) {
-          filters.push(
-            inArray(
-              journalEntry.subCategoryId,
-              tx
-                .select({ id: subCategory.id })
-                .from(subCategory)
-                .where(
-                  and(eq(subCategory.bookId, bookId), eq(subCategory.categoryId, query.categoryId)),
+  return (
+    new Hono<AppEnv>()
+      .get("/", zValidator("query", journalQuerySchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const query = c.req.valid("query");
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "viewer");
+          const filters: SQL[] = [eq(journalEntry.bookId, bookId)];
+          if (query.from) filters.push(gte(journalEntry.date, query.from));
+          if (query.to) filters.push(lte(journalEntry.date, query.to));
+          if (query.accountId) filters.push(eq(journalEntry.accountId, query.accountId));
+          if (query.subCategoryId) {
+            filters.push(eq(journalEntry.subCategoryId, query.subCategoryId));
+          }
+          if (query.months) {
+            filters.push(
+              query.months.length > 0
+                ? inArray(sql`to_char(${journalEntry.date}, 'YYYY-MM')`, query.months)
+                : sql`false`,
+            );
+          }
+          if (query.subCategoryIds) {
+            filters.push(
+              query.subCategoryIds.length > 0
+                ? inArray(journalEntry.subCategoryId, query.subCategoryIds)
+                : sql`false`,
+            );
+          }
+          if (query.categoryId) {
+            filters.push(
+              inArray(
+                journalEntry.subCategoryId,
+                tx
+                  .select({ id: subCategory.id })
+                  .from(subCategory)
+                  .where(
+                    and(
+                      eq(subCategory.bookId, bookId),
+                      eq(subCategory.categoryId, query.categoryId),
+                    ),
+                  ),
+              ),
+            );
+          }
+          if (query.reconciled) {
+            filters.push(eq(journalEntry.reconciled, query.reconciled === "true"));
+          }
+          if (query.q) {
+            const pattern = `%${query.q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+            filters.push(ilike(journalEntry.description, pattern));
+          }
+          const where = and(...filters);
+          const [rows, [total], bookCurrency] = await Promise.all([
+            tx
+              .select({ ...entryColumns, currency: bookAccount.currency })
+              .from(journalEntry)
+              .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
+              .where(where)
+              .orderBy(desc(journalEntry.date), desc(journalEntry.createdAt), asc(journalEntry.id))
+              .limit(query.limit)
+              .offset(query.offset),
+            tx.select({ n: count() }).from(journalEntry).where(where),
+            bookCurrencyOf(tx, bookId),
+          ]);
+          return {
+            total: total?.n ?? 0,
+            bookCurrency,
+            entries: rows.map(({ currency, ...row }) => outEntry(row, currency, bookCurrency)),
+          };
+        });
+        return c.json(result);
+      })
+
+      // The descriptions most used in the last 12 months, each with its latest
+      // entry, to start a new entry from. Descriptions found on a forecast are
+      // left out: those are planned, not typed.
+      .get("/frequent", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const key = sql<string>`lower(btrim(${journalEntry.description}))`;
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "viewer");
+          const forecasts = tx
+            .select({ key })
+            .from(journalEntry)
+            .where(and(eq(journalEntry.bookId, bookId), eq(journalEntry.reconciled, false)));
+          const top = await tx
+            .select({ key, uses: count() })
+            .from(journalEntry)
+            .where(
+              and(
+                eq(journalEntry.bookId, bookId),
+                eq(journalEntry.reconciled, true),
+                sql`${key} <> ''`,
+                gte(journalEntry.date, sql`current_date - interval '12 months'`),
+                sql`${key} not in (${forecasts})`,
+              ),
+            )
+            .groupBy(key)
+            .orderBy(desc(count()), key)
+            .limit(10);
+          if (top.length === 0) return [];
+          const [latest, bookCurrency] = await Promise.all([
+            tx
+              .selectDistinctOn([key], { ...entryColumns, key, currency: bookAccount.currency })
+              .from(journalEntry)
+              .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
+              .where(
+                and(
+                  eq(journalEntry.bookId, bookId),
+                  eq(journalEntry.reconciled, true),
+                  inArray(
+                    key,
+                    top.map((row) => row.key),
+                  ),
                 ),
-            ),
+              )
+              .orderBy(key, desc(journalEntry.date), desc(journalEntry.createdAt)),
+            bookCurrencyOf(tx, bookId),
+          ]);
+          const byKey = new Map(
+            latest.map(({ key: k, currency, ...row }) => [k, { currency, row }]),
           );
-        }
-        if (query.reconciled) {
-          filters.push(eq(journalEntry.reconciled, query.reconciled === "true"));
-        }
-        if (query.q) {
-          const pattern = `%${query.q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
-          filters.push(ilike(journalEntry.description, pattern));
-        }
-        const where = and(...filters);
-        const [rows, [total], bookCurrency] = await Promise.all([
-          tx
+          return top.flatMap(({ key: k, uses }) => {
+            const found = byKey.get(k);
+            return found
+              ? [{ uses, entry: outEntry(found.row, found.currency, bookCurrency) }]
+              : [];
+          });
+        });
+        return c.json(result);
+      })
+
+      // The months holding entries, with their number, for the period picker.
+      .get("/months", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const month = sql<string>`to_char(${journalEntry.date}, 'YYYY-MM')`;
+        const rows = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "viewer");
+          return tx
+            .select({ month, entries: count() })
+            .from(journalEntry)
+            .where(eq(journalEntry.bookId, bookId))
+            .groupBy(month)
+            .orderBy(month);
+        });
+        return c.json(rows);
+      })
+
+      .get("/balances", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const rows = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "viewer");
+          return tx
+            .select({
+              accountId: bookAccount.id,
+              currency: bookAccount.currency,
+              reconciled: sql<string>`coalesce(sum(${journalEntry.amount}) filter (where ${journalEntry.reconciled}), 0)`,
+              total: sql<string>`coalesce(sum(${journalEntry.amount}), 0)`,
+            })
+            .from(bookAccount)
+            .leftJoin(journalEntry, eq(journalEntry.accountId, bookAccount.id))
+            .where(eq(bookAccount.bookId, bookId))
+            .groupBy(bookAccount.id, bookAccount.currency);
+        });
+        return c.json(
+          rows.map((row) => ({
+            accountId: row.accountId,
+            currency: row.currency,
+            reconciled: toDecimalString(money(BigInt(row.reconciled), row.currency)),
+            total: toDecimalString(money(BigInt(row.total), row.currency)),
+          })),
+        );
+      })
+
+      .post("/", zValidator("json", entryInputSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const input = c.req.valid("json");
+        const entry = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const account = await usable(accountOf(tx, bookId, input.accountId), "account");
+          await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
+          if (input.paymentTypeId) {
+            await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
+          }
+          const bookCurrency = await bookCurrencyOf(tx, bookId);
+          const amount = checked(() => parseAmount(input.amount, account.currency));
+          const rate = checked(() =>
+            resolveRate(account.currency, bookCurrency, input.exchangeRate),
+          );
+          const [created] = await tx
+            .insert(journalEntry)
+            .values({
+              bookId,
+              date: input.date,
+              accountId: input.accountId,
+              subCategoryId: input.subCategoryId,
+              description: input.description,
+              paymentTypeId: input.paymentTypeId ?? null,
+              amount: amount.minor,
+              plannedAmount: amount.minor,
+              exchangeRate: rate,
+              bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
+              ...originalOf(input.originalAmount, input.originalCurrency),
+              reconciled: input.reconciled ?? false,
+            })
+            .returning(entryColumns);
+          return outEntry(created!, account.currency, bookCurrency);
+        });
+        return c.json(entry, 201);
+      })
+
+      .post("/reconcile", zValidator("json", reconcileSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const { ids, reconciled } = c.req.valid("json");
+        const updated = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          return tx
+            .update(journalEntry)
+            .set({ reconciled })
+            .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.id, ids)))
+            .returning({ id: journalEntry.id });
+        });
+        return c.json({ updated: updated.length });
+      })
+
+      .patch("/:id", zValidator("json", entryUpdateSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Entry");
+        const input = c.req.valid("json");
+        const entry = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const [current] = await tx
             .select({ ...entryColumns, currency: bookAccount.currency })
             .from(journalEntry)
             .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
-            .where(where)
-            .orderBy(desc(journalEntry.date), desc(journalEntry.createdAt), asc(journalEntry.id))
-            .limit(query.limit)
-            .offset(query.offset),
-          tx.select({ n: count() }).from(journalEntry).where(where),
-          bookCurrencyOf(tx, bookId),
-        ]);
-        return {
-          total: total?.n ?? 0,
-          bookCurrency,
-          entries: rows.map(({ currency, ...row }) => outEntry(row, currency, bookCurrency)),
-        };
-      });
-      return c.json(result);
-    })
-
-    .get("/balances", async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const rows = await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "viewer");
-        return tx
-          .select({
-            accountId: bookAccount.id,
-            currency: bookAccount.currency,
-            reconciled: sql<string>`coalesce(sum(${journalEntry.amount}) filter (where ${journalEntry.reconciled}), 0)`,
-            total: sql<string>`coalesce(sum(${journalEntry.amount}), 0)`,
-          })
-          .from(bookAccount)
-          .leftJoin(journalEntry, eq(journalEntry.accountId, bookAccount.id))
-          .where(eq(bookAccount.bookId, bookId))
-          .groupBy(bookAccount.id, bookAccount.currency);
-      });
-      return c.json(
-        rows.map((row) => ({
-          accountId: row.accountId,
-          currency: row.currency,
-          reconciled: toDecimalString(money(BigInt(row.reconciled), row.currency)),
-          total: toDecimalString(money(BigInt(row.total), row.currency)),
-        })),
-      );
-    })
-
-    .post("/", zValidator("json", entryInputSchema), async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const input = c.req.valid("json");
-      const entry = await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "editor");
-        const account = await usable(accountOf(tx, bookId, input.accountId), "account");
-        await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
-        if (input.paymentTypeId) {
-          await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
-        }
-        const bookCurrency = await bookCurrencyOf(tx, bookId);
-        const amount = checked(() => parseAmount(input.amount, account.currency));
-        const rate = checked(() => resolveRate(account.currency, bookCurrency, input.exchangeRate));
-        const [created] = await tx
-          .insert(journalEntry)
-          .values({
-            bookId,
-            date: input.date,
-            accountId: input.accountId,
-            subCategoryId: input.subCategoryId,
-            description: input.description,
-            paymentTypeId: input.paymentTypeId ?? null,
-            amount: amount.minor,
-            plannedAmount: amount.minor,
-            exchangeRate: rate,
-            bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
-            ...originalOf(input.originalAmount, input.originalCurrency),
-            reconciled: input.reconciled ?? false,
-          })
-          .returning(entryColumns);
-        return outEntry(created!, account.currency, bookCurrency);
-      });
-      return c.json(entry, 201);
-    })
-
-    .post("/reconcile", zValidator("json", reconcileSchema), async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const { ids, reconciled } = c.req.valid("json");
-      const updated = await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "editor");
-        return tx
-          .update(journalEntry)
-          .set({ reconciled })
-          .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.id, ids)))
-          .returning({ id: journalEntry.id });
-      });
-      return c.json({ updated: updated.length });
-    })
-
-    .patch("/:id", zValidator("json", entryUpdateSchema), async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const id = idOf(c.req.param("id"), "Entry");
-      const input = c.req.valid("json");
-      const entry = await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "editor");
-        const [current] = await tx
-          .select({ ...entryColumns, currency: bookAccount.currency })
-          .from(journalEntry)
-          .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
-          .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
-        if (!current) {
-          throw new HTTPException(404, { message: "Entry not found" });
-        }
-        // Items the entry already uses stay allowed even once archived.
-        if (input.accountId && input.accountId !== current.accountId) {
-          const account = await usable(accountOf(tx, bookId, input.accountId), "account");
-          if (account.currency !== current.currency) {
-            throw new HTTPException(400, {
-              message: "An entry cannot move to an account in another currency",
-            });
+            .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
+          if (!current) {
+            throw new HTTPException(404, { message: "Entry not found" });
           }
-        }
-        if (input.subCategoryId && input.subCategoryId !== current.subCategoryId) {
-          await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
-        }
-        if (input.paymentTypeId && input.paymentTypeId !== current.paymentTypeId) {
-          await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
-        }
-        const bookCurrency = await bookCurrencyOf(tx, bookId);
-        const amount =
-          input.amount === undefined
-            ? money(current.amount, current.currency)
-            : checked(() => parseAmount(input.amount!, current.currency));
-        const rate = checked(() =>
-          resolveRate(current.currency, bookCurrency, input.exchangeRate ?? current.exchangeRate),
-        );
-        const [updated] = await tx
-          .update(journalEntry)
-          .set({
-            date: input.date,
-            accountId: input.accountId,
-            subCategoryId: input.subCategoryId,
-            description: input.description,
-            paymentTypeId: input.paymentTypeId,
-            reconciled: input.reconciled,
-            amount: amount.minor,
-            exchangeRate: rate,
-            bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
-            ...(input.originalAmount !== undefined || input.originalCurrency !== undefined
-              ? originalOf(input.originalAmount, input.originalCurrency)
-              : {}),
-          })
-          .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)))
-          .returning(entryColumns);
-        return outEntry(updated!, current.currency, bookCurrency);
-      });
-      return c.json(entry);
-    })
+          // Items the entry already uses stay allowed even once archived.
+          if (input.accountId && input.accountId !== current.accountId) {
+            const account = await usable(accountOf(tx, bookId, input.accountId), "account");
+            if (account.currency !== current.currency) {
+              throw new HTTPException(400, {
+                message: "An entry cannot move to an account in another currency",
+              });
+            }
+          }
+          if (input.subCategoryId && input.subCategoryId !== current.subCategoryId) {
+            await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
+          }
+          if (input.paymentTypeId && input.paymentTypeId !== current.paymentTypeId) {
+            await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
+          }
+          const bookCurrency = await bookCurrencyOf(tx, bookId);
+          const amount =
+            input.amount === undefined
+              ? money(current.amount, current.currency)
+              : checked(() => parseAmount(input.amount!, current.currency));
+          const rate = checked(() =>
+            resolveRate(current.currency, bookCurrency, input.exchangeRate ?? current.exchangeRate),
+          );
+          const [updated] = await tx
+            .update(journalEntry)
+            .set({
+              date: input.date,
+              accountId: input.accountId,
+              subCategoryId: input.subCategoryId,
+              description: input.description,
+              paymentTypeId: input.paymentTypeId,
+              reconciled: input.reconciled,
+              amount: amount.minor,
+              exchangeRate: rate,
+              bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
+              ...(input.originalAmount !== undefined || input.originalCurrency !== undefined
+                ? originalOf(input.originalAmount, input.originalCurrency)
+                : {}),
+            })
+            .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)))
+            .returning(entryColumns);
+          return outEntry(updated!, current.currency, bookCurrency);
+        });
+        return c.json(entry);
+      })
 
-    .delete("/:id", async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const id = idOf(c.req.param("id"), "Entry");
-      await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "editor");
-        const deleted = await tx
-          .delete(journalEntry)
-          .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)))
-          .returning({ id: journalEntry.id });
-        if (deleted.length === 0) {
-          throw new HTTPException(404, { message: "Entry not found" });
-        }
-      });
-      return c.body(null, 204);
-    });
+      .delete("/:id", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Entry");
+        await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const deleted = await tx
+            .delete(journalEntry)
+            .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)))
+            .returning({ id: journalEntry.id });
+          if (deleted.length === 0) {
+            throw new HTTPException(404, { message: "Entry not found" });
+          }
+        });
+        return c.body(null, 204);
+      })
+  );
 }

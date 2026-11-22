@@ -91,10 +91,23 @@ export const journalQuerySchema = z.object({
   accountId: z.uuid().optional(),
   categoryId: z.uuid().optional(),
   subCategoryId: z.uuid().optional(),
+  /** Only these sub-categories, comma-separated; an empty list matches no entry. */
+  subCategoryIds: z
+    .string()
+    .transform((text) => (text === "" ? [] : text.split(",")))
+    .pipe(z.array(z.uuid()).max(1000))
+    .optional(),
+  /** Only these months ("2026-11"), comma-separated; an empty list matches no entry. */
+  months: z
+    .string()
+    .transform((text) => (text === "" ? [] : text.split(",")))
+    .pipe(z.array(z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)).max(1200))
+    .optional(),
   reconciled: z.enum(["true", "false"]).optional(),
   /** Text contained in the description, ignoring case. */
   q: z.string().trim().max(100).optional(),
-  limit: z.coerce.number().int().min(1).max(500).default(100),
+  /** Up to a few years of a household's entries in one page. */
+  limit: z.coerce.number().int().min(1).max(2000).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
 export type JournalQuery = z.input<typeof journalQuerySchema>;

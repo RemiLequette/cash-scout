@@ -15,6 +15,10 @@ export interface JournalFilters {
   accountId?: string;
   categoryId?: string;
   subCategoryId?: string;
+  /** Comma-separated; "" shows nothing. */
+  subCategoryIds?: string;
+  /** Comma-separated months ("2026-11"); "" shows nothing. */
+  months?: string;
   reconciled?: "true" | "false";
   q?: string;
   limit: number;
@@ -24,13 +28,36 @@ export interface JournalFilters {
 export function useJournal(bookId: string, filters: JournalFilters) {
   const query = Object.fromEntries(
     Object.entries(filters)
-      .filter(([, value]) => value !== undefined && value !== "")
+      .filter(
+        ([key, value]) =>
+          value !== undefined && (value !== "" || key === "subCategoryIds" || key === "months"),
+      )
       .map(([key, value]) => [key, String(value)]),
   );
   return useQuery({
     queryKey: ["books", bookId, "journal", "list", query],
     queryFn: () => unwrap(journal.$get({ param: { bookId }, query })),
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * The descriptions most used lately, with their latest entry; loaded only
+ * when `enabled`, as the menu that shows them opens.
+ */
+export function useFrequent(bookId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "frequent"],
+    queryFn: () => unwrap(journal.frequent.$get({ param: { bookId } })),
+    enabled,
+  });
+}
+
+/** The months holding entries, with their number. */
+export function useMonths(bookId: string) {
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "months"],
+    queryFn: () => unwrap(journal.months.$get({ param: { bookId } })),
   });
 }
 
