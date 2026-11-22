@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { api, unwrap } from "../api";
 import { useSession } from "../auth";
 import { languageOptions } from "../options";
+import { Journal } from "./Journal";
 import { ReferenceData } from "./Reference";
 
 function ErrorAlert({ error }: { error: Error | null }) {
@@ -53,11 +54,19 @@ function BookView({ bookId }: { bookId: string }) {
         <Badge variant="light">{book.data.currency}</Badge>
         <Badge variant="outline">{t(`roles.${role}`)}</Badge>
       </Group>
-      <Tabs defaultValue="reference" keepMounted={false}>
+      <Tabs defaultValue="journal" keepMounted={false}>
         <Tabs.List>
+          <Tabs.Tab value="journal">{t("book.journal")}</Tabs.Tab>
           <Tabs.Tab value="reference">{t("book.referenceData")}</Tabs.Tab>
           <Tabs.Tab value="settings">{t("book.settingsAndMembers")}</Tabs.Tab>
         </Tabs.List>
+        <Tabs.Panel value="journal" pt="md">
+          <Journal
+            bookId={bookId}
+            bookCurrency={book.data.currency}
+            canEdit={hasRole(role, "editor")}
+          />
+        </Tabs.Panel>
         <Tabs.Panel value="reference" pt="md">
           <ReferenceData bookId={bookId} canEdit={hasRole(role, "editor")} />
         </Tabs.Panel>
