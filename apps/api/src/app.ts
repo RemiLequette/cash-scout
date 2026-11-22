@@ -6,6 +6,15 @@ import type { Db } from "./db/client.js";
 import type { AppEnv } from "./http.js";
 import { booksRoutes } from "./routes/books.js";
 
+/** PostgreSQL constraint errors that are the user's to fix, as a message; else undefined. */
+function conflictMessage(error: unknown): string | undefined {
+  const cause = (error as { cause?: { code?: string } }).cause;
+  const code = (error as { code?: string }).code ?? cause?.code;
+  if (code === "23505") return "Already exists (duplicate code or name)";
+  if (code === "23503") return "Still in use, or refers to an unknown item: archive it instead";
+  return undefined;
+}
+
 export interface AppDeps {
   db: Db;
   auth: Auth;
@@ -28,6 +37,10 @@ export function createApp({ db, auth, pingDatabase }: AppDeps) {
     .onError((error, c) => {
       if (error instanceof HTTPException) {
         return c.json({ error: error.message }, error.status);
+      }
+      const conflict = conflictMessage(error);
+      if (conflict) {
+        return c.json({ error: conflict }, 409);
       }
       console.error(error);
       return c.json({ error: "Internal error" }, 500);

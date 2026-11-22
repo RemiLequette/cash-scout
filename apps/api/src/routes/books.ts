@@ -2,7 +2,6 @@ import { zValidator } from "@hono/zod-validator";
 import {
   bookInputSchema,
   bookUpdateSchema,
-  hasRole,
   memberInputSchema,
   memberUpdateSchema,
   type BookRole,
@@ -11,28 +10,10 @@ import { and, asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
-import { book, bookMember, user } from "../db/schema.js";
+import { book, bookLanguage, bookMember, user } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
-
-async function roleOf(tx: Tx, bookId: string, userId: string): Promise<BookRole | undefined> {
-  const rows = await tx
-    .select({ role: bookMember.role })
-    .from(bookMember)
-    .where(and(eq(bookMember.bookId, bookId), eq(bookMember.userId, userId)));
-  return rows[0]?.role;
-}
-
-/** Fails with 404 when the book is not visible, 403 when the role is too low. */
-async function requireRole(tx: Tx, bookId: string, userId: string, required: BookRole) {
-  const role = await roleOf(tx, bookId, userId);
-  if (!role) {
-    throw new HTTPException(404, { message: "Book not found" });
-  }
-  if (!hasRole(role, required)) {
-    throw new HTTPException(403, { message: `Requires the ${required} role` });
-  }
-  return role;
-}
+import { idOf, languagesOf, requireRole, roleOf } from "./access.js";
+import { referenceRoutes } from "./reference.js";
 
 async function ownerCount(tx: Tx, bookId: string): Promise<number> {
   const owners = await tx
@@ -49,14 +30,7 @@ const bookColumns = {
   defaultLanguage: book.defaultLanguage,
 };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function bookIdOf(param: string): string {
-  if (!UUID.test(param)) {
-    throw new HTTPException(404, { message: "Book not found" });
-  }
-  return param;
-}
+const bookIdOf = (param: string) => idOf(param);
 
 export function booksRoutes(db: Db) {
   return (
@@ -81,8 +55,12 @@ export function booksRoutes(db: Db) {
         await withUser(db, me, async (tx) => {
           await tx.insert(book).values({ id, ...input });
           await tx.insert(bookMember).values({ bookId: id, userId: me, role: "owner" });
+          await tx.insert(bookLanguage).values({ bookId: id, language: input.defaultLanguage });
         });
-        return c.json({ id, ...input, role: "owner" as BookRole }, 201);
+        return c.json(
+          { id, ...input, languages: [input.defaultLanguage], role: "owner" as BookRole },
+          201,
+        );
       })
 
       .get("/:bookId", async (c) => {
@@ -91,7 +69,8 @@ export function booksRoutes(db: Db) {
         const result = await withUser(db, me, async (tx) => {
           const role = await requireRole(tx, bookId, me, "viewer");
           const [row] = await tx.select(bookColumns).from(book).where(eq(book.id, bookId));
-          return { ...row!, role };
+          const { languages } = await languagesOf(tx, bookId);
+          return { ...row!, languages, role };
         });
         return c.json(result);
       })
@@ -99,7 +78,7 @@ export function booksRoutes(db: Db) {
       .patch("/:bookId", zValidator("json", bookUpdateSchema), async (c) => {
         const me = c.var.user.id;
         const bookId = bookIdOf(c.req.param("bookId"));
-        const input = c.req.valid("json");
+        const { languages, ...input } = c.req.valid("json");
         const result = await withUser(db, me, async (tx) => {
           const role = await requireRole(tx, bookId, me, "owner");
           const [row] = await tx
@@ -107,10 +86,16 @@ export function booksRoutes(db: Db) {
             .set(input)
             .where(eq(book.id, bookId))
             .returning(bookColumns);
-          return { ...row!, role };
+          // Names in a removed language are kept, so adding it back restores them.
+          await tx.delete(bookLanguage).where(eq(bookLanguage.bookId, bookId));
+          await tx.insert(bookLanguage).values(languages.map((language) => ({ bookId, language })));
+          const current = await languagesOf(tx, bookId);
+          return { ...row!, languages: current.languages, role };
         });
         return c.json(result);
       })
+
+      .route("/:bookId/reference", referenceRoutes(db))
 
       .delete("/:bookId", async (c) => {
         const me = c.var.user.id;

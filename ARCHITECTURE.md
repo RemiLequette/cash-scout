@@ -47,7 +47,8 @@ How the database side works:
 - Migrations run as the database owner. The API then runs every query as the role `cashscout_app`, which is not the table owner and cannot bypass row-level security.
 - Each request touching book data runs in a transaction that sets `app.user_id` (`withUser` in `apps/api/src/db/client.ts`). Without it, no book row is visible.
 - Policies call `app_book_ids(min_role)`, the books of the current user with at least a role. Reading needs membership; changing a book or its members needs the owner role.
-- Every new book-owned table gets the same policies, with `editor` for writes.
+- Every other book-owned table gets the same policies, with `editor` for writes (reference data since `0004_reference_isolation.sql`).
+- A child item refers to its parent through a composite foreign key `(parent_id, book_id)`, so it cannot point to another book's item even through a bug.
 - Tests check it directly: unfiltered queries, and writes into another user's book that bypass the API.
 
 Linked entries between two books are written in one transaction, after checking editor rights on both books.
@@ -58,7 +59,8 @@ Linked entries between two books are written in one transaction, after checking 
 - **Currencies**: an entry stores its amount in the account's currency, the exchange rate (`numeric`) and the book amount, all fixed when saved. Reports sum book amounts. Display-currency views convert with the period's average rate.
 - **Rates**: a global `exchange_rate` table (date, base, quote, rate, source), filled daily by a job from the European Central Bank reference rates, plus manual rates per book that take precedence.
 - **Derived values** (year, month, category, group, direction) are never stored on an entry; they come from the date and the sub-category.
-- **Reference data names** are stored per language in translation tables; entries, rules and reports reference items by id.
+- **Reference data names** are stored per item in a `names` JSON column, one name per language (`{"fr": "Alimentation", "en": "Food"}`). The API checks them against the book's languages and requires the default one; names in a language the book drops are kept. Entries, rules and reports reference items by id.
+- **Archiving** sets `archived_at`: the item stays for past data and is hidden from choices. Deleting is refused while an item is in use.
 
 ### Reports and projection
 
@@ -68,7 +70,9 @@ Linked entries between two books are written in one transaction, after checking 
 
 ### Import
 
-CSV, OFX and QIF parsing, column mappings per account, classification rules, and matching against unreconciled scheduled entries live in the API. Import runs as a preview first: the user reviews, classifies unknown labels, creates rules, then confirms.
+Reference data is imported from CSV files by `pnpm import:reference`, in one transaction and with the rights of an editor of the book ([format](docs/import.md)).
+
+For bank statements: CSV, OFX and QIF parsing, column mappings per account, classification rules, and matching against unreconciled scheduled entries live in the API. Import runs as a preview first: the user reviews, classifies unknown labels, creates rules, then confirms.
 
 ## Front end
 

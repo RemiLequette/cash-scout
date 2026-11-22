@@ -49,7 +49,11 @@
     "leave": "Leave this book",
     "deleteBook": "Delete this book",
     "deleteConfirm": "Delete the book {name} and all its data? This cannot be undone.",
-    "you": "you"
+    "you": "you",
+    "referenceData": "Reference data",
+    "settingsAndMembers": "Settings and members",
+    "languages": "Languages of the book",
+    "languagesHint": "Categories, accounts and payment types get a name in each of these languages."
   },
   "admin": {
     "title": "Users",
@@ -67,5 +71,54 @@
   "health": {
     "title": "Server status",
     "error": "The database cannot be reached."
+  },
+  "reference": {
+    "categories": "Categories",
+    "accounts": "Accounts",
+    "paymentTypes": "Payment types",
+    "showArchived": "Show archived",
+    "archived": "archived",
+    "actions": "Actions",
+    "edit": "Edit",
+    "archive": "Archive",
+    "restore": "Restore",
+    "name": "Name",
+    "newGroup": "New group",
+    "editGroup": "Edit group",
+    "position": "Position",
+    "positionHint": "Groups are shown in this order.",
+    "newCategory": "New category",
+    "editCategory": "Edit category",
+    "code": "Code",
+    "codeHint": "Short code that sets the order, e.g. C01.",
+    "direction": "Direction",
+    "directionHint": "Decides whether amounts count as spending or income, whatever their sign.",
+    "group": "Group",
+    "newSubCategory": "New sub-category",
+    "editSubCategory": "Edit sub-category",
+    "category": "Category",
+    "moveHint": "Pick another category to move this sub-category.",
+    "newAccount": "New account",
+    "editAccount": "Edit account",
+    "kind": "Kind",
+    "currencyHint": "Entries on this account are in this currency. It cannot be changed later.",
+    "threshold": "Low balance warning",
+    "thresholdHint": "Warn when the projected balance goes below this amount. Leave empty for no warning.",
+    "newPaymentType": "New payment type",
+    "editPaymentType": "Edit payment type",
+    "emptyCategories": "No categories yet. Start with a group, such as Daily life, then add its categories.",
+    "emptyAccounts": "No accounts yet.",
+    "emptyPaymentTypes": "No payment types yet."
+  },
+  "directions": {
+    "expense": "Expense",
+    "income": "Income",
+    "transfer": "Transfer"
+  },
+  "accountKinds": {
+    "bank": "Bank",
+    "virtual": "Virtual",
+    "bankHint": "A real account: reconciled with the bank and included in the cash projection.",
+    "virtualHint": "No bank behind it: holds compensations that add up to zero, left out of the cash projection."
   }
 }
