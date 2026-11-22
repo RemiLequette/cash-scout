@@ -15,6 +15,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "db:up": "docker compose up -d db",
+    "stack:up": "docker compose --profile stack up -d --build",
+    "stack:down": "docker compose --profile stack down",
     "db:generate": "pnpm --filter @cash-scout/api db:generate",
     "db:migrate": "pnpm --filter @cash-scout/api db:migrate"
   },
