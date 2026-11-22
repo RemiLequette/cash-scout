@@ -77,6 +77,7 @@ describe("books", () => {
     const renamed = await alice.request("PATCH", `/books/${id}`, {
       name: "Home",
       defaultLanguage: "en",
+      languages: ["en"],
     });
     expect(await renamed.json()).toMatchObject({ name: "Home", defaultLanguage: "en" });
     expect((await alice.request("DELETE", `/books/${id}`)).status).toBe(204);
@@ -101,7 +102,13 @@ describe("members", () => {
     expect((await bob.request("GET", `/books/${id}`)).status).toBe(200);
     expect((await bob.request("GET", `/books/${id}/members`)).status).toBe(200);
     expect(
-      (await bob.request("PATCH", `/books/${id}`, { name: "x", defaultLanguage: "fr" })).status,
+      (
+        await bob.request("PATCH", `/books/${id}`, {
+          name: "x",
+          defaultLanguage: "fr",
+          languages: ["fr"],
+        })
+      ).status,
     ).toBe(403);
     expect(
       (await bob.request("POST", `/books/${id}/members`, { email: carol.email, role: "viewer" }))

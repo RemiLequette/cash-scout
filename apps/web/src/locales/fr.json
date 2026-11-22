@@ -49,7 +49,11 @@
     "leave": "Quitter ce livre",
     "deleteBook": "Supprimer ce livre",
     "deleteConfirm": "Supprimer le livre {name} et toutes ses données ? Cette action est définitive.",
-    "you": "vous"
+    "you": "vous",
+    "referenceData": "Données de référence",
+    "settingsAndMembers": "Paramètres et membres",
+    "languages": "Langues du livre",
+    "languagesHint": "Catégories, comptes et moyens de paiement ont un nom dans chacune de ces langues."
   },
   "admin": {
     "title": "Utilisateurs",
@@ -67,5 +71,54 @@
   "health": {
     "title": "État du serveur",
     "error": "La base de données est injoignable."
+  },
+  "reference": {
+    "categories": "Catégories",
+    "accounts": "Comptes",
+    "paymentTypes": "Moyens de paiement",
+    "showArchived": "Afficher les archivés",
+    "archived": "archivé",
+    "actions": "Actions",
+    "edit": "Modifier",
+    "archive": "Archiver",
+    "restore": "Restaurer",
+    "name": "Nom",
+    "newGroup": "Nouveau groupe",
+    "editGroup": "Modifier le groupe",
+    "position": "Position",
+    "positionHint": "Les groupes sont affichés dans cet ordre.",
+    "newCategory": "Nouvelle catégorie",
+    "editCategory": "Modifier la catégorie",
+    "code": "Code",
+    "codeHint": "Code court qui fixe l'ordre, par exemple C01.",
+    "direction": "Sens",
+    "directionHint": "Décide si les montants comptent en dépense ou en recette, quel que soit leur signe.",
+    "group": "Groupe",
+    "newSubCategory": "Nouvelle sous-catégorie",
+    "editSubCategory": "Modifier la sous-catégorie",
+    "category": "Catégorie",
+    "moveHint": "Choisissez une autre catégorie pour y déplacer cette sous-catégorie.",
+    "newAccount": "Nouveau compte",
+    "editAccount": "Modifier le compte",
+    "kind": "Type",
+    "currencyHint": "Les écritures de ce compte sont dans cette devise. Elle ne peut plus être changée ensuite.",
+    "threshold": "Alerte de solde bas",
+    "thresholdHint": "Alerter quand le solde prévu passe sous ce montant. Laisser vide pour aucune alerte.",
+    "newPaymentType": "Nouveau moyen de paiement",
+    "editPaymentType": "Modifier le moyen de paiement",
+    "emptyCategories": "Aucune catégorie. Commencez par un groupe, par exemple Vie courante, puis ajoutez ses catégories.",
+    "emptyAccounts": "Aucun compte.",
+    "emptyPaymentTypes": "Aucun moyen de paiement."
+  },
+  "directions": {
+    "expense": "Dépense",
+    "income": "Recette",
+    "transfer": "Virement"
+  },
+  "accountKinds": {
+    "bank": "Bancaire",
+    "virtual": "Virtuel",
+    "bankHint": "Un vrai compte : pointé avec la banque et inclus dans la prévision de trésorerie.",
+    "virtualHint": "Sans banque derrière : porte des compensations de somme nulle, hors de la prévision de trésorerie."
   }
 }

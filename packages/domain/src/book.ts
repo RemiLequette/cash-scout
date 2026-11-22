@@ -37,10 +37,21 @@ export const bookInputSchema = z.object({
 });
 export type BookInput = z.infer<typeof bookInputSchema>;
 
-export const bookUpdateSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-  defaultLanguage: languageSchema,
-});
+/** Languages of the book's reference data; the default language is one of them. */
+export const bookUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    defaultLanguage: languageSchema,
+    languages: z.array(languageSchema).min(1).max(10),
+  })
+  .refine((b) => b.languages.includes(b.defaultLanguage), {
+    message: "The default language must be one of the book's languages",
+    path: ["defaultLanguage"],
+  })
+  .refine((b) => new Set(b.languages).size === b.languages.length, {
+    message: "Languages must be unique",
+    path: ["languages"],
+  });
 export type BookUpdate = z.infer<typeof bookUpdateSchema>;
 
 export const memberInputSchema = z.object({

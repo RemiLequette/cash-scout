@@ -1,13 +1,15 @@
-import { bookRoles, type BookRole } from "@cash-scout/domain";
+import { bookRoles, hasRole, type BookRole } from "@cash-scout/domain";
 import {
   Alert,
   Badge,
   Button,
   Group,
+  MultiSelect,
   Paper,
   Select,
   Stack,
   Table,
+  Tabs,
   Text,
   TextInput,
   Title,
@@ -19,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { api, unwrap } from "../api";
 import { useSession } from "../auth";
 import { languageOptions } from "../options";
+import { ReferenceData } from "./Reference";
 
 function ErrorAlert({ error }: { error: Error | null }) {
   const { t } = useTranslation();
@@ -30,21 +33,45 @@ interface BookData {
   name: string;
   currency: string;
   defaultLanguage: string;
+  languages: string[];
   role: BookRole;
 }
 
-function Settings({ bookId }: { bookId: string }) {
+function BookView({ bookId }: { bookId: string }) {
+  const { t } = useTranslation();
   const book = useQuery({
     queryKey: ["books", bookId],
     queryFn: () => unwrap(api.books[":bookId"].$get({ param: { bookId } })),
   });
   if (book.error) return <ErrorAlert error={book.error} />;
   if (!book.data) return null;
+  const { role } = book.data;
   return (
     <Stack>
-      {/* Keyed so the form restarts from the saved values when they change. */}
-      <SettingsForm key={`${book.data.name}|${book.data.defaultLanguage}`} book={book.data} />
-      <Members bookId={bookId} isOwner={book.data.role === "owner"} bookName={book.data.name} />
+      <Group>
+        <Title order={2}>{book.data.name}</Title>
+        <Badge variant="light">{book.data.currency}</Badge>
+        <Badge variant="outline">{t(`roles.${role}`)}</Badge>
+      </Group>
+      <Tabs defaultValue="reference" keepMounted={false}>
+        <Tabs.List>
+          <Tabs.Tab value="reference">{t("book.referenceData")}</Tabs.Tab>
+          <Tabs.Tab value="settings">{t("book.settingsAndMembers")}</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="reference" pt="md">
+          <ReferenceData bookId={bookId} canEdit={hasRole(role, "editor")} />
+        </Tabs.Panel>
+        <Tabs.Panel value="settings" pt="md">
+          <Stack>
+            {/* Keyed so the form restarts from the saved values when they change. */}
+            <SettingsForm
+              key={`${book.data.name}|${book.data.defaultLanguage}|${book.data.languages.join()}`}
+              book={book.data}
+            />
+            <Members bookId={bookId} isOwner={role === "owner"} bookName={book.data.name} />
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
     </Stack>
   );
 }
@@ -55,14 +82,16 @@ function SettingsForm({ book }: { book: BookData }) {
   const bookId = book.id;
   const [name, setName] = useState(book.name);
   const [defaultLanguage, setDefaultLanguage] = useState<string | null>(book.defaultLanguage);
+  const [languages, setLanguages] = useState<string[]>(book.languages);
   const isOwner = book.role === "owner";
+  const options = languageOptions(i18n.language);
 
   const save = useMutation({
     mutationFn: () =>
       unwrap(
         api.books[":bookId"].$patch({
           param: { bookId },
-          json: { name, defaultLanguage: defaultLanguage ?? "" },
+          json: { name, defaultLanguage: defaultLanguage ?? "", languages },
         }),
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["books"] }),
@@ -75,11 +104,6 @@ function SettingsForm({ book }: { book: BookData }) {
 
   return (
     <Stack>
-      <Group>
-        <Title order={2}>{book.name}</Title>
-        <Badge variant="light">{book.currency}</Badge>
-        <Badge variant="outline">{t(`roles.${book.role}`)}</Badge>
-      </Group>
       <Paper withBorder p="md" component="form" onSubmit={submit}>
         <Stack>
           <Title order={4}>{t("book.settings")}</Title>
@@ -92,12 +116,26 @@ function SettingsForm({ book }: { book: BookData }) {
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
           />
+          <MultiSelect
+            label={t("book.languages")}
+            description={t("book.languagesHint")}
+            required
+            disabled={!isOwner}
+            data={options}
+            value={languages}
+            onChange={(value) => {
+              setLanguages(value);
+              if (defaultLanguage && !value.includes(defaultLanguage)) {
+                setDefaultLanguage(value[0] ?? null);
+              }
+            }}
+          />
           <Select
             label={t("books.defaultLanguage")}
             description={t("books.defaultLanguageHint")}
             required
             disabled={!isOwner}
-            data={languageOptions(i18n.language)}
+            data={options.filter((o) => languages.includes(o.value))}
             value={defaultLanguage}
             onChange={setDefaultLanguage}
           />
@@ -279,5 +317,5 @@ function Members({
 }
 
 export function Book({ bookId }: { bookId: string }) {
-  return <Settings bookId={bookId} />;
+  return <BookView bookId={bookId} />;
 }
