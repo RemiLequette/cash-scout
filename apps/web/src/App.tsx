@@ -6,11 +6,13 @@ import {
   Container,
   Group,
   Loader,
+  Modal,
   Select,
   Text,
   Title,
 } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, Outlet, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "./api";
@@ -19,6 +21,7 @@ import { languages, type Language } from "./i18n";
 import { Admin } from "./pages/Admin";
 import { Book } from "./pages/Book";
 import { Books } from "./pages/Books";
+import { ChangePassword } from "./pages/Password";
 import { SignIn } from "./pages/SignIn";
 
 function LanguageSelect() {
@@ -54,6 +57,7 @@ function Layout() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data: session, isPending } = useSession();
+  const [changingPassword, setChangingPassword] = useState(false);
 
   if (isPending) {
     return (
@@ -82,9 +86,15 @@ function Layout() {
               <LanguageSelect />
               {session && (
                 <>
-                  <Text size="sm" visibleFrom="sm">
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    visibleFrom="sm"
+                    title={t("password.change")}
+                    onClick={() => setChangingPassword(true)}
+                  >
                     {session.user.name}
-                  </Text>
+                  </Button>
                   <Button variant="default" size="xs" onClick={signOut}>
                     {t("nav.signOut")}
                   </Button>
@@ -100,6 +110,13 @@ function Layout() {
           {session ? <Outlet /> : <SignIn />}
         </Container>
       </AppShell.Main>
+      <Modal
+        opened={changingPassword}
+        onClose={() => setChangingPassword(false)}
+        title={t("password.change")}
+      >
+        <ChangePassword onClose={() => setChangingPassword(false)} />
+      </Modal>
     </AppShell>
   );
 }

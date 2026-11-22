@@ -21,7 +21,8 @@
     "email": "Email",
     "password": "Password",
     "submit": "Sign in",
-    "failed": "Wrong email or password."
+    "failed": "Wrong email or password.",
+    "forgot": "Forgot your password? Ask the person who manages cash-scout to set a new one."
   },
   "roles": {
     "owner": "Owner",
@@ -120,5 +121,20 @@
     "virtual": "Virtual",
     "bankHint": "A real account: reconciled with the bank and included in the cash projection.",
     "virtualHint": "No bank behind it: holds compensations that add up to zero, left out of the cash projection."
+  },
+  "password": {
+    "reset": "Set a new password",
+    "resetIntro": "For {email}. Give them the new password; they can change it after signing in. Their open sessions end.",
+    "resetDone": "New password saved for {email}. Their open sessions have ended.",
+    "close": "Close",
+    "change": "Change my password",
+    "current": "Current password",
+    "new": "New password",
+    "newHint": "At least {min} characters.",
+    "confirm": "New password again",
+    "tooShort": "At least {min} characters.",
+    "mismatch": "The two passwords are different.",
+    "changeHint": "You stay signed in here; your other devices are signed out.",
+    "changeFailed": "The current password is wrong, or the new one is not accepted."
   }
 }

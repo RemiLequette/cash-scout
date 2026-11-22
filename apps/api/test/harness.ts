@@ -5,7 +5,8 @@ import { APP_ROLE, createDb } from "../src/db/client.js";
 import { testDatabaseUrl } from "./database.js";
 
 const BASE_URL = "http://localhost:3000";
-const PASSWORD = "test-password-123";
+/** Password of every user made by `signedInUser`. */
+export const TEST_PASSWORD = "test-password-123";
 
 /** An app wired to the test database, running as the app role like in production. */
 export function createHarness() {
@@ -17,10 +18,15 @@ export function createHarness() {
   async function signedInUser(options: { role?: "admin" | "user" } = {}) {
     const email = `user-${randomUUID()}@example.test`;
     const { user } = await auth.api.createUser({
-      body: { email, password: PASSWORD, name: email.slice(0, 13), role: options.role ?? "user" },
+      body: {
+        email,
+        password: TEST_PASSWORD,
+        name: email.slice(0, 13),
+        role: options.role ?? "user",
+      },
     });
     const response = await auth.api.signInEmail({
-      body: { email, password: PASSWORD },
+      body: { email, password: TEST_PASSWORD },
       asResponse: true,
     });
     const cookie = response.headers

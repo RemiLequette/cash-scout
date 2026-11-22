@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
-import { createHarness, household } from "../test/harness.js";
+import { createHarness, household, TEST_PASSWORD } from "../test/harness.js";
 import { ensureSuperUser } from "./auth.js";
 import { withUser } from "./db/client.js";
 import { book } from "./db/schema.js";
@@ -39,6 +39,65 @@ describe("authentication", () => {
     const superUser = { email: "admin@example.test", password: "admin-password-1", name: "Admin" };
     expect(await ensureSuperUser(h.db, h.auth, superUser)).toBe(true);
     expect(await ensureSuperUser(h.db, h.auth, superUser)).toBe(false);
+  });
+
+  describe("passwords", () => {
+    const signIn = (email: string, password: string) =>
+      h.app.request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+    it("lets the super user reset a user's password and end their sessions", async () => {
+      const admin = await h.signedInUser({ role: "admin" });
+      const bob = await h.signedInUser();
+      const reset = await admin.request("POST", "/auth/admin/set-user-password", {
+        userId: bob.id,
+        newPassword: "new-password-from-admin",
+      });
+      expect(reset.status).toBe(200);
+      const revoke = await admin.request("POST", "/auth/admin/revoke-user-sessions", {
+        userId: bob.id,
+      });
+      expect(revoke.status).toBe(200);
+
+      expect((await bob.request("GET", "/books")).status).toBe(401);
+      expect((await signIn(bob.email, "new-password-from-admin")).status).toBe(200);
+    });
+
+    it("refuses a reset by a user who is not the super user, or a short password", async () => {
+      const alice = await h.signedInUser();
+      const bob = await h.signedInUser();
+      const byUser = await alice.request("POST", "/auth/admin/set-user-password", {
+        userId: bob.id,
+        newPassword: "alice-sets-bob-password",
+      });
+      expect(byUser.ok).toBe(false);
+
+      const admin = await h.signedInUser({ role: "admin" });
+      const short = await admin.request("POST", "/auth/admin/set-user-password", {
+        userId: bob.id,
+        newPassword: "short",
+      });
+      expect(short.ok).toBe(false);
+    });
+
+    it("lets users change their own password with the current one", async () => {
+      const bob = await h.signedInUser();
+      const wrong = await bob.request("POST", "/auth/change-password", {
+        currentPassword: "not-the-password",
+        newPassword: "bob-new-password-1",
+      });
+      expect(wrong.ok).toBe(false);
+      const changed = await bob.request("POST", "/auth/change-password", {
+        currentPassword: TEST_PASSWORD,
+        newPassword: "bob-new-password-1",
+        revokeOtherSessions: true,
+      });
+      expect(changed.status).toBe(200);
+      expect((await signIn(bob.email, "bob-new-password-1")).status).toBe(200);
+    });
   });
 });
 

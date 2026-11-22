@@ -21,7 +21,8 @@
     "email": "E-mail",
     "password": "Mot de passe",
     "submit": "Se connecter",
-    "failed": "E-mail ou mot de passe incorrect."
+    "failed": "E-mail ou mot de passe incorrect.",
+    "forgot": "Mot de passe oublié ? Demandez à la personne qui gère cash-scout d'en définir un nouveau."
   },
   "roles": {
     "owner": "Propriétaire",
@@ -120,5 +121,20 @@
     "virtual": "Virtuel",
     "bankHint": "Un vrai compte : pointé avec la banque et inclus dans la prévision de trésorerie.",
     "virtualHint": "Sans banque derrière : porte des compensations de somme nulle, hors de la prévision de trésorerie."
+  },
+  "password": {
+    "reset": "Définir un nouveau mot de passe",
+    "resetIntro": "Pour {email}. Donnez-lui le nouveau mot de passe ; il pourra le changer une fois connecté. Ses sessions ouvertes sont fermées.",
+    "resetDone": "Nouveau mot de passe enregistré pour {email}. Ses sessions ouvertes sont fermées.",
+    "close": "Fermer",
+    "change": "Changer mon mot de passe",
+    "current": "Mot de passe actuel",
+    "new": "Nouveau mot de passe",
+    "newHint": "Au moins {min} caractères.",
+    "confirm": "Nouveau mot de passe, à nouveau",
+    "tooShort": "Au moins {min} caractères.",
+    "mismatch": "Les deux mots de passe sont différents.",
+    "changeHint": "Vous restez connecté ici ; vos autres appareils sont déconnectés.",
+    "changeFailed": "Le mot de passe actuel est faux, ou le nouveau n'est pas accepté."
   }
 }
