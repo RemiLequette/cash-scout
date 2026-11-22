@@ -283,6 +283,19 @@ describe("journal list and balances", () => {
     expect(ids(await get(`accountId=${b.ringgit.id}`))).toEqual([b.e.id]);
     expect(ids(await get(`categoryId=${b.food.id}`))).toEqual([b.e.id, b.c.id, b.a.id]);
     expect(ids(await get(`subCategoryId=${b.market.id}`))).toEqual([b.c.id]);
+    expect(ids(await get(`subCategoryIds=${b.market.id},${b.pay.id}`))).toEqual([b.d.id, b.c.id]);
+    expect(ids(await get("subCategoryIds="))).toEqual([]);
+    expect(ids(await get("months=2026-10,2026-11"))).toEqual([b.d.id, b.e.id, b.c.id, b.a.id]);
+    expect(ids(await get("months=2026-10"))).toEqual([b.a.id]);
+    expect(ids(await get("months="))).toEqual([]);
+
+    const months = await json<{ month: string; entries: number }[]>(
+      b.owner.request("GET", b.journal("/months")),
+    );
+    expect(months).toEqual([
+      { month: "2026-10", entries: 1 },
+      { month: "2026-11", entries: 3 },
+    ]);
     expect(ids(await get("q=COMPLET"))).toEqual([b.a.id]);
     expect(ids(await get("q=%25"))).toEqual([]);
 
@@ -313,6 +326,48 @@ describe("journal list and balances", () => {
         { accountId: b.ringgit.id, currency: "MYR", reconciled: "-50.00", total: "-50.00" },
       ]),
     );
+  });
+});
+
+describe("frequent descriptions", () => {
+  it("gives the most used ones with their latest entry, without forecasts", async () => {
+    const b = await bookWithReference();
+    const daysAgo = (days: number) => {
+      const date = new Date();
+      date.setDate(date.getDate() - days);
+      return date.toISOString().slice(0, 10);
+    };
+    const add = (description: string, days: number, extra: Record<string, unknown> = {}) =>
+      b.add({ description, date: daysAgo(days), reconciled: true, ...extra });
+    await add("Boulangerie Paul", 30);
+    await add("boulangerie paul ", 20);
+    const latest = await add("Boulangerie Paul", 10, {
+      amount: "-4.20",
+      subCategoryId: b.market.id,
+    });
+    await add("Carrefour", 40);
+    await add("Carrefour", 50);
+    // Planned: a forecast carries the same description.
+    await add("Loyer", 15);
+    await add("Loyer", 45);
+    await add("Loyer", 75);
+    await add("Loyer", -5, { reconciled: false });
+    // Too old to count.
+    for (const days of [400, 410, 420, 430]) await add("Ancien magasin", days);
+    // No description.
+    await add("", 5);
+    await add("", 6);
+    await add("", 7);
+
+    const frequent = await json<{ uses: number; entry: Entry }[]>(
+      b.owner.request("GET", b.journal("/frequent")),
+    );
+    expect(frequent.map((f) => [f.entry.description, f.uses])).toEqual([
+      ["Boulangerie Paul", 3],
+      ["Carrefour", 2],
+    ]);
+    expect(frequent[0]!.entry.id).toBe(latest.id);
+    expect(frequent[0]!.entry.amount).toBe("-4.20");
   });
 });
 

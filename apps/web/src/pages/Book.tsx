@@ -1,7 +1,6 @@
 import { bookRoles, hasRole, type BookRole } from "@cash-scout/domain";
 import {
   Alert,
-  Badge,
   Button,
   Group,
   MultiSelect,
@@ -9,7 +8,6 @@ import {
   Select,
   Stack,
   Table,
-  Tabs,
   Text,
   TextInput,
   Title,
@@ -38,51 +36,40 @@ interface BookData {
   role: BookRole;
 }
 
-function BookView({ bookId }: { bookId: string }) {
-  const { t } = useTranslation();
-  const book = useQuery({
+/** The parts of a book, chosen in the navigation menu. */
+export type BookView = "journal" | "reference" | "settings";
+
+export function useBook(bookId: string | undefined) {
+  return useQuery({
     queryKey: ["books", bookId],
-    queryFn: () => unwrap(api.books[":bookId"].$get({ param: { bookId } })),
+    queryFn: () => unwrap(api.books[":bookId"].$get({ param: { bookId: bookId! } })),
+    enabled: bookId !== undefined,
   });
+}
+
+function BookView({ bookId, view }: { bookId: string; view: BookView }) {
+  const book = useBook(bookId);
   if (book.error) return <ErrorAlert error={book.error} />;
   if (!book.data) return null;
   const { role } = book.data;
-  return (
-    <Stack>
-      <Group>
-        <Title order={2}>{book.data.name}</Title>
-        <Badge variant="light">{book.data.currency}</Badge>
-        <Badge variant="outline">{t(`roles.${role}`)}</Badge>
-      </Group>
-      <Tabs defaultValue="journal" keepMounted={false}>
-        <Tabs.List>
-          <Tabs.Tab value="journal">{t("book.journal")}</Tabs.Tab>
-          <Tabs.Tab value="reference">{t("book.referenceData")}</Tabs.Tab>
-          <Tabs.Tab value="settings">{t("book.settingsAndMembers")}</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="journal" pt="md">
-          <Journal
-            bookId={bookId}
-            bookCurrency={book.data.currency}
-            canEdit={hasRole(role, "editor")}
+  const canEdit = hasRole(role, "editor");
+  switch (view) {
+    case "journal":
+      return <Journal bookId={bookId} bookCurrency={book.data.currency} canEdit={canEdit} />;
+    case "reference":
+      return <ReferenceData bookId={bookId} canEdit={canEdit} />;
+    case "settings":
+      return (
+        <Stack>
+          {/* Keyed so the form restarts from the saved values when they change. */}
+          <SettingsForm
+            key={`${book.data.name}|${book.data.defaultLanguage}|${book.data.languages.join()}`}
+            book={book.data}
           />
-        </Tabs.Panel>
-        <Tabs.Panel value="reference" pt="md">
-          <ReferenceData bookId={bookId} canEdit={hasRole(role, "editor")} />
-        </Tabs.Panel>
-        <Tabs.Panel value="settings" pt="md">
-          <Stack>
-            {/* Keyed so the form restarts from the saved values when they change. */}
-            <SettingsForm
-              key={`${book.data.name}|${book.data.defaultLanguage}|${book.data.languages.join()}`}
-              book={book.data}
-            />
-            <Members bookId={bookId} isOwner={role === "owner"} bookName={book.data.name} />
-          </Stack>
-        </Tabs.Panel>
-      </Tabs>
-    </Stack>
-  );
+          <Members bookId={bookId} isOwner={role === "owner"} bookName={book.data.name} />
+        </Stack>
+      );
+  }
 }
 
 function SettingsForm({ book }: { book: BookData }) {
@@ -349,6 +336,6 @@ function Members({
   );
 }
 
-export function Book({ bookId }: { bookId: string }) {
-  return <BookView bookId={bookId} />;
+export function Book({ bookId, view }: { bookId: string; view: BookView }) {
+  return <BookView bookId={bookId} view={view} />;
 }

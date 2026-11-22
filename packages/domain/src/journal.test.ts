@@ -63,6 +63,29 @@ describe("journalQuerySchema", () => {
       limit: 20,
       offset: 40,
     });
+    expect(journalQuerySchema.safeParse({ limit: "2000" }).success).toBe(true);
+    expect(journalQuerySchema.safeParse({ limit: "2001" }).success).toBe(false);
+  });
+
+  it("reads a list of sub-categories", () => {
+    const a = "0190a5c4-0000-7000-8000-000000000001";
+    const b = "0190a5c4-0000-7000-8000-000000000002";
+    expect(journalQuerySchema.parse({ subCategoryIds: `${a},${b}` }).subCategoryIds).toEqual([
+      a,
+      b,
+    ]);
+    expect(journalQuerySchema.parse({ subCategoryIds: "" }).subCategoryIds).toEqual([]);
+    expect(journalQuerySchema.safeParse({ subCategoryIds: `${a},nope` }).success).toBe(false);
+  });
+
+  it("reads a list of months", () => {
+    expect(journalQuerySchema.parse({ months: "2026-10,2026-11" }).months).toEqual([
+      "2026-10",
+      "2026-11",
+    ]);
+    expect(journalQuerySchema.parse({ months: "" }).months).toEqual([]);
+    expect(journalQuerySchema.safeParse({ months: "2026-13" }).success).toBe(false);
+    expect(journalQuerySchema.safeParse({ months: "2026-1" }).success).toBe(false);
   });
 });
 
