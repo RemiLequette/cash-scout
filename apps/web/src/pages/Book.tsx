@@ -175,20 +175,31 @@ function Members({
   const navigate = useNavigate();
   const { data: session } = useSession();
   const me = session?.user.id;
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<BookRole>("viewer");
 
   const members = useQuery({
     queryKey: ["books", bookId, "members"],
     queryFn: () => unwrap(api.books[":bookId"].members.$get({ param: { bookId } })),
   });
+  // Users of the installation who are not members yet; only owners can see them.
+  const candidates = useQuery({
+    queryKey: ["books", bookId, "candidates"],
+    enabled: isOwner,
+    queryFn: () => unwrap(api.books[":bookId"].candidates.$get({ param: { bookId } })),
+  });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["books"] });
 
   const add = useMutation({
     mutationFn: () =>
-      unwrap(api.books[":bookId"].members.$post({ param: { bookId }, json: { email, role } })),
+      unwrap(
+        api.books[":bookId"].members.$post({
+          param: { bookId },
+          json: { email: email ?? "", role },
+        }),
+      ),
     onSuccess: async () => {
-      setEmail("");
+      setEmail(null);
       await refresh();
     },
   });
@@ -232,7 +243,14 @@ function Members({
       <Stack>
         <Title order={4}>{t("book.members")}</Title>
         <ErrorAlert
-          error={members.error ?? add.error ?? changeRole.error ?? remove.error ?? deleteBook.error}
+          error={
+            members.error ??
+            candidates.error ??
+            add.error ??
+            changeRole.error ??
+            remove.error ??
+            deleteBook.error
+          }
         />
         <Table>
           <Table.Tbody>
@@ -282,13 +300,19 @@ function Members({
         </Table>
         {isOwner && (
           <Group component="form" onSubmit={submit} align="flex-end">
-            <TextInput
-              label={t("book.memberEmail")}
-              type="email"
+            <Select
+              label={t("book.memberUser")}
+              placeholder={t("book.memberUserHint")}
+              nothingFoundMessage={t("book.noOtherUser")}
+              searchable
               required
               style={{ flex: 1 }}
+              data={(candidates.data ?? []).map((u) => ({
+                value: u.email,
+                label: `${u.name} (${u.email})`,
+              }))}
               value={email}
-              onChange={(e) => setEmail(e.currentTarget.value)}
+              onChange={setEmail}
             />
             <Select
               aria-label={t("books.role")}
@@ -298,7 +322,7 @@ function Members({
               allowDeselect={false}
               onChange={(value) => value && setRole(value as BookRole)}
             />
-            <Button type="submit" loading={add.isPending}>
+            <Button type="submit" loading={add.isPending} disabled={!email}>
               {t("book.addMember")}
             </Button>
           </Group>
