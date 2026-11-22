@@ -1,0 +1,13 @@
+{
+  "app": {
+    "title": "cash-scout",
+    "tagline": "Plan, project forward, control and analyse your money."
+  },
+  "health": {
+    "title": "Server status",
+    "checking": "Checking…",
+    "ok": "API and database are running.",
+    "error": "The database cannot be reached."
+  },
+  "language": "Language"
+}

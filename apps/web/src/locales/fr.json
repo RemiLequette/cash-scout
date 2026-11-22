@@ -1,0 +1,13 @@
+{
+  "app": {
+    "title": "cash-scout",
+    "tagline": "Planifier, anticiper, contrôler et analyser votre argent."
+  },
+  "health": {
+    "title": "État du serveur",
+    "checking": "Vérification…",
+    "ok": "L'API et la base de données fonctionnent.",
+    "error": "La base de données est injoignable."
+  },
+  "language": "Langue"
+}

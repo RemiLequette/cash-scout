@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+
+# Real data, dumps and local backups: never committed
+local/
+
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
