@@ -23,7 +23,8 @@
     "submit": "Sign in",
     "failed": "Wrong email or password.",
     "stay": "Stay signed in",
-    "stayHint": "For 30 days on this device. Leave it unticked on a shared computer."
+    "stayHint": "For 30 days on this device. Leave it unticked on a shared computer.",
+    "forgot": "Forgot your password? Ask the person who manages cash-scout to set a new one."
   },
   "roles": {
     "owner": "Owner",
@@ -178,5 +179,20 @@
     "allAccounts": "All accounts",
     "allCategories": "All categories",
     "amountPlaceholder": "-12.50"
+  },
+  "password": {
+    "reset": "Set a new password",
+    "resetIntro": "For {email}. Give them the new password; they can change it after signing in. Their open sessions end.",
+    "resetDone": "New password saved for {email}. Their open sessions have ended.",
+    "close": "Close",
+    "change": "Change my password",
+    "current": "Current password",
+    "new": "New password",
+    "newHint": "At least {min} characters.",
+    "confirm": "New password again",
+    "tooShort": "At least {min} characters.",
+    "mismatch": "The two passwords are different.",
+    "changeHint": "You stay signed in here; your other devices are signed out.",
+    "changeFailed": "The current password is wrong, or the new one is not accepted."
   }
 }

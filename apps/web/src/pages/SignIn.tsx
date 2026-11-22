@@ -6,6 +6,7 @@ import {
   Paper,
   PasswordInput,
   Stack,
+  Text,
   TextInput,
   Title,
 } from "@mantine/core";
@@ -61,6 +62,9 @@ export function SignIn() {
           <Button type="submit" loading={pending}>
             {t("signIn.submit")}
           </Button>
+          <Text size="xs" c="dimmed">
+            {t("signIn.forgot")}
+          </Text>
         </Stack>
       </Paper>
     </Center>

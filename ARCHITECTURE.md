@@ -32,7 +32,7 @@ A pnpm workspace, TypeScript everywhere:
 
 - **Hono** for the HTTP API: very light, and its typed client gives the front end the API's types without code generation.
 - **Drizzle ORM** on **PostgreSQL**: schema and migrations in TypeScript, SQL kept visible for reporting queries.
-- **better-auth** for authentication: local accounts, secure session cookies, password hashing. OIDC can be added later. There is no public sign-up: the super user, created at first start from `SUPERUSER_*` variables, creates the users (better-auth admin plugin).
+- **better-auth** for authentication: local accounts, secure session cookies, password hashing. OIDC can be added later. There is no public sign-up: the super user, created at first start from `SUPERUSER_*` variables, creates the users (better-auth admin plugin). A forgotten password is reset by the super user, which ends the user's open sessions; users change their own password from the header. No email is sent.
 - **Audit log**: who created, changed or deleted what, per book, so members of a shared book can follow changes.
 
 ### Book isolation

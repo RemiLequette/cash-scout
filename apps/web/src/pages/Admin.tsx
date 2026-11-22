@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { authClient, useSession } from "../auth";
+import { ResetPassword } from "./Password";
 
 /** Turns a better-auth { data, error } result into a value or a thrown error. */
 async function check<T>(result: Promise<{ data: T | null; error: { message?: string } | null }>) {
@@ -89,6 +90,7 @@ export function Admin() {
   const queryClient = useQueryClient();
   const { data: session } = useSession();
   const [opened, { open, close }] = useDisclosure(false);
+  const [resetFor, setResetFor] = useState<{ id: string; email: string } | null>(null);
   const isAdmin = session?.user.role === "admin";
 
   const users = useQuery({
@@ -133,19 +135,24 @@ export function Admin() {
                 {user.role === "admin" && <Badge variant="light">{t("admin.superUser")}</Badge>}
               </Table.Td>
               <Table.Td>{user.email}</Table.Td>
-              <Table.Td w={120}>
+              <Table.Td w={260}>
                 {user.id !== session?.user.id && (
-                  <Button
-                    variant="subtle"
-                    color="red"
-                    size="xs"
-                    onClick={() =>
-                      window.confirm(t("admin.removeConfirm", { email: user.email })) &&
-                      remove.mutate(user.id)
-                    }
-                  >
-                    {t("common.delete")}
-                  </Button>
+                  <Group gap="xs" justify="flex-end" wrap="nowrap">
+                    <Button variant="subtle" size="xs" onClick={() => setResetFor(user)}>
+                      {t("password.reset")}
+                    </Button>
+                    <Button
+                      variant="subtle"
+                      color="red"
+                      size="xs"
+                      onClick={() =>
+                        window.confirm(t("admin.removeConfirm", { email: user.email })) &&
+                        remove.mutate(user.id)
+                      }
+                    >
+                      {t("common.delete")}
+                    </Button>
+                  </Group>
                 )}
               </Table.Td>
             </Table.Tr>
@@ -154,6 +161,13 @@ export function Admin() {
       </Table>
       <Modal opened={opened} onClose={close} title={t("admin.create")}>
         <CreateUser onClose={close} />
+      </Modal>
+      <Modal
+        opened={resetFor !== null}
+        onClose={() => setResetFor(null)}
+        title={t("password.reset")}
+      >
+        {resetFor && <ResetPassword user={resetFor} onClose={() => setResetFor(null)} />}
       </Modal>
     </Stack>
   );
