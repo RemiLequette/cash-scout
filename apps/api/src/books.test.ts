@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { createHarness, household } from "../test/harness.js";
-import { ensureSuperUser } from "./auth.js";
+import { ensureSuperUser, SESSION_DAYS } from "./auth.js";
 import { withUser } from "./db/client.js";
 import { book } from "./db/schema.js";
 
@@ -33,6 +33,27 @@ describe("authentication", () => {
       body: JSON.stringify({ email: "new@example.test", password: "x".repeat(12), name: "New" }),
     });
     expect(response.ok).toBe(false);
+  });
+
+  it("keeps the session cookie 30 days only when asked to stay signed in", async () => {
+    const email = "remember@example.test";
+    const password = "remember-password-1";
+    await h.auth.api.createUser({ body: { email, password, name: "Remember" } });
+
+    async function sessionCookie(rememberMe: boolean) {
+      const response = await h.app.request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password, rememberMe }),
+      });
+      expect(response.status).toBe(200);
+      return response.headers.getSetCookie().find((c) => c.includes("session_token="))!;
+    }
+
+    // A persistent cookie, for SESSION_DAYS days.
+    expect(await sessionCookie(true)).toMatch(new RegExp(`Max-Age=${SESSION_DAYS * 86400}`));
+    // A browser-session cookie: no expiry, gone when the browser closes.
+    expect(await sessionCookie(false)).not.toMatch(/Max-Age|Expires/i);
   });
 
   it("creates the super user only once", async () => {

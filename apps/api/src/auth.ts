@@ -11,6 +11,10 @@ export interface AuthOptions {
   trustedOrigins?: string[];
 }
 
+const DAY = 60 * 60 * 24;
+/** How long a remembered session lasts without use. */
+export const SESSION_DAYS = 30;
+
 export function createAuth(db: Db, options: AuthOptions) {
   return betterAuth({
     secret: options.secret,
@@ -19,6 +23,9 @@ export function createAuth(db: Db, options: AuthOptions) {
     database: drizzleAdapter(db, { provider: "pg", schema }),
     // Users are created by the super user; there is no public sign-up.
     emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 10 },
+    // "Stay signed in" keeps the session for 30 days, renewed once a day while
+    // the app is used. Without it, the cookie ends when the browser closes.
+    session: { expiresIn: SESSION_DAYS * DAY, updateAge: DAY },
     plugins: [admin()],
   });
 }
