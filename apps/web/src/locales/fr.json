@@ -47,7 +47,6 @@
     "settings": "Paramètres",
     "members": "Membres",
     "addMember": "Ajouter un membre",
-    "memberEmail": "E-mail d'un utilisateur existant",
     "remove": "Retirer",
     "leave": "Quitter ce livre",
     "deleteBook": "Supprimer ce livre",
@@ -57,7 +56,10 @@
     "settingsAndMembers": "Paramètres et membres",
     "languages": "Langues du livre",
     "languagesHint": "Catégories, comptes et moyens de paiement ont un nom dans chacune de ces langues.",
-    "journal": "Journal"
+    "journal": "Journal",
+    "memberUser": "Utilisateur",
+    "memberUserHint": "Chercher par nom ou e-mail",
+    "noOtherUser": "Aucun autre utilisateur. Le super utilisateur crée les utilisateurs dans la page Utilisateurs."
   },
   "admin": {
     "title": "Utilisateurs",

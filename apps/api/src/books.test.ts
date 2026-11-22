@@ -166,6 +166,30 @@ describe("books", () => {
 });
 
 describe("members", () => {
+  it("proposes to owners the users who are not members yet", async () => {
+    const alice = await h.signedInUser();
+    const bob = await h.signedInUser();
+    const { id } = await createBook(alice);
+    await alice.request("POST", `/books/${id}/members`, { email: bob.email, role: "viewer" });
+
+    const response = await alice.request("GET", `/books/${id}/candidates`);
+    expect(response.status).toBe(200);
+    const candidates = (await response.json()) as { userId: string; email: string }[];
+    const ids = candidates.map((c) => c.userId);
+    expect(ids).not.toContain(alice.id);
+    expect(ids).not.toContain(bob.id);
+    const carol = await h.signedInUser();
+    const again = (await (await alice.request("GET", `/books/${id}/candidates`)).json()) as {
+      userId: string;
+      email: string;
+    }[];
+    expect(again).toContainEqual(expect.objectContaining({ userId: carol.id, email: carol.email }));
+
+    // Only owners see the list of users.
+    expect((await bob.request("GET", `/books/${id}/candidates`)).status).toBe(403);
+    expect((await carol.request("GET", `/books/${id}/candidates`)).status).toBe(404);
+  });
+
   it("applies roles", async () => {
     const alice = await h.signedInUser();
     const bob = await h.signedInUser();

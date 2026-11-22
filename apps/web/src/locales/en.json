@@ -47,7 +47,6 @@
     "settings": "Settings",
     "members": "Members",
     "addMember": "Add a member",
-    "memberEmail": "Email of an existing user",
     "remove": "Remove",
     "leave": "Leave this book",
     "deleteBook": "Delete this book",
@@ -57,7 +56,10 @@
     "settingsAndMembers": "Settings and members",
     "languages": "Languages of the book",
     "languagesHint": "Categories, accounts and payment types get a name in each of these languages.",
-    "journal": "Journal"
+    "journal": "Journal",
+    "memberUser": "User",
+    "memberUserHint": "Search by name or email",
+    "noOtherUser": "No other user. The super user creates users on the Users page."
   },
   "admin": {
     "title": "Users",

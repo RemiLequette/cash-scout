@@ -6,7 +6,7 @@ import {
   memberUpdateSchema,
   type BookRole,
 } from "@cash-scout/domain";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, notInArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
@@ -129,6 +129,28 @@ export function booksRoutes(db: Db) {
         return c.json(members);
       })
 
+      // Users an owner can add: every user of the installation not yet a member.
+      .get("/:bookId/candidates", async (c) => {
+        const me = c.var.user.id;
+        const bookId = bookIdOf(c.req.param("bookId"));
+        const candidates = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "owner");
+          return tx
+            .select({ userId: user.id, name: user.name, email: user.email })
+            .from(user)
+            .where(
+              notInArray(
+                user.id,
+                tx
+                  .select({ id: bookMember.userId })
+                  .from(bookMember)
+                  .where(eq(bookMember.bookId, bookId)),
+              ),
+            )
+            .orderBy(asc(user.name));
+        });
+        return c.json(candidates);
+      })
       .post("/:bookId/members", zValidator("json", memberInputSchema), async (c) => {
         const me = c.var.user.id;
         const bookId = bookIdOf(c.req.param("bookId"));
