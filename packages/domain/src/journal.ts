@@ -118,6 +118,16 @@ export const journalQuerySchema = z.object({
 });
 export type JournalQuery = z.input<typeof journalQuerySchema>;
 
+/**
+ * The window of the account projection: daily balances from `from` to `to`.
+ * `today` tells which month-end budget lines are still ahead.
+ */
+export const projectionQuerySchema = z.object({
+  from: entryDateSchema,
+  to: entryDateSchema,
+  today: entryDateSchema,
+});
+
 /** Merges a sub-category into another one of the same book. */
 export const mergeSchema = z.object({ targetId: z.uuid() });
 

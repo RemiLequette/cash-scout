@@ -1,22 +1,20 @@
 import { zValidator } from "@hono/zod-validator";
 import {
-  allocate,
   budgetBatchSchema,
-  budgetMonths,
   budgetQuerySchema,
   categoryBudgetInputSchema,
   categoryBudgetUpdateSchema,
   checkNames,
-  MONTHS,
   money,
   parseAmount,
   profileInputSchema,
   profileUpdateSchema,
   resolveRate,
+  settlementSchema,
   toDecimalString,
   type CategoryBudgetInput,
 } from "@cash-scout/domain";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
@@ -24,13 +22,13 @@ import {
   book,
   bookAccount,
   budgetProfile,
+  budgetSettlement,
   category,
   categoryBudget,
-  journalEntry,
-  subCategory,
 } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { checked, idOf, languagesOf, missing, requireRole, rowOf } from "./access.js";
+import { budgetColumns, consumptionSign, loadYear, monthEnds, monthsOf } from "./budget-months.js";
 
 const profileColumns = {
   version: budgetProfile.version,
@@ -44,19 +42,6 @@ const outProfile = <T extends { archivedAt: Date | null }>({ archivedAt, ...rest
   archived: archivedAt !== null,
 });
 
-const budgetColumns = {
-  version: categoryBudget.version,
-  id: categoryBudget.id,
-  categoryId: categoryBudget.categoryId,
-  year: categoryBudget.year,
-  type: categoryBudget.type,
-  assumptions: categoryBudget.assumptions,
-  amount: categoryBudget.amount,
-  profileId: categoryBudget.profileId,
-  consumption: categoryBudget.consumption,
-  accountId: categoryBudget.accountId,
-  exchangeRate: categoryBudget.exchangeRate,
-};
 type BudgetRow = Omit<typeof categoryBudget.$inferSelect, "bookId" | "createdAt" | "updatedAt">;
 
 async function bookCurrencyOf(tx: Tx, bookId: string): Promise<string> {
@@ -169,8 +154,6 @@ function inputOf(row: BudgetRow, bookCurrency: string): Record<string, unknown> 
   };
 }
 
-const MONTH = sql<number>`extract(month from ${journalEntry.date})::int`;
-
 /**
  * The budgets of a book, mounted under /books/:bookId/budgets. Allocation,
  * consumption and what remains are computed on demand from the budget and the
@@ -254,36 +237,7 @@ export function budgetsRoutes(db: Db) {
         const result = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "viewer");
           const bookCurrency = await bookCurrencyOf(tx, bookId);
-          const [rows, profiles, consumption] = await Promise.all([
-            tx
-              .select({ ...budgetColumns, code: category.code, direction: category.direction })
-              .from(categoryBudget)
-              .innerJoin(category, eq(category.id, categoryBudget.categoryId))
-              .where(and(eq(categoryBudget.bookId, bookId), eq(categoryBudget.year, year)))
-              .orderBy(asc(category.code)),
-            tx
-              .select({ id: budgetProfile.id, weights: budgetProfile.weights })
-              .from(budgetProfile)
-              .where(eq(budgetProfile.bookId, bookId)),
-            // What the journal consumed, per category and month, in the book currency.
-            tx
-              .select({
-                categoryId: subCategory.categoryId,
-                direction: category.direction,
-                month: MONTH,
-                total: sql<string>`sum(${journalEntry.bookAmount})`,
-              })
-              .from(journalEntry)
-              .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
-              .innerJoin(category, eq(category.id, subCategory.categoryId))
-              .where(
-                and(
-                  eq(journalEntry.bookId, bookId),
-                  sql`extract(year from ${journalEntry.date}) = ${year}`,
-                ),
-              )
-              .groupBy(subCategory.categoryId, category.direction, MONTH),
-          ]);
+          const { rows, profiles, consumption } = await loadYear(tx, bookId, year);
           const weightsOf = new Map(profiles.map((p) => [p.id, p.weights]));
           const text = (minor: bigint) => toDecimalString(money(minor, bookCurrency));
           const budgets = rows.map(({ code, direction, ...row }) => {
@@ -294,18 +248,7 @@ export function budgetsRoutes(db: Db) {
             };
             if (row.type !== "periodic") return { ...base, months: null };
             // Spending in an expense category, income in an income category, uses the budget.
-            const sign = direction === "income" ? 1n : -1n;
-            const used = Array<bigint>(MONTHS).fill(0n);
-            for (const entry of consumption) {
-              if (entry.categoryId === row.categoryId) {
-                used[entry.month - 1] = sign * BigInt(entry.total);
-              }
-            }
-            const months = budgetMonths(
-              allocate(row.amount!, weightsOf.get(row.profileId!)!),
-              used,
-              row.consumption!,
-            );
+            const months = monthsOf(row, direction, weightsOf, consumption);
             return {
               ...base,
               months: months.map((m) => ({
@@ -320,10 +263,9 @@ export function budgetsRoutes(db: Db) {
           // category's sign: spending and saving positive, income positive.
           const totals = new Map<string, bigint>();
           for (const entry of consumption) {
-            const sign = entry.direction === "income" ? 1n : -1n;
             totals.set(
               entry.categoryId,
-              (totals.get(entry.categoryId) ?? 0n) + sign * BigInt(entry.total),
+              (totals.get(entry.categoryId) ?? 0n) + consumptionSign(entry.direction) * entry.total,
             );
           }
           const actuals = [...totals].map(([categoryId, total]) => ({
@@ -333,6 +275,59 @@ export function budgetsRoutes(db: Db) {
           return { year, bookCurrency, budgets, actuals };
         });
         return c.json(result);
+      })
+      // The month-end lines of a year: the unused budget of its periodic categories.
+      .get("/month-ends", zValidator("query", budgetQuerySchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const { year } = c.req.valid("query");
+        const lines = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "viewer");
+          return monthEnds(tx, bookId, await bookCurrencyOf(tx, bookId), year);
+        });
+        return c.json(lines);
+      })
+      // Settles ("reconciles") a month's unused budget, or takes the settling back.
+      .post("/settlements", zValidator("json", settlementSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const { categoryId, year, month, reconciled } = c.req.valid("json");
+        await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const [budget] = await tx
+            .select({ type: categoryBudget.type })
+            .from(categoryBudget)
+            .where(
+              and(
+                eq(categoryBudget.bookId, bookId),
+                eq(categoryBudget.categoryId, categoryId),
+                eq(categoryBudget.year, year),
+              ),
+            );
+          if (budget?.type !== "periodic") {
+            throw new HTTPException(400, {
+              message: "No periodic budget for this category and year",
+            });
+          }
+          if (reconciled) {
+            await tx
+              .insert(budgetSettlement)
+              .values({ bookId, categoryId, year, month })
+              .onConflictDoNothing();
+          } else {
+            await tx
+              .delete(budgetSettlement)
+              .where(
+                and(
+                  eq(budgetSettlement.bookId, bookId),
+                  eq(budgetSettlement.categoryId, categoryId),
+                  eq(budgetSettlement.year, year),
+                  eq(budgetSettlement.month, month),
+                ),
+              );
+          }
+        });
+        return c.body(null, 204);
       })
       // Saves the budgets of a year at once, all or nothing: the preparation screen's save.
       .post("/batch", zValidator("json", budgetBatchSchema), async (c) => {
@@ -409,6 +404,12 @@ export function budgetsRoutes(db: Db) {
           const merged: Record<string, unknown> = { ...inputOf(current, bookCurrency) };
           for (const [key, value] of Object.entries(patch)) {
             if (value !== undefined) merged[key] = value === null ? undefined : value;
+          }
+          // Dropping to a scheduled budget drops the periodic plan, account included.
+          if (patch.type === "scheduled") {
+            for (const key of ["amount", "profileId", "consumption", "accountId", "exchangeRate"]) {
+              merged[key] = undefined;
+            }
           }
           // The stored rate belongs to the stored account: a new account needs its own.
           if (patch.accountId !== undefined && patch.accountId !== current.accountId) {

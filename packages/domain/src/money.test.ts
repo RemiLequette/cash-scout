@@ -8,6 +8,7 @@ import {
   parseAmount,
   sum,
   toDecimalString,
+  unconvert,
 } from "./money.js";
 
 describe("currencyDigits", () => {
@@ -68,5 +69,27 @@ describe("convert", () => {
     expect(convert(money(-5n, "EUR"), "0.5", "USD")).toEqual(money(-3n, "USD"));
     // 10.00 EUR at 161.234 = 1612.34 -> 1612 JPY
     expect(convert(money(1000n, "EUR"), "161.234", "JPY")).toEqual(money(1612n, "JPY"));
+  });
+});
+
+describe("unconvert", () => {
+  it("goes back from the book currency to the account currency", () => {
+    // 1 MYR = 0.2 EUR: 10.00 EUR is 50.00 MYR.
+    expect(unconvert(money(1000n, "EUR"), "0.2", "MYR")).toEqual(money(5000n, "MYR"));
+  });
+
+  it("rounds half away from zero", () => {
+    expect(unconvert(money(-100n, "EUR"), "3", "MYR")).toEqual(money(-33n, "MYR"));
+    expect(unconvert(money(100n, "EUR"), "3", "MYR")).toEqual(money(33n, "MYR"));
+    expect(unconvert(money(1n, "EUR"), "2", "MYR")).toEqual(money(1n, "MYR"));
+  });
+
+  it("is the identity at rate 1", () => {
+    expect(unconvert(money(1234n, "EUR"), "1", "EUR")).toEqual(money(1234n, "EUR"));
+  });
+
+  it("rejects a zero or invalid rate", () => {
+    expect(() => unconvert(money(1n, "EUR"), "0", "MYR")).toThrow(RangeError);
+    expect(() => unconvert(money(1n, "EUR"), "x", "MYR")).toThrow(RangeError);
   });
 });

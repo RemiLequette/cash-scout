@@ -403,3 +403,30 @@ export const categoryBudget = pgTable(
     ),
   ],
 );
+
+/**
+ * A month's unused budget of a periodic category, settled ("reconciled") by the
+ * user: its month-end line in the journal then goes to 0. The line itself is
+ * never stored: it is computed from the budget and the journal, so only the
+ * settling is.
+ */
+export const budgetSettlement = pgTable(
+  "budget_settlement",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    categoryId: uuid("category_id").notNull(),
+    year: integer("year").notNull(),
+    month: integer("month").notNull(),
+    settledAt: timestamp("settled_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("budget_settlement_month_unique").on(t.categoryId, t.year, t.month),
+    foreignKey({
+      columns: [t.categoryId, t.bookId],
+      foreignColumns: [category.id, category.bookId],
+    }),
+    index("budget_settlement_book_year_idx").on(t.bookId, t.year),
+    check("budget_settlement_month_check", sql`${t.month} BETWEEN 1 AND 12`),
+  ],
+);

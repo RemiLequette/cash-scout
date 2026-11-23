@@ -78,6 +78,20 @@
       "when": 1795447925358,
       "tag": "0010_saving_direction",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795454843028,
+      "tag": "0011_month_end_budgets",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795454850158,
+      "tag": "0012_month_end_budgets_isolation",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import {
   journalQuerySchema,
   money,
   parseAmount,
+  projectionQuerySchema,
   reconcileSchema,
   resolveRate,
   toDecimalString,
@@ -17,6 +18,7 @@ import { withUser, type Db, type Tx } from "../db/client.js";
 import { book, bookAccount, journalEntry, paymentType, subCategory } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
+import { monthEnds } from "./budget-months.js";
 
 async function bookCurrencyOf(tx: Tx, bookId: string): Promise<string> {
   const [row] = await tx.select({ currency: book.currency }).from(book).where(eq(book.id, bookId));
@@ -294,6 +296,92 @@ export function journalRoutes(db: Db) {
             total: toDecimalString(money(BigInt(row.total), row.currency)),
           })),
         );
+      })
+
+      // The daily balance of every account over a window, whatever the journal's
+      // filters: the opening balance on its first day, then what changes it day
+      // by day. Entries count reconciled or not; the month-end lines of unused
+      // budgets count while their month has not passed, and settled ones are 0.
+      .get("/projection", zValidator("query", projectionQuerySchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const { from, to, today } = c.req.valid("query");
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "viewer");
+          const bookCurrency = await bookCurrencyOf(tx, bookId);
+          const years = Array.from(
+            { length: Math.max(0, Number(to.slice(0, 4)) - Number(from.slice(0, 4)) + 1) },
+            (_, i) => Number(from.slice(0, 4)) + i,
+          );
+          const [accounts, opening, days, lines] = await Promise.all([
+            tx
+              .select({
+                id: bookAccount.id,
+                currency: bookAccount.currency,
+                archived: sql<boolean>`${bookAccount.archivedAt} is not null`,
+              })
+              .from(bookAccount)
+              .where(eq(bookAccount.bookId, bookId)),
+            tx
+              .select({
+                accountId: journalEntry.accountId,
+                total: sql<string>`sum(${journalEntry.amount})`,
+              })
+              .from(journalEntry)
+              .where(and(eq(journalEntry.bookId, bookId), sql`${journalEntry.date} < ${from}`))
+              .groupBy(journalEntry.accountId),
+            tx
+              .select({
+                accountId: journalEntry.accountId,
+                date: journalEntry.date,
+                total: sql<string>`sum(${journalEntry.amount})`,
+              })
+              .from(journalEntry)
+              .where(
+                and(
+                  eq(journalEntry.bookId, bookId),
+                  gte(journalEntry.date, from),
+                  lte(journalEntry.date, to),
+                ),
+              )
+              .groupBy(journalEntry.accountId, journalEntry.date)
+              .orderBy(asc(journalEntry.date)),
+            Promise.all(years.map((year) => monthEnds(tx, bookId, bookCurrency, year))),
+          ]);
+          const minor = (text: string | undefined, currency: string) =>
+            toDecimalString(money(BigInt(text ?? "0"), currency));
+          const openingOf = new Map(opening.map((row) => [row.accountId, row.total]));
+          const changes = new Map<string, Map<string, bigint>>();
+          const addChange = (accountId: string, date: string, amount: bigint) => {
+            const byDate = changes.get(accountId) ?? new Map<string, bigint>();
+            byDate.set(date, (byDate.get(date) ?? 0n) + amount);
+            changes.set(accountId, byDate);
+          };
+          const currencyOf = new Map(accounts.map((a) => [a.id, a.currency]));
+          for (const day of days) addChange(day.accountId, day.date, BigInt(day.total));
+          for (const line of lines.flat()) {
+            if (line.date < from || line.date > to) continue;
+            if (line.date.slice(0, 7) < today.slice(0, 7)) continue;
+            addChange(
+              line.accountId,
+              line.date,
+              parseAmount(line.amount, currencyOf.get(line.accountId)!).minor,
+            );
+          }
+          return accounts.map(({ id, currency, archived }) => ({
+            accountId: id,
+            currency,
+            archived,
+            opening: minor(openingOf.get(id), currency),
+            changes: [...(changes.get(id) ?? [])]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([date, amount]) => ({
+                date,
+                amount: toDecimalString(money(amount, currency)),
+              })),
+          }));
+        });
+        return c.json(result);
       })
 
       .post("/", zValidator("json", entryInputSchema), async (c) => {
