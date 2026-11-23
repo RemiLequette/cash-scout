@@ -205,6 +205,24 @@ describe("category budgets", () => {
     expect((await b.year(2027)).budgets).toEqual([]);
   });
 
+  it("gives the year's total of every category, budgeted or not", async () => {
+    const b = await bookWithCategories();
+    await b.spend(b.bakery.id, "2026-03-05", "-40");
+    await b.spend(b.bakery.id, "2026-04-05", "-10.50");
+    await b.spend(b.pay.id, "2026-04-28", "2000");
+    await b.spend(b.bakery.id, "2025-04-05", "-999");
+    const { actuals } = (await b.year()) as unknown as {
+      actuals: { categoryId: string; total: string }[];
+    };
+    expect(actuals).toEqual(
+      expect.arrayContaining([
+        { categoryId: b.food.id, total: "50.50" },
+        { categoryId: b.salary.id, total: "2000.00" },
+      ]),
+    );
+    expect(actuals).toHaveLength(2);
+  });
+
   it("counts income of an income category as consumption, and carries it by mode", async () => {
     const b = await bookWithCategories();
     await b.addBudget({ categoryId: b.salary.id, amount: "1200", consumption: "roll_over" });
@@ -351,6 +369,85 @@ describe("category budgets", () => {
       type: "scheduled",
     });
     expect(refused.status).toBe(400);
+  });
+});
+
+describe("saving the budgets of a year at once", () => {
+  const save = (b: Awaited<ReturnType<typeof bookWithCategories>>, body: unknown) =>
+    b.owner.request("POST", b.budgets("/batch"), body);
+  const periodic = (b: Awaited<ReturnType<typeof bookWithCategories>>, categoryId: string) => ({
+    categoryId,
+    year: 2027,
+    type: "periodic",
+    amount: "600",
+    profileId: b.profile.id,
+    consumption: "lapse",
+  });
+
+  it("creates, replaces and removes budgets together", async () => {
+    const b = await bookWithCategories();
+    const first = await save(b, {
+      year: 2027,
+      save: [periodic(b, b.food.id), { categoryId: b.salary.id, year: 2027, type: "scheduled" }],
+    });
+    expect(await first.json()).toEqual({ saved: 2, removed: 0 });
+    const read = (await b.year(2027)).budgets as (Budget & { version: number })[];
+    expect(read.map((x) => x.type)).toEqual(["periodic", "scheduled"]);
+
+    const versions = Object.fromEntries(read.map((x) => [x.categoryId, x.version]));
+    const second = await save(b, {
+      year: 2027,
+      save: [{ ...periodic(b, b.food.id), amount: "900" }],
+      remove: [b.salary.id],
+      versions,
+    });
+    expect(await second.json()).toEqual({ saved: 1, removed: 1 });
+    const after = (await b.year(2027)).budgets;
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ amount: "900.00" });
+  });
+
+  it("refuses everything when one budget is wrong", async () => {
+    const b = await bookWithCategories();
+    const refused = await save(b, {
+      year: 2027,
+      save: [periodic(b, b.food.id), { ...periodic(b, b.salary.id), amount: "-5" }],
+    });
+    expect(refused.status).toBe(400);
+    expect((await b.year(2027)).budgets).toEqual([]);
+  });
+
+  it("refuses a change made on a budget that moved on since it was read", async () => {
+    const b = await bookWithCategories();
+    await save(b, { year: 2027, save: [periodic(b, b.food.id)] });
+    const [read] = (await b.year(2027)).budgets as (Budget & { version: number })[];
+    const patch = await b.owner.request("PATCH", b.budgets(`/${read!.id}`), { amount: "700" });
+    expect(patch.status).toBe(200);
+
+    const stale = await save(b, {
+      year: 2027,
+      save: [{ ...periodic(b, b.food.id), amount: "800" }],
+      versions: { [b.food.id]: read!.version },
+    });
+    expect(stale.status).toBe(409);
+    // A budget the screen did not know about counts as a conflict too.
+    const unknown = await save(b, { year: 2027, save: [periodic(b, b.food.id)] });
+    expect(unknown.status).toBe(409);
+    expect((await b.year(2027)).budgets[0]).toMatchObject({ amount: "700.00" });
+  });
+
+  it("needs the editor role and budgets of the year", async () => {
+    const b = await bookWithCategories();
+    expect(
+      (await save(b, { year: 2027, save: [{ ...periodic(b, b.food.id), year: 2026 }] })).status,
+    ).toBe(400);
+    const viewer = await h.signedInUser();
+    await b.owner.request("POST", `/books/${b.bookId}/members`, {
+      email: viewer.email,
+      role: "viewer",
+    });
+    const denied = await viewer.request("POST", b.budgets("/batch"), { year: 2027, save: [] });
+    expect(denied.status).toBe(403);
   });
 });
 

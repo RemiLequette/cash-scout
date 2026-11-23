@@ -65,7 +65,13 @@ function BookTitle({ bookId, view }: { bookId: string; view: BookView }) {
       {view !== "journal" && (
         <Text span c="dimmed" fw={400}>
           {" · "}
-          {t(view === "reference" ? "book.referenceData" : "book.settingsAndMembers")}
+          {t(
+            view === "reference"
+              ? "book.referenceData"
+              : view === "budget"
+                ? "book.budget"
+                : "book.settingsAndMembers",
+          )}
         </Text>
       )}
     </Text>
@@ -108,6 +114,9 @@ function NavMenu({
             </Menu.Label>
             <Menu.Item leftSection={mark(view === "journal")} onClick={() => open("journal")}>
               {t("book.journal")}
+            </Menu.Item>
+            <Menu.Item leftSection={mark(view === "budget")} onClick={() => open("budget")}>
+              {t("book.budget")}
             </Menu.Item>
             <Menu.Item leftSection={mark(view === "reference")} onClick={() => open("reference")}>
               {t("book.referenceData")}
@@ -236,7 +245,9 @@ const bookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/books/$bookId",
   validateSearch: (search: Record<string, unknown>): { view?: Exclude<BookView, "journal"> } =>
-    search.view === "reference" || search.view === "settings" ? { view: search.view } : {},
+    search.view === "budget" || search.view === "reference" || search.view === "settings"
+      ? { view: search.view }
+      : {},
   component: function BookPage() {
     const { bookId } = bookRoute.useParams();
     const { view } = bookRoute.useSearch();

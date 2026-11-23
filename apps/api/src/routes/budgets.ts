@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import {
   allocate,
+  budgetBatchSchema,
   budgetMonths,
   budgetQuerySchema,
   categoryBudgetInputSchema,
@@ -38,10 +39,7 @@ const profileColumns = {
   weights: budgetProfile.weights,
   archivedAt: budgetProfile.archivedAt,
 };
-const outProfile = ({
-  archivedAt,
-  ...rest
-}: { archivedAt: Date | null } & Record<string, unknown>) => ({
+const outProfile = <T extends { archivedAt: Date | null }>({ archivedAt, ...rest }: T) => ({
   ...rest,
   archived: archivedAt !== null,
 });
@@ -271,18 +269,20 @@ export function budgetsRoutes(db: Db) {
             tx
               .select({
                 categoryId: subCategory.categoryId,
+                direction: category.direction,
                 month: MONTH,
                 total: sql<string>`sum(${journalEntry.bookAmount})`,
               })
               .from(journalEntry)
               .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
+              .innerJoin(category, eq(category.id, subCategory.categoryId))
               .where(
                 and(
                   eq(journalEntry.bookId, bookId),
                   sql`extract(year from ${journalEntry.date}) = ${year}`,
                 ),
               )
-              .groupBy(subCategory.categoryId, MONTH),
+              .groupBy(subCategory.categoryId, category.direction, MONTH),
           ]);
           const weightsOf = new Map(profiles.map((p) => [p.id, p.weights]));
           const text = (minor: bigint) => toDecimalString(money(minor, bookCurrency));
@@ -316,7 +316,63 @@ export function budgetsRoutes(db: Db) {
               })),
             };
           });
-          return { year, bookCurrency, budgets };
+          // What the journal holds for the year in every category, budgeted or not, with the
+          // category's sign: spending and saving positive, income positive.
+          const totals = new Map<string, bigint>();
+          for (const entry of consumption) {
+            const sign = entry.direction === "income" ? 1n : -1n;
+            totals.set(
+              entry.categoryId,
+              (totals.get(entry.categoryId) ?? 0n) + sign * BigInt(entry.total),
+            );
+          }
+          const actuals = [...totals].map(([categoryId, total]) => ({
+            categoryId,
+            total: text(total),
+          }));
+          return { year, bookCurrency, budgets, actuals };
+        });
+        return c.json(result);
+      })
+      // Saves the budgets of a year at once, all or nothing: the preparation screen's save.
+      .post("/batch", zValidator("json", budgetBatchSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const { year, save, remove = [], versions = {} } = c.req.valid("json");
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const existing = await tx
+            .select({
+              id: categoryBudget.id,
+              categoryId: categoryBudget.categoryId,
+              version: categoryBudget.version,
+            })
+            .from(categoryBudget)
+            .where(and(eq(categoryBudget.bookId, bookId), eq(categoryBudget.year, year)));
+          const byCategory = new Map(existing.map((row) => [row.categoryId, row]));
+          // What the screen read must still be there: else someone else changed it.
+          for (const categoryId of [...save.map((item) => item.categoryId), ...remove]) {
+            const row = byCategory.get(categoryId);
+            if (row?.version !== versions[categoryId]) {
+              throw new HTTPException(409, {
+                message: "A budget was changed or deleted by someone else: reload the year",
+              });
+            }
+          }
+          for (const item of save) {
+            const values = await budgetValues(tx, bookId, item);
+            const row = byCategory.get(item.categoryId);
+            if (row) {
+              await tx.update(categoryBudget).set(values).where(eq(categoryBudget.id, row.id));
+            } else {
+              await tx.insert(categoryBudget).values({ bookId, ...values });
+            }
+          }
+          for (const categoryId of remove) {
+            const row = byCategory.get(categoryId);
+            if (row) await tx.delete(categoryBudget).where(eq(categoryBudget.id, row.id));
+          }
+          return { saved: save.length, removed: remove.filter((id) => byCategory.has(id)).length };
         });
         return c.json(result);
       })
