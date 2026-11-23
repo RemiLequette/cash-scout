@@ -20,10 +20,10 @@ Two containers in Docker Compose: one Node container serving the API and the bui
 
 A pnpm workspace, TypeScript everywhere:
 
-| Package           | Content                                                                                                                                         |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`        | React front end                                                                                                                                 |
-| `apps/api`        | HTTP API, authentication, database access, import                                                                                               |
+| Package           | Content                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`        | React front end                                                                                                                          |
+| `apps/api`        | HTTP API, authentication, database access, import                                                                                        |
 | `packages/domain` | Types, zod validation schemas, and pure calculations: budget allocation by profile, consumption by mode, cash projection, yearly balance |
 
 `packages/domain` has no dependency on the database or the browser. The API and the front end use the same schemas, so a form validates exactly as the server does, and the calculations are tested in isolation.
