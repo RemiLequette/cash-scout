@@ -1,5 +1,6 @@
 import { hasRole, type BookRole } from "@cash-scout/domain";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, type SQL } from "drizzle-orm";
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { HTTPException } from "hono/http-exception";
 import type { Tx } from "../db/client.js";
 import { book, bookLanguage, bookMember } from "../db/schema.js";
@@ -36,6 +37,32 @@ export function idOf(param: string | undefined, what = "Book"): string {
     throw new HTTPException(404, { message: `${what} not found` });
   }
   return param;
+}
+
+/** A table of book data that counts the revisions of its rows. */
+type VersionedTable = PgTable & { id: PgColumn; bookId: PgColumn; version: PgColumn };
+
+/**
+ * Condition selecting one row of a book. With `version`, the row is selected
+ * only while it is still at that revision: an update that finds nothing then
+ * is reported by `missing` as a conflict.
+ */
+export function rowOf(table: VersionedTable, bookId: string, id: string, version?: number): SQL {
+  const row = and(eq(table.id, id), eq(table.bookId, bookId))!;
+  return version === undefined ? row : and(row, eq(table.version, version))!;
+}
+
+/**
+ * Fails when an update or a delete selected no row: 409 when the client sent
+ * the revision it had read (the row changed or went away since), else 404.
+ */
+export function missing(what: string, version?: number): never {
+  if (version !== undefined) {
+    throw new HTTPException(409, {
+      message: `${what} was changed or deleted by someone else: reload it`,
+    });
+  }
+  throw new HTTPException(404, { message: `${what} not found` });
 }
 
 /** The book's languages, its default language first. */

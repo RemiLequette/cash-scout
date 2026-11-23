@@ -128,7 +128,7 @@ describe("books", () => {
     const { id } = await createBook(alice);
 
     const list = await (await alice.request("GET", "/books")).json();
-    expect(list).toEqual([{ id, ...household, role: "owner" }]);
+    expect(list).toEqual([{ id, ...household, role: "owner", version: 1 }]);
   });
 
   it("rejects invalid input", async () => {

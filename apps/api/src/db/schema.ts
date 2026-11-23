@@ -20,6 +20,16 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+/**
+ * Revision counter of a row, raised by every update. A client that read version
+ * N sends it back with its change, which is refused (409) if the row moved on.
+ */
+const version = () =>
+  integer("version")
+    .notNull()
+    .default(1)
+    .$onUpdate(() => sql`version + 1`);
+
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -109,6 +119,7 @@ export const book = pgTable("book", {
   /** Default language of the book's reference data (BCP 47). */
   defaultLanguage: text("default_language").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  version: version(),
 });
 
 export const bookMember = pgTable(
@@ -168,6 +179,7 @@ export const categoryGroup = pgTable(
     /** Display order of the groups. */
     position: integer("position").notNull().default(0),
     archivedAt: archivedAt(),
+    version: version(),
   },
   (t) => [unique().on(t.id, t.bookId), index("category_group_book_idx").on(t.bookId)],
 );
@@ -185,6 +197,7 @@ export const category = pgTable(
     defaultBudgetType: budgetType("default_budget_type").notNull().default("periodic"),
     names: names(),
     archivedAt: archivedAt(),
+    version: version(),
   },
   (t) => [
     unique().on(t.id, t.bookId),
@@ -204,6 +217,7 @@ export const subCategory = pgTable(
     categoryId: uuid("category_id").notNull(),
     names: names(),
     archivedAt: archivedAt(),
+    version: version(),
   },
   (t) => [
     unique().on(t.id, t.bookId),
@@ -221,6 +235,7 @@ export const paymentType = pgTable(
     bookId: bookId(),
     names: names(),
     archivedAt: archivedAt(),
+    version: version(),
   },
   (t) => [unique().on(t.id, t.bookId), index("payment_type_book_idx").on(t.bookId)],
 );
@@ -239,6 +254,7 @@ export const bookAccount = pgTable(
     /** Warn when the projected balance goes below this amount, in minor units. */
     lowBalanceThreshold: bigint("low_balance_threshold", { mode: "bigint" }),
     archivedAt: archivedAt(),
+    version: version(),
   },
   (t) => [unique().on(t.id, t.bookId), index("book_account_book_idx").on(t.bookId)],
 );
@@ -276,6 +292,7 @@ export const journalEntry = pgTable(
     /** Matching entry in another book (linked entries come in a later version). */
     linkId: uuid("link_id"),
     ...timestamps,
+    version: version(),
   },
   (t) => [
     foreignKey({
@@ -315,6 +332,7 @@ export const budgetProfile = pgTable(
     names: names(),
     weights: integer("weights").array().notNull(),
     archivedAt: archivedAt(),
+    version: version(),
   },
   (t) => [
     unique().on(t.id, t.bookId),
@@ -355,6 +373,7 @@ export const categoryBudget = pgTable(
     /** 1 unit of the account currency = rate units of the book currency, as for entries. */
     exchangeRate: numeric("exchange_rate"),
     ...timestamps,
+    version: version(),
   },
   (t) => [
     unique("category_budget_year_unique").on(t.categoryId, t.year),

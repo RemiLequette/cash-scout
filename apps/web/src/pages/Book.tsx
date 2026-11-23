@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { api, unwrap } from "../api";
 import { useSession } from "../auth";
 import { languageOptions } from "../options";
+import { useBookEvents } from "../sync";
 import { Journal } from "./Journal";
 import { ReferenceData } from "./Reference";
 
@@ -34,6 +35,7 @@ interface BookData {
   defaultLanguage: string;
   languages: string[];
   role: BookRole;
+  version: number;
 }
 
 /** The parts of a book, chosen in the navigation menu. */
@@ -48,6 +50,7 @@ export function useBook(bookId: string | undefined) {
 }
 
 function BookView({ bookId, view }: { bookId: string; view: BookView }) {
+  useBookEvents(bookId);
   const book = useBook(bookId);
   if (book.error) return <ErrorAlert error={book.error} />;
   if (!book.data) return null;
@@ -87,7 +90,7 @@ function SettingsForm({ book }: { book: BookData }) {
       unwrap(
         api.books[":bookId"].$patch({
           param: { bookId },
-          json: { name, defaultLanguage: defaultLanguage ?? "", languages },
+          json: { name, defaultLanguage: defaultLanguage ?? "", languages, version: book.version },
         }),
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["books"] }),

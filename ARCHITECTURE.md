@@ -64,6 +64,14 @@ Linked entries between two books are written in one transaction, after checking 
 - **Archiving** sets `archived_at`: the item stays for past data and is hidden from choices. A new entry cannot use an archived account, sub-category or payment type; an existing entry keeps the ones it has. Deleting is refused while an item is in use; merging a sub-category moves its entries to another one, then deletes it, in one transaction.
 - **Journal entries** reserve `schedule_id` and `link_id` for schedules and linked entries; they stay empty until those exist.
 
+### Concurrent use
+
+A book can be open in several windows at once, by one member or several.
+
+- **Versions**: books and every row edited by the app (reference items, journal entries, budgets and profiles) carry an integer `version`, raised by each update. A client sends back the `version` it read with its change; if the row has moved on or is gone, the API answers 409 and the client reloads. Without a `version` the change wins, which is what scripts and imports use.
+- **Events**: `GET /api/books/:bookId/events` is a stream of server-sent events, open to members. After each successful change under `/books/:bookId`, a middleware publishes its scope (`book`, `members`, `reference`, `journal`, `budgets`) and the windows reload the matching queries. Events carry no data, so nothing is read with another user's rights. A window that lost its connection reloads the whole book when the browser reconnects.
+- **Limit**: the event bus is in the memory of the API process. Running several API instances needs a relay between them, for example PostgreSQL `LISTEN` / `NOTIFY`.
+
 ### Reports and projection
 
 - Pivots, dashboards and history are computed in SQL (`GROUP BY` over the journal joined with reference data) and returned as rows (O3).

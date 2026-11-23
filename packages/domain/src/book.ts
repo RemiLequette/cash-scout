@@ -37,12 +37,19 @@ export const bookInputSchema = z.object({
 });
 export type BookInput = z.infer<typeof bookInputSchema>;
 
+/**
+ * Revision of a row as the client last read it. When given with a change, the
+ * API refuses it (409) if the row has changed since; without it, the change wins.
+ */
+export const versionSchema = z.number().int().positive();
+
 /** Languages of the book's reference data; the default language is one of them. */
 export const bookUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(100),
     defaultLanguage: languageSchema,
     languages: z.array(languageSchema).min(1).max(10),
+    version: versionSchema.optional(),
   })
   .refine((b) => b.languages.includes(b.defaultLanguage), {
     message: "The default language must be one of the book's languages",

@@ -31,7 +31,7 @@ import {
   subCategory,
 } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
-import { idOf, languagesOf, requireRole } from "./access.js";
+import { idOf, languagesOf, missing, requireRole, rowOf } from "./access.js";
 
 /** A table of reference data: every one has id, book_id, names and archived_at. */
 type ReferenceTable = PgTable & {
@@ -39,6 +39,7 @@ type ReferenceTable = PgTable & {
   bookId: PgColumn;
   names: PgColumn;
   archivedAt: PgColumn;
+  version: PgColumn;
 };
 
 /** Checks new names against the book's languages; fails with 400. */
@@ -82,10 +83,10 @@ function archiveValue(archived: boolean | undefined) {
   return archived === undefined ? {} : { archivedAt: archived ? new Date() : null };
 }
 
-/** Fails with 404 when the update touched no row of the book. */
-function updatedOne<T>(rows: T[]): T {
+/** Fails when the update touched no row of the book: 409 with a version, else 404. */
+function updatedOne<T>(rows: T[], version?: number): T {
   if (rows.length === 0) {
-    throw new HTTPException(404, { message: "Item not found" });
+    return missing("Item", version);
   }
   return rows[0]!;
 }
@@ -102,12 +103,14 @@ function threshold(value: string | null | undefined, currency: string) {
 }
 
 const groupColumns = {
+  version: categoryGroup.version,
   id: categoryGroup.id,
   names: categoryGroup.names,
   position: categoryGroup.position,
   archivedAt: categoryGroup.archivedAt,
 };
 const categoryColumns = {
+  version: category.version,
   id: category.id,
   groupId: category.groupId,
   code: category.code,
@@ -117,17 +120,20 @@ const categoryColumns = {
   archivedAt: category.archivedAt,
 };
 const subCategoryColumns = {
+  version: subCategory.version,
   id: subCategory.id,
   categoryId: subCategory.categoryId,
   names: subCategory.names,
   archivedAt: subCategory.archivedAt,
 };
 const paymentTypeColumns = {
+  version: paymentType.version,
   id: paymentType.id,
   names: paymentType.names,
   archivedAt: paymentType.archivedAt,
 };
 const accountColumns = {
+  version: bookAccount.version,
   id: bookAccount.id,
   names: bookAccount.names,
   kind: bookAccount.kind,
@@ -143,6 +149,7 @@ const out = <T extends { archivedAt: Date | null }>({ archivedAt, ...rest }: T) 
 });
 const outAccount = (row: {
   id: string;
+  version: number;
   names: Names;
   kind: "bank" | "virtual";
   currency: string;
@@ -212,7 +219,7 @@ export function referenceRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Item");
-        const { names, archived, ...input } = c.req.valid("json");
+        const { names, archived, version, ...input } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           return updatedOne(
@@ -223,8 +230,9 @@ export function referenceRoutes(db: Db) {
                 ...archiveValue(archived),
                 ...(names && { names: await mergedNames(tx, bookId, categoryGroup, id, names) }),
               })
-              .where(and(eq(categoryGroup.id, id), eq(categoryGroup.bookId, bookId)))
+              .where(rowOf(categoryGroup, bookId, id, version))
               .returning(groupColumns),
+            version,
           );
         });
         return c.json(out(row));
@@ -253,7 +261,7 @@ export function referenceRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Item");
-        const { names, archived, ...input } = c.req.valid("json");
+        const { names, archived, version, ...input } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           return updatedOne(
@@ -264,8 +272,9 @@ export function referenceRoutes(db: Db) {
                 ...archiveValue(archived),
                 ...(names && { names: await mergedNames(tx, bookId, category, id, names) }),
               })
-              .where(and(eq(category.id, id), eq(category.bookId, bookId)))
+              .where(rowOf(category, bookId, id, version))
               .returning(categoryColumns),
+            version,
           );
         });
         return c.json(out(row));
@@ -294,7 +303,7 @@ export function referenceRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Item");
-        const { names, archived, ...input } = c.req.valid("json");
+        const { names, archived, version, ...input } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           return updatedOne(
@@ -305,8 +314,9 @@ export function referenceRoutes(db: Db) {
                 ...archiveValue(archived),
                 ...(names && { names: await mergedNames(tx, bookId, subCategory, id, names) }),
               })
-              .where(and(eq(subCategory.id, id), eq(subCategory.bookId, bookId)))
+              .where(rowOf(subCategory, bookId, id, version))
               .returning(subCategoryColumns),
+            version,
           );
         });
         return c.json(out(row));
@@ -368,7 +378,7 @@ export function referenceRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Item");
-        const { names, archived } = c.req.valid("json");
+        const { names, archived, version } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           return updatedOne(
@@ -378,8 +388,9 @@ export function referenceRoutes(db: Db) {
                 ...archiveValue(archived),
                 ...(names && { names: await mergedNames(tx, bookId, paymentType, id, names) }),
               })
-              .where(and(eq(paymentType.id, id), eq(paymentType.bookId, bookId)))
+              .where(rowOf(paymentType, bookId, id, version))
               .returning(paymentTypeColumns),
+            version,
           );
         });
         return c.json(out(row));
@@ -414,7 +425,7 @@ export function referenceRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Item");
-        const { names, archived, lowBalanceThreshold } = c.req.valid("json");
+        const { names, archived, lowBalanceThreshold, version } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           const [current] = await tx
@@ -434,8 +445,9 @@ export function referenceRoutes(db: Db) {
                   lowBalanceThreshold: threshold(lowBalanceThreshold, current.currency),
                 }),
               })
-              .where(and(eq(bookAccount.id, id), eq(bookAccount.bookId, bookId)))
+              .where(rowOf(bookAccount, bookId, id, version))
               .returning(accountColumns),
+            version,
           );
         });
         return c.json(outAccount(row));

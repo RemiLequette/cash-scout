@@ -3,6 +3,7 @@ import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import type { Auth } from "./auth.js";
 import type { Db } from "./db/client.js";
+import { createBookEvents } from "./events.js";
 import type { AppEnv } from "./http.js";
 import { booksRoutes } from "./routes/books.js";
 
@@ -32,6 +33,8 @@ export function createApp({ db, auth, pingDatabase }: AppDeps) {
     await next();
   });
 
+  const events = createBookEvents();
+
   return new Hono<AppEnv>()
     .basePath("/api")
     .onError((error, c) => {
@@ -56,7 +59,7 @@ export function createApp({ db, auth, pingDatabase }: AppDeps) {
     .on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw))
     .use("/books", requireUser)
     .use("/books/*", requireUser)
-    .route("/books", booksRoutes(db));
+    .route("/books", booksRoutes(db, events));
 }
 
 /** Type of the API, used by the front end's typed client. */
