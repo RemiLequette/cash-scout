@@ -45,6 +45,7 @@
     "open": "Ouvrir"
   },
   "book": {
+    "dashboard": "Tableau de bord",
     "settings": "Paramètres",
     "members": "Membres",
     "addMember": "Ajouter un membre",
@@ -117,6 +118,29 @@
     "emptyCategories": "Aucune catégorie. Commencez par un groupe, par exemple Vie courante, puis ajoutez ses catégories.",
     "emptyAccounts": "Aucun compte.",
     "emptyPaymentTypes": "Aucun moyen de paiement."
+  },
+  "dashboard": {
+    "row": "Catégorie",
+    "total": "Total",
+    "previousYear": "Année précédente",
+    "nextYear": "Année suivante",
+    "currency": "Montants en {currency}",
+    "expandAll": "Tout déplier",
+    "collapseAll": "Tout replier",
+    "expand": "Déplier",
+    "collapse": "Replier",
+    "unused": "Budget non consommé",
+    "balances": "Soldes des comptes en fin de mois",
+    "balanceTotal": "Tous les comptes",
+    "empty": "Rien sur cette année.",
+    "detail": "Écritures",
+    "selectHint": "Sélectionnez une case pour voir ses écritures.",
+    "unusedHint": "Budget pas encore consommé : il n'a pas d'écritures.",
+    "showing": "{shown} écritures sur {total}",
+    "openJournal": "Ouvrir le journal",
+    "showDetail": "Afficher les écritures",
+    "hideDetail": "Masquer les écritures",
+    "resize": "Redimensionner les écritures"
   },
   "budget": {
     "title": "Budget {year}",

@@ -16,6 +16,7 @@ import { book, bookLanguage, bookMember, user } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, languagesOf, missing, requireRole, roleOf } from "./access.js";
 import { budgetsRoutes } from "./budgets.js";
+import { dashboardRoutes } from "./dashboard.js";
 import { journalRoutes } from "./journal.js";
 import { referenceRoutes } from "./reference.js";
 
@@ -118,6 +119,7 @@ export function booksRoutes(db: Db, events: BookEvents) {
       })
 
       .route("/:bookId/budgets", budgetsRoutes(db))
+      .route("/:bookId/dashboard", dashboardRoutes(db))
       .route("/:bookId/journal", journalRoutes(db))
       .route("/:bookId/reference", referenceRoutes(db))
 

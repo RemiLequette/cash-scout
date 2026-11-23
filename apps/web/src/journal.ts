@@ -36,7 +36,7 @@ export interface JournalFilters {
   offset: number;
 }
 
-export function useJournal(bookId: string, filters: JournalFilters) {
+export function useJournal(bookId: string, filters: JournalFilters, enabled = true) {
   const query = Object.fromEntries(
     Object.entries(filters)
       .filter(
@@ -49,6 +49,7 @@ export function useJournal(bookId: string, filters: JournalFilters) {
     queryKey: ["books", bookId, "journal", "list", query],
     queryFn: () => unwrap(journal.$get({ param: { bookId }, query })),
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 
