@@ -112,6 +112,7 @@ const categoryColumns = {
   groupId: category.groupId,
   code: category.code,
   direction: category.direction,
+  defaultBudgetType: category.defaultBudgetType,
   names: category.names,
   archivedAt: category.archivedAt,
 };

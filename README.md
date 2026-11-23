@@ -15,7 +15,7 @@ Every feature and decision below serves at least one of these objectives.
 ## Scope
 
 - A journal of past and future transactions, reconciled against the bank (O2, O3).
-- Yearly budgets with a saving target, and scheduled predictable transactions (O1, O2).
+- Yearly budgets, with saving budgeted as a category of its own, and scheduled predictable transactions (O1, O2).
 - A cash projection per account (O2).
 - Pivot views and reports (O3).
 - Several users, each working in separate **books**, some private and some shared (O1–O3 for a household as well as for each person).
@@ -142,16 +142,17 @@ A book plans each year category by category. Each category's plan follows one of
 
 A **category budget** is the plan of one category for one year:
 
-| Element     | Applies to | Meaning                                                                                                                                                |
-| ----------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Category    | both       |                                                                                                                                                        |
-| Year        | both       | Calendar year                                                                                                                                          |
-| Type        | both       | Scheduled or periodic                                                                                                                                  |
-| Assumptions | both       | Free text: what the plan relies on, such as "rent +3 % in July" or "no long trip this year"                                                            |
-| Amount      | periodic   | The annual amount, in the book's currency                                                                                                              |
-| Profile     | periodic   | How the annual amount is spread over the 12 months                                                                                                     |
-| Consumption | periodic   | **Lapse**: what a month did not use, or overspent, is gone. **Roll over**: it moves to the next month. **Annual pool**: the whole year is one envelope |
-| Account     | periodic   | The account where the remaining budget is expected to be spent, for the projection                                                                     |
+| Element     | Applies to | Meaning                                                                                                                                                                                                    |
+| ----------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Category    | both       |                                                                                                                                                                                                            |
+| Year        | both       | Calendar year                                                                                                                                                                                              |
+| Type        | both       | Scheduled or periodic                                                                                                                                                                                      |
+| Assumptions | both       | Free text: what the plan relies on, such as "rent +3 % in July" or "no long trip this year"                                                                                                                |
+| Amount      | periodic   | The annual amount, in the book's currency                                                                                                                                                                  |
+| Profile     | periodic   | How the annual amount is spread over the 12 months                                                                                                                                                         |
+| Consumption | periodic   | **Lapse**: what a month did not use, or overspent, is gone. **Roll over**: it moves to the next month. **Annual pool**: the whole year is one envelope                                                     |
+| Account     | periodic   | The account where the remaining budget is expected to be spent, for the projection                                                                                                                         |
+| Rate        | periodic   | Exchange rate of the account's currency into the book's currency, as for entries (1 when they are the same). It is kept with the budget to convert it for the projection; a first version, to refine later |
 
 Budgets of every past year are kept: reports compare each year with its own plan.
 
@@ -172,7 +173,7 @@ A **profile** is a set of 12 monthly weights adding up to 100 %. Profiles are re
 ### Periodic categories
 
 - The plan is **not journal entries**: the category budget is its own object, and reports and the projection compute from it.
-- **Allocation**: each month gets annual amount × the profile's weight for that month. Revising the amount re-spreads it over the whole year.
+- **Allocation**: each month gets annual amount × the profile's weight for that month. Amounts are in minor units, so the rounding remainder goes to the last month and the 12 months always add up to the annual amount. Revising the amount re-spreads it over the whole year.
 - **Consumption**: every journal entry of the category consumes its month, whatever its date, reconciled or not. A future entry known in advance, such as a holiday deposit, consumes the budget like any other and appears at its date in the projection.
 - **Remaining** = allocated (after the consumption mode) − consumed.
 
@@ -198,7 +199,7 @@ The year's plan is checked as a whole. Since each category has a single type, pl
 - the planned amounts of the year's entries in scheduled categories;
 - the annual amounts of periodic categories.
 
-Planned income − planned spending = planned saving, compared with the book's **saving target** for the year. During the year, the same balance is shown with actuals to date plus what remains planned.
+Saving has no separate target: it is budgeted like any other category, in a dedicated one, so a balanced plan has planned income equal to planned spending plus planned saving. During the year, the same balance is shown with actuals to date plus what remains planned.
 
 ### Cash projection
 
@@ -206,7 +207,7 @@ For each account, in **the account's currency**, the expected daily balance is: 
 
 ## Reports
 
-- **Yearly balance** (O1, O3): income, spending and saving, planned against actual, with the saving target.
+- **Yearly balance** (O1, O3): income, spending and saving, planned against actual.
 - **Pivot view** (O3): rows by group, category, sub-category, account or payment type; columns by month, quarter or year; measures: actual, planned, budget allocated, consumed, remaining, variance. Expand and collapse levels, filter by period, account and reconciled status, export to CSV.
 - **Year dashboard** (O3): per category, month by month: annual total, monthly average, current month against its budget, year to date against the annual budget, comparison with the previous year.
 - **Budget planning** (O1): next year's budgets and scheduled entries per category and month, against this year.
@@ -232,7 +233,6 @@ Functional decisions. Technical choices are in [ARCHITECTURE.md](ARCHITECTURE.md
 | Per-person spending  | Not a dimension inside a book: a member's own spending goes in their own book                                                                                      | O3                                 | Keeps books simple; linked entries cover contributions. A virtual common book is a possible [future improvement](#future-improvements) |
 | Periodic categories  | Category budgets outside the journal: annual amount, monthly profile, consumption mode, projection account                                                         | O1, O2, O3                         | Replace the special budget entries of the sheets                                                                                       |
 | Budget revisions     | One amount per category budget, revised freely; past years kept, no history of revisions; free-text assumptions per category and year                              | O1, O3                             | A household tool, not an accounting system                                                                                             |
-| Saving target        | A yearly target per book, checked against planned and actual saving                                                                                                | O1, O3                             |                                                                                                                                        |
 | Bank data            | File import first: CSV, OFX, QIF, matched against scheduled entries                                                                                                | O2, O3                             | Reconciled balances are the starting point of the projection; bank sync can come later                                                 |
 | Interface languages  | Clean i18n from the start: no text in the code, one message file per language, dates, numbers and currencies formatted by locale. English and French shipped first | — (users)                          | A new language is added by contributing a message file, without code changes; each user picks their language                           |
 | Book languages       | Each book lists the languages of its reference data, with a default one                                                                                            | — (users)                          | Members of a multilingual household each read the book's categories in their own language                                              |

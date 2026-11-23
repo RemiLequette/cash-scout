@@ -13,6 +13,7 @@ import { withUser, type Db, type Tx } from "../db/client.js";
 import { book, bookLanguage, bookMember, user } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, languagesOf, requireRole, roleOf } from "./access.js";
+import { budgetsRoutes } from "./budgets.js";
 import { journalRoutes } from "./journal.js";
 import { referenceRoutes } from "./reference.js";
 
@@ -96,6 +97,7 @@ export function booksRoutes(db: Db) {
         return c.json(result);
       })
 
+      .route("/:bookId/budgets", budgetsRoutes(db))
       .route("/:bookId/journal", journalRoutes(db))
       .route("/:bookId/reference", referenceRoutes(db))
 

@@ -53,3 +53,15 @@ export async function languagesOf(tx: Tx, bookId: string) {
   const others = rows.map((r) => r.language).filter((l) => l !== defaultLanguage);
   return { defaultLanguage, languages: [defaultLanguage, ...others] };
 }
+
+/** Runs a calculation whose RangeError is the user's to fix, as a 400. */
+export function checked<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new HTTPException(400, { message: error.message });
+    }
+    throw error;
+  }
+}
