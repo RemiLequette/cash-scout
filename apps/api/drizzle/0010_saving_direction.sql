@@ -1,0 +1,1 @@
+ALTER TYPE "public"."direction" ADD VALUE 'saving' BEFORE 'transfer';

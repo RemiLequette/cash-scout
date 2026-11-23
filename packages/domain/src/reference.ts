@@ -31,7 +31,7 @@ export function checkNames(
   return undefined;
 }
 
-export const directions = ["expense", "income", "transfer"] as const;
+export const directions = ["expense", "income", "saving", "transfer"] as const;
 export const directionSchema = z.enum(directions);
 export type Direction = z.infer<typeof directionSchema>;
 

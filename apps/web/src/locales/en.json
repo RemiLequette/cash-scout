@@ -120,6 +120,7 @@
   "directions": {
     "expense": "Expense",
     "income": "Income",
+    "saving": "Saving",
     "transfer": "Transfer"
   },
   "accountKinds": {

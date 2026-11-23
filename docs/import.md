@@ -22,13 +22,13 @@ Name columns are in the book's **default language**. A translation goes in a col
 
 One line per sub-category; a category without sub-categories can have an empty `sub_category`.
 
-| Column         | Required | Content                                                                          |
-| -------------- | -------- | -------------------------------------------------------------------------------- |
-| `group`        | yes      | Group name. Lines with the same group name share the group.                      |
-| `category`     | yes      | Category name                                                                    |
-| `code`         | yes      | Category code, unique in the book (`C01`). Lines with the same code share it.    |
-| `direction`    | yes      | `expense`, `income` or `transfer` (French `dépense`, `recette`, `virement` work) |
-| `sub_category` | no       | Sub-category name                                                                |
+| Column         | Required | Content                                                                                               |
+| -------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `group`        | yes      | Group name. Lines with the same group name share the group.                                           |
+| `category`     | yes      | Category name                                                                                         |
+| `code`         | yes      | Category code, unique in the book (`C01`). Lines with the same code share it.                         |
+| `direction`    | yes      | `expense`, `income`, `saving` or `transfer` (French `dépense`, `recette`, `épargne`, `virement` work) |
+| `sub_category` | no       | Sub-category name                                                                                     |
 
 ```csv
 group;group@en;category;category@en;code;direction;sub_category;sub_category@en

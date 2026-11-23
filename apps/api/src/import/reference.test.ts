@@ -88,7 +88,7 @@ describe("importReference", () => {
     await expect(
       withUser(h.db, owner.id, (tx) => importReference(tx, bookId, { categories: bad })),
     ).rejects.toThrow(
-      new ImportError('Line 5: unknown direction "sideways" (expense, income or transfer)'),
+      new ImportError('Line 5: unknown direction "sideways" (expense, income, saving or transfer)'),
     );
 
     const reference = (await (await owner.request("GET", `/books/${bookId}/reference`)).json()) as {

@@ -56,11 +56,14 @@ export function parseCsv(text: string): Row[] {
 const directionAliases: Record<string, Direction> = {
   expense: "expense",
   income: "income",
+  saving: "saving",
   transfer: "transfer",
   dépense: "expense",
   depense: "expense",
   recette: "income",
   revenu: "income",
+  épargne: "saving",
+  epargne: "saving",
   virement: "transfer",
 };
 
@@ -142,7 +145,7 @@ export async function importReference(
         const direction = directionAliases[required(row, "direction", line).toLowerCase()];
         if (!direction) {
           throw new ImportError(
-            `Line ${line}: unknown direction "${row.direction}" (expense, income or transfer)`,
+            `Line ${line}: unknown direction "${row.direction}" (expense, income, saving or transfer)`,
           );
         }
         const [created] = await tx

@@ -8,7 +8,7 @@ Every feature and decision below serves at least one of these objectives.
 
 | Id     | Objective               | What it means                                                                                   |
 | ------ | ----------------------- | ----------------------------------------------------------------------------------------------- |
-| **O1** | **Plan**                | Make a yearly budget, with targets that balance income, spending and saving.                    |
+| **O1** | **Plan**                | Make a yearly budget for income, spending and saving, and see what it does to the accounts.     |
 | **O2** | **Project forward**     | Avoid overdrafts by projecting each account's balance, especially across several bank accounts. |
 | **O3** | **Control and analyse** | Compare actuals with the plan to improve savings and plan the next period better.               |
 
@@ -95,7 +95,7 @@ One entry per transaction, past or future, in a book:
 | Schedule        | The schedule that generated the entry, if any                                                                                                                                                                   |
 | Link            | The matching entry in another book, if any                                                                                                                                                                      |
 
-**Categories** have three levels: group → category → sub-category. A category has a short code (`C01`, `P02`…) that sets its sort order. Each category has a **direction** (expense, income or transfer); transfers between a book's own accounts are left out of spending totals.
+**Categories** have three levels: group → category → sub-category. A category has a short code (`C01`, `P02`…) that sets its sort order. Each category has a **direction**: expense, income, saving or transfer. **Saving** is money that leaves the book's accounts for assets the book does not track, such as a life insurance: a negative saving is a withdrawal from them. A saving account that is in the book makes its movements **transfers**, which are left out of the totals, like any transfer between a book's own accounts.
 
 **The category decides, not the sign.** An amount's sign never says whether it is income or spending: a tax withheld is negative income, a refund or a health insurance reimbursement is positive spending. Reports add signed amounts within each category and take the direction from the category. Import rules and entry helpers never pick a category from the sign alone.
 
@@ -199,7 +199,7 @@ The year's plan is checked as a whole. Since each category has a single type, pl
 - the planned amounts of the year's entries in scheduled categories;
 - the annual amounts of periodic categories.
 
-Saving has no separate target: it is budgeted like any other category, in a dedicated one, so a balanced plan has planned income equal to planned spending plus planned saving. During the year, the same balance is shown with actuals to date plus what remains planned.
+Saving is budgeted like any other category, in a category of the saving direction, for instance scheduled payments to a life insurance; its budget amount may be negative for a planned withdrawal. The plan is not meant to balance to zero: planned income − planned spending − planned saving is the **planned change of the book's accounts**, shown for information, not as a target. During the year, the same balance is shown with actuals to date plus what remains planned.
 
 ### Cash projection
 

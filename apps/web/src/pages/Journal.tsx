@@ -734,7 +734,7 @@ function BalanceCards({
 // Entries
 // ---------------------------------------------------------------------------
 
-type Direction = "expense" | "income" | "transfer";
+type Direction = "expense" | "income" | "saving" | "transfer";
 
 /** What a row needs from the reference data, resolved once per entry. */
 interface Row {

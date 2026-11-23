@@ -222,6 +222,30 @@ describe("category budgets", () => {
     expect(months[1]).toMatchObject({ allocated: "99.96", available: "-49.96" });
   });
 
+  it("accepts a negative amount only in a saving category: a planned withdrawal", async () => {
+    const b = await bookWithCategories();
+    const insurance = await json<{ id: string }>(
+      b.owner.request("POST", `/books/${b.bookId}/reference/categories`, {
+        groupId: b.group.id,
+        code: "E01",
+        direction: "saving",
+        names: { fr: "Assurance vie" },
+      }),
+      201,
+    );
+    const withdrawal = await b.addBudget({ categoryId: insurance.id, amount: "-3000" });
+    expect(withdrawal.amount).toBe("-3000.00");
+    const negative = await b.owner.request("POST", b.budgets(), {
+      categoryId: b.food.id,
+      year: 2026,
+      type: "periodic",
+      amount: "-10",
+      profileId: b.profile.id,
+      consumption: "lapse",
+    });
+    expect(negative.status).toBe(400);
+  });
+
   it("keeps a scheduled budget to its type and assumptions", async () => {
     const b = await bookWithCategories();
     const scheduled = await json<Budget>(
