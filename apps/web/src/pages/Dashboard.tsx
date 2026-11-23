@@ -4,6 +4,7 @@ import {
   formatMoney,
   parseAmount,
   type DashboardRow,
+  type Names,
 } from "@cash-scout/domain";
 import { ActionIcon, Alert, Badge, Button, Group, Loader, Paper, Table, Text } from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
@@ -78,11 +79,13 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
 
   const rows = useMemo(() => {
     if (!data || !refData) return [];
-    const subCategories = [...refData.subCategories].sort((a, b) =>
-      nameOf(a.names).localeCompare(nameOf(b.names), i18n.language),
-    );
+    const byName = (a: { names: Names }, b: { names: Names }) =>
+      nameOf(a.names).localeCompare(nameOf(b.names), i18n.language);
+    const subCategories = [...refData.subCategories].sort(byName);
+    // Siblings keep the order the book gave its groups.
+    const groups = [...refData.groups].sort((a, b) => a.position - b.position || byName(a, b));
     return dashboardRows(
-      { groups: refData.groups, categories: refData.categories, subCategories },
+      { groups, categories: refData.categories, subCategories },
       data.cells.map((cell) => ({
         subCategoryId: cell.subCategoryId,
         month: cell.month,
@@ -98,12 +101,15 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
 
   const isExpanded = (key: string) => (expanded ? expanded.has(key) : key.startsWith("group:"));
   // A row shows when its parent is shown and open.
-  const visible = rows.reduce<DashboardRow[]>((shown, row) => {
-    if (row.parentId === null) return [...shown, row];
-    const parent = `${row.kind === "category" ? "group" : "category"}:${row.parentId}`;
-    const parentShown = shown.some((r) => rowKey(r) === parent);
-    return parentShown && isExpanded(parent) ? [...shown, row] : shown;
-  }, []);
+  const visible: DashboardRow[] = [];
+  const shown = new Set<string>();
+  for (const row of rows) {
+    const parent = row.parentId === null ? null : `${row.parentKind}:${row.parentId}`;
+    if (parent === null || (shown.has(parent) && isExpanded(parent))) {
+      visible.push(row);
+      shown.add(rowKey(row));
+    }
+  }
 
   const toggle = (key: string) => {
     const next = new Set(
@@ -221,6 +227,9 @@ const numberCell: CSSProperties = {
   cursor: "pointer",
 };
 const selectedCell: CSSProperties = { background: "var(--mantine-primary-color-light)" };
+/** Negative amounts read in red, the text only. */
+const negative = (minor: bigint): CSSProperties =>
+  minor < 0n ? { color: "var(--mantine-color-red-6)" } : {};
 
 /** Month names in the interface language, "janv." to "déc.". */
 function useMonthNames(style: "short" | "long") {
@@ -273,6 +282,16 @@ function Grid(props: {
   const categories = new Map(reference.categories.map((c) => [c.id, c]));
   const subCategories = new Map(reference.subCategories.map((s) => [s.id, s]));
   const accounts = new Map(reference.accounts.map((a) => [a.id, a]));
+  const byKey = new Map(rows.map((r) => [rowKey(r), r]));
+  // A row takes the colour of its group, else of the nearest group around it.
+  const colorOf = (row: DashboardRow): string | null => {
+    for (let at: DashboardRow | undefined = row; at;) {
+      const color = at.kind === "group" ? groups.get(at.id)?.color : null;
+      if (color) return color;
+      at = at.parentId === null ? undefined : byKey.get(`${at.parentKind}:${at.parentId}`);
+    }
+    return null;
+  };
   const hasChildren = (row: DashboardRow) =>
     row.kind === "group" ||
     (row.kind === "category" &&
@@ -329,21 +348,21 @@ function Grid(props: {
           const rowStyle: CSSProperties = {
             fontWeight: row.kind === "group" ? 700 : row.kind === "category" ? 600 : 400,
           };
+          const color = colorOf(row);
+          // A group's line is tinted: over the page's own colour, so that the sticky
+          // label stays opaque while the months scroll under it.
+          const tint = color
+            ? `linear-gradient(var(--mantine-color-${color}-light), var(--mantine-color-${color}-light)), var(--mantine-color-body)`
+            : "var(--mantine-color-default-hover)";
           return (
-            <Table.Tr
-              key={key}
-              style={
-                row.kind === "group" ? { background: "var(--mantine-color-default-hover)" } : {}
-              }
-            >
+            <Table.Tr key={key} style={row.kind === "group" ? { background: tint } : {}}>
               <Table.Td
                 style={{
                   ...stickyLabel,
                   ...rowStyle,
                   paddingLeft: 8 + row.depth * 16,
-                  ...(row.kind === "group"
-                    ? { background: "var(--mantine-color-default-hover)" }
-                    : {}),
+                  ...(color ? { borderLeft: `4px solid var(--mantine-color-${color}-6)` } : {}),
+                  ...(row.kind === "group" ? { background: tint } : {}),
                   ...(isSelected(selection, key, null) ? selectedCell : {}),
                 }}
               >
@@ -382,6 +401,7 @@ function Grid(props: {
                     ...numberCell,
                     ...rowStyle,
                     ...monthStyle(i + 1),
+                    ...negative(minor),
                     ...(isSelected(selection, key, i + 1) ? selectedCell : {}),
                   }}
                   onClick={() => select({ kind: "row", key, month: i + 1 })}
@@ -393,6 +413,7 @@ function Grid(props: {
                 style={{
                   ...numberCell,
                   fontWeight: bold ? 700 : 600,
+                  ...negative(row.total),
                   ...(isSelected(selection, key, null) ? selectedCell : {}),
                 }}
                 onClick={() => select({ kind: "row", key, month: null })}
@@ -431,7 +452,7 @@ function Grid(props: {
                       style={{
                         ...numberCell,
                         ...monthStyle(i + 1),
-                        ...(minor < 0n ? { color: "var(--mantine-color-red-6)" } : {}),
+                        ...negative(minor),
                         ...(picked ? selectedCell : {}),
                       }}
                       onClick={() =>
@@ -458,7 +479,7 @@ function Grid(props: {
                     ...numberCell,
                     cursor: "default",
                     ...monthStyle(i + 1),
-                    ...(minor < 0n ? { color: "var(--mantine-color-red-6)" } : {}),
+                    ...negative(minor),
                   }}
                 >
                   {amount(minor)}
@@ -507,19 +528,21 @@ function DetailPanel({
 
   // The row selected, with the sub-categories whose entries it adds up.
   const row = selection?.kind === "row" ? rows.find((r) => rowKey(r) === selection.key) : undefined;
+  const byKey = new Map(rows.map((r) => [rowKey(r), r]));
+  // Whether `r` is inside `ancestor`, however deep the groups nest.
+  const isInside = (r: DashboardRow, ancestor: DashboardRow) => {
+    for (let at: DashboardRow | undefined = r; at && at.parentId !== null;) {
+      const parent = `${at.parentKind}:${at.parentId}`;
+      if (parent === rowKey(ancestor)) return true;
+      at = byKey.get(parent);
+    }
+    return false;
+  };
   const subIds = !row
     ? []
     : row.kind === "sub"
       ? [row.id]
-      : rows
-          .filter(
-            (r) =>
-              r.kind === "sub" &&
-              (row.kind === "category"
-                ? r.parentId === row.id
-                : categories.get(r.parentId!)?.groupId === row.id),
-          )
-          .map((r) => r.id);
+      : rows.filter((r) => r.kind === "sub" && isInside(r, row)).map((r) => r.id);
   const unusedOnly = row?.kind === "unused";
 
   const month = selection?.month ?? null;

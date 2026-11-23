@@ -176,12 +176,23 @@ export const categoryGroup = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     bookId: bookId(),
     names: names(),
-    /** Display order of the groups. */
+    /** Display order of the groups among those of the same parent. */
     position: integer("position").notNull().default(0),
+    /** The group this one is part of, if any: groups nest, to any depth. */
+    parentId: uuid("parent_id"),
+    /** A palette colour name ("blue", "teal"…) for the dashboard; inherited from the parent when null. */
+    color: text("color"),
     archivedAt: archivedAt(),
     version: version(),
   },
-  (t) => [unique().on(t.id, t.bookId), index("category_group_book_idx").on(t.bookId)],
+  (t) => [
+    unique().on(t.id, t.bookId),
+    index("category_group_book_idx").on(t.bookId),
+    foreignKey({
+      columns: [t.parentId, t.bookId],
+      foreignColumns: [t.id, t.bookId],
+    }),
+  ],
 );
 
 export const category = pgTable(

@@ -54,13 +54,59 @@ export const categoryCodeSchema = z
 
 const archived = z.boolean();
 
+/** Colours a group can take in the dashboard: the palette's names, gray left out. */
+export const groupColors = [
+  "red",
+  "pink",
+  "grape",
+  "violet",
+  "indigo",
+  "blue",
+  "cyan",
+  "teal",
+  "green",
+  "lime",
+  "yellow",
+  "orange",
+] as const;
+export const groupColorSchema = z.enum(groupColors);
+export type GroupColor = z.infer<typeof groupColorSchema>;
+
 export const groupInputSchema = z.object({
   names: namesSchema,
+  /** Order among the groups of the same parent. */
   position: z.number().int().min(0).max(10_000).optional(),
+  /** The group this one belongs to; null or omitted for a top-level group. */
+  parentId: z.uuid().nullable().optional(),
+  /** Colour in the dashboard; null to take the parent's. */
+  color: groupColorSchema.nullable().optional(),
 });
 export const groupUpdateSchema = groupInputSchema
   .partial()
   .extend({ archived: archived.optional(), version: versionSchema.optional() });
+
+/** Sets the order of sibling groups: their ids, first to last. */
+export const groupOrderSchema = z.object({
+  ids: z.array(z.uuid()).min(1).max(500),
+});
+
+/**
+ * Whether making `parentId` the parent of group `id` would put a group inside
+ * itself, given each group's current parent.
+ */
+export function makesCycle(
+  id: string,
+  parentId: string | null | undefined,
+  parents: ReadonlyMap<string, string | null>,
+): boolean {
+  const seen = new Set<string>();
+  for (let at = parentId ?? null; at !== null; at = parents.get(at) ?? null) {
+    if (at === id) return true;
+    if (seen.has(at)) return true;
+    seen.add(at);
+  }
+  return false;
+}
 
 export const categoryInputSchema = z.object({
   groupId: z.uuid(),

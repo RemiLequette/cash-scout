@@ -52,7 +52,8 @@ export function monthEndBalances(opening: bigint, changes: readonly bigint[]): b
 
 /** The reference data the rows are built from, each list already in display order. */
 export interface DashboardStructure {
-  groups: readonly { id: string }[];
+  /** Groups nest: `parentId` is the group this one belongs to, if any. */
+  groups: readonly { id: string; parentId?: string | null }[];
   categories: readonly { id: string; groupId: string; direction: Direction }[];
   subCategories: readonly { id: string; categoryId: string }[];
 }
@@ -76,12 +77,14 @@ export type DashboardRowKind = "group" | "category" | "sub" | "unused";
 /**
  * A line of the grid. `id` is the id of the group, category or sub-category;
  * the "unused" line of a category carries the category's id. `parentId` is the
- * id of the enclosing group or category, so a page can fold the tree.
+ * id of the enclosing group or category, and `parentKind` which of the two it
+ * is, so a page can fold the tree.
  */
 export interface DashboardRow {
   kind: DashboardRowKind;
   id: string;
   parentId: string | null;
+  parentKind: "group" | "category" | null;
   depth: number;
   /** 12 monthly amounts, in minor units. */
   months: bigint[];
@@ -97,11 +100,12 @@ function addInto(target: bigint[], source: readonly bigint[]) {
 const totalOf = (months: readonly bigint[]) => months.reduce((a, b) => a + b, 0n);
 
 /**
- * The rows of the year dashboard, in display order: a group, then its
+ * The rows of the year dashboard, in display order: a group, then its own
  * categories, each followed by its sub-categories and, for a periodic
- * category, the line of its unused budget. A row is the sum of what it
- * contains. What has nothing in the year (no entry, no budget) is left out,
- * and so is a group left empty; transfers are not part of the dashboard.
+ * category, the line of its unused budget, then the groups nested in it, to
+ * any depth. A row is the sum of what it contains. What has nothing in the
+ * year (no entry, no budget) is left out, and so is a group left empty;
+ * transfers are not part of the dashboard.
  */
 export function dashboardRows(
   structure: DashboardStructure,
@@ -115,11 +119,24 @@ export function dashboardRows(
     bySub.set(cell.subCategoryId, months);
   }
   const unusedOf = new Map(unused.map((u) => [u.categoryId, u.months]));
+  const known = new Set(structure.groups.map((g) => g.id));
+  // A group whose parent is unknown is shown at the top.
+  const isTop = (group: { parentId?: string | null }) =>
+    !group.parentId || !known.has(group.parentId);
+  // Groups pointing at each other (the API refuses it) are left out rather than looped on.
+  const inProgress = new Set<string>();
 
-  const rows: DashboardRow[] = [];
-  for (const group of structure.groups) {
+  /** The rows of a group and of everything in it, with the group's months; none when empty. */
+  function groupRows(
+    group: { id: string },
+    parent: string | null,
+    depth: number,
+  ): { rows: DashboardRow[]; months: bigint[] } {
     const groupMonths = zeros();
     const inGroup: DashboardRow[] = [];
+    if (inProgress.has(group.id)) return { rows: inGroup, months: groupMonths };
+    inProgress.add(group.id);
+
     for (const category of structure.categories) {
       if (category.groupId !== group.id || category.direction === "transfer") continue;
       const categoryMonths = zeros();
@@ -132,7 +149,8 @@ export function dashboardRows(
           kind: "sub",
           id: sub.id,
           parentId: category.id,
-          depth: 2,
+          parentKind: "category",
+          depth: depth + 2,
           months,
           total: totalOf(months),
         });
@@ -145,7 +163,8 @@ export function dashboardRows(
           kind: "unused",
           id: category.id,
           parentId: category.id,
-          depth: 2,
+          parentKind: "category",
+          depth: depth + 2,
           months: [...budget],
           total: totalOf(budget),
         });
@@ -156,25 +175,40 @@ export function dashboardRows(
           kind: "category",
           id: category.id,
           parentId: group.id,
-          depth: 1,
+          parentKind: "group",
+          depth: depth + 1,
           months: categoryMonths,
           total: totalOf(categoryMonths),
         },
         ...inCategory,
       );
     }
-    if (inGroup.length === 0) continue;
-    rows.push(
-      {
-        kind: "group",
-        id: group.id,
-        parentId: null,
-        depth: 0,
-        months: groupMonths,
-        total: totalOf(groupMonths),
-      },
-      ...inGroup,
-    );
+
+    for (const child of structure.groups) {
+      if (child.parentId !== group.id) continue;
+      const nested = groupRows(child, group.id, depth + 1);
+      addInto(groupMonths, nested.months);
+      inGroup.push(...nested.rows);
+    }
+
+    inProgress.delete(group.id);
+    if (inGroup.length === 0) return { rows: [], months: groupMonths };
+    return {
+      rows: [
+        {
+          kind: "group",
+          id: group.id,
+          parentId: parent,
+          parentKind: parent === null ? null : "group",
+          depth,
+          months: groupMonths,
+          total: totalOf(groupMonths),
+        },
+        ...inGroup,
+      ],
+      months: groupMonths,
+    };
   }
-  return rows;
+
+  return structure.groups.filter(isTop).flatMap((group) => groupRows(group, null, 0).rows);
 }

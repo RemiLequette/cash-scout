@@ -221,7 +221,8 @@ function Layout() {
         </Container>
       </AppShell.Header>
       <AppShell.Main>
-        <Container size="lg">
+        {/* The dashboard's grid has 14 columns: it takes the whole width. */}
+        <Container size="lg" fluid={view === "dashboard"}>
           <HealthAlert />
           {session ? <Outlet /> : <SignIn />}
         </Container>

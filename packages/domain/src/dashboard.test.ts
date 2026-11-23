@@ -149,3 +149,96 @@ describe("dashboardRows", () => {
     expect(rows[0]!.total).toBe(-600n);
   });
 });
+
+describe("dashboardRows with nested groups", () => {
+  const structure: DashboardStructure = {
+    groups: [
+      { id: "assets" },
+      { id: "rennes", parentId: "assets" },
+      { id: "maisons", parentId: "assets" },
+      { id: "empty", parentId: "assets" },
+      { id: "daily" },
+    ],
+    categories: [
+      { id: "rent", groupId: "rennes", direction: "income" },
+      { id: "loan", groupId: "rennes", direction: "expense" },
+      { id: "tax", groupId: "assets", direction: "expense" },
+      { id: "house", groupId: "maisons", direction: "income" },
+      { id: "food", groupId: "daily", direction: "expense" },
+    ],
+    subCategories: [
+      { id: "s-rent", categoryId: "rent" },
+      { id: "s-loan", categoryId: "loan" },
+      { id: "s-tax", categoryId: "tax" },
+      { id: "s-house", categoryId: "house" },
+      { id: "s-food", categoryId: "food" },
+    ],
+  };
+  const cell = (subCategoryId: string, month: number, total: bigint) => ({
+    subCategoryId,
+    month,
+    total,
+  });
+  const all = [
+    cell("s-rent", 1, 1_000n),
+    cell("s-loan", 1, -400n),
+    cell("s-tax", 1, -50n),
+    cell("s-house", 2, 300n),
+    cell("s-food", 1, -20n),
+  ];
+
+  it("puts a group's own categories first, then the groups nested in it, to any depth", () => {
+    const rows = dashboardRows(structure, all, []);
+    expect(rows.map((r) => [r.kind, r.id, r.depth])).toEqual([
+      ["group", "assets", 0],
+      ["category", "tax", 1],
+      ["sub", "s-tax", 2],
+      ["group", "rennes", 1],
+      ["category", "rent", 2],
+      ["sub", "s-rent", 3],
+      ["category", "loan", 2],
+      ["sub", "s-loan", 3],
+      ["group", "maisons", 1],
+      ["category", "house", 2],
+      ["sub", "s-house", 3],
+      ["group", "daily", 0],
+      ["category", "food", 1],
+      ["sub", "s-food", 2],
+    ]);
+  });
+
+  it("tells each row's parent and its kind", () => {
+    const rows = dashboardRows(structure, all, []);
+    const parent = (id: string, kind: string) => {
+      const row = rows.find((r) => r.id === id && r.kind === kind)!;
+      return [row.parentId, row.parentKind];
+    };
+    expect(parent("assets", "group")).toEqual([null, null]);
+    expect(parent("rennes", "group")).toEqual(["assets", "group"]);
+    expect(parent("rent", "category")).toEqual(["rennes", "group"]);
+    expect(parent("s-rent", "sub")).toEqual(["rent", "category"]);
+  });
+
+  it("makes a group the sum of its categories and of its nested groups", () => {
+    const rows = dashboardRows(structure, all, []);
+    const total = (id: string) => rows.find((r) => r.kind === "group" && r.id === id)!.total;
+    expect(total("rennes")).toBe(600n);
+    expect(total("maisons")).toBe(300n);
+    expect(total("assets")).toBe(600n + 300n - 50n);
+    expect(rows.find((r) => r.id === "assets")!.months.slice(0, 2)).toEqual([550n, 300n]);
+  });
+
+  it("hides a nested group with nothing in it, and a parent left with only empty ones", () => {
+    const rows = dashboardRows(structure, [cell("s-food", 1, -20n)], []);
+    expect(rows.map((r) => r.id)).toEqual(["daily", "food", "s-food"]);
+  });
+
+  it("does not loop on groups that point at each other", () => {
+    const loop: DashboardStructure = {
+      groups: [{ id: "a", parentId: "b" }, { id: "b", parentId: "a" }, { id: "c" }],
+      categories: [{ id: "k", groupId: "c", direction: "expense" }],
+      subCategories: [{ id: "s", categoryId: "k" }],
+    };
+    expect(dashboardRows(loop, [cell("s", 1, -5n)], []).map((r) => r.id)).toEqual(["c", "k", "s"]);
+  });
+});
