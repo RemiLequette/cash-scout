@@ -87,6 +87,30 @@ export const categoryBudgetUpdateSchema = z.object({
   version: versionSchema.optional(),
 });
 
+/**
+ * The budgets of a year saved in one go, which is how the preparation screen
+ * works: budgets to create or replace, and categories whose budget goes away.
+ * `versions` holds, per category, the version of the budget the screen read;
+ * a category without one is expected to have no budget yet.
+ */
+export const budgetBatchSchema = z
+  .object({
+    year: budgetYearSchema,
+    save: z.array(categoryBudgetInputSchema).max(500),
+    remove: z.array(z.uuid()).max(500).optional(),
+    versions: z.record(z.uuid(), versionSchema).optional(),
+  })
+  .superRefine((batch, ctx) => {
+    if (batch.save.some((item) => item.year !== batch.year)) {
+      ctx.addIssue({ code: "custom", path: ["save"], message: "Every budget is of the year" });
+    }
+    const categories = [...batch.save.map((item) => item.categoryId), ...(batch.remove ?? [])];
+    if (new Set(categories).size !== categories.length) {
+      ctx.addIssue({ code: "custom", path: ["save"], message: "A category appears once" });
+    }
+  });
+export type BudgetBatch = z.infer<typeof budgetBatchSchema>;
+
 export const budgetQuerySchema = z.object({
   year: z.coerce.number().pipe(budgetYearSchema),
 });
@@ -145,4 +169,14 @@ export function budgetMonths(
     used += spent;
     return { allocated: share, available, consumed: spent, remaining };
   });
+}
+
+/**
+ * An amount raised by a percentage given in basis points (300 = +3 %, -500 =
+ * -5 %), rounded half away from zero to the minor unit.
+ */
+export function raise(amount: bigint, basisPoints: number): bigint {
+  const scaled = amount * BigInt(WEIGHT_TOTAL + basisPoints);
+  const half = BigInt(WEIGHT_TOTAL / 2);
+  return (scaled + (scaled < 0n ? -half : half)) / BigInt(WEIGHT_TOTAL);
 }

@@ -4,6 +4,7 @@ import {
   budgetMonths,
   categoryBudgetInputSchema,
   profileInputSchema,
+  raise,
   weightsSchema,
 } from "./budget.js";
 
@@ -130,5 +131,15 @@ describe("categoryBudgetInputSchema", () => {
     expect(categoryBudgetInputSchema.safeParse({ ...periodic, exchangeRate: "0.2" }).success).toBe(
       false,
     );
+  });
+});
+
+describe("raise", () => {
+  it("applies a percentage in basis points, rounding half away from zero", () => {
+    expect(raise(100_000n, 300)).toBe(103_000n);
+    expect(raise(100_000n, -500)).toBe(95_000n);
+    expect(raise(1_050n, 100)).toBe(1_061n); // 1060.5
+    expect(raise(-1_050n, 100)).toBe(-1_061n);
+    expect(raise(0n, 300)).toBe(0n);
   });
 });
