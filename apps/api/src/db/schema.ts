@@ -149,6 +149,8 @@ export const bookLanguage = pgTable(
 
 export const direction = pgEnum("direction", ["expense", "income", "transfer"]);
 export const accountKind = pgEnum("account_kind", ["bank", "virtual"]);
+export const budgetType = pgEnum("budget_type", ["scheduled", "periodic"]);
+export const consumptionMode = pgEnum("consumption_mode", ["lapse", "roll_over", "annual_pool"]);
 
 const bookId = () =>
   uuid("book_id")
@@ -179,6 +181,8 @@ export const category = pgTable(
     /** Short code setting the sort order, unique in the book. */
     code: text("code").notNull(),
     direction: direction("direction").notNull(),
+    /** Budget type given to the category in a year not yet budgeted. */
+    defaultBudgetType: budgetType("default_budget_type").notNull().default("periodic"),
     names: names(),
     archivedAt: archivedAt(),
   },
@@ -295,5 +299,88 @@ export const journalEntry = pgTable(
     index("journal_entry_account_idx").on(t.accountId),
     index("journal_entry_sub_category_idx").on(t.subCategoryId),
     index("journal_entry_payment_type_idx").on(t.paymentTypeId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Budgets (see README, Budgets and cash projection).
+// ---------------------------------------------------------------------------
+
+/** 12 monthly weights in basis points (10 000 = 100 %), shared by the book's categories. */
+export const budgetProfile = pgTable(
+  "budget_profile",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    names: names(),
+    weights: integer("weights").array().notNull(),
+    archivedAt: archivedAt(),
+  },
+  (t) => [
+    unique().on(t.id, t.bookId),
+    index("budget_profile_book_idx").on(t.bookId),
+    check(
+      "budget_profile_weights_check",
+      sql`cardinality(${t.weights}) = 12
+        AND array_position(${t.weights}, NULL) IS NULL
+        AND 0 <= ALL(${t.weights})
+        AND ${t.weights}[1] + ${t.weights}[2] + ${t.weights}[3] + ${t.weights}[4]
+          + ${t.weights}[5] + ${t.weights}[6] + ${t.weights}[7] + ${t.weights}[8]
+          + ${t.weights}[9] + ${t.weights}[10] + ${t.weights}[11] + ${t.weights}[12] = 10000`,
+    ),
+  ],
+);
+
+/**
+ * The plan of one category for one year. A scheduled budget only holds the
+ * type and the assumptions (its plan is future journal entries); a periodic one
+ * also holds the annual amount, how it is spread and consumed, and where it
+ * is expected to be spent.
+ */
+export const categoryBudget = pgTable(
+  "category_budget",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    categoryId: uuid("category_id").notNull(),
+    year: integer("year").notNull(),
+    type: budgetType("type").notNull(),
+    assumptions: text("assumptions").notNull().default(""),
+    /** Annual amount in minor units of the book currency, positive (periodic). */
+    amount: bigint("amount", { mode: "bigint" }),
+    profileId: uuid("profile_id"),
+    consumption: consumptionMode("consumption"),
+    /** Account where the remaining budget is expected to be spent (periodic). */
+    accountId: uuid("account_id"),
+    /** 1 unit of the account currency = rate units of the book currency, as for entries. */
+    exchangeRate: numeric("exchange_rate"),
+    ...timestamps,
+  },
+  (t) => [
+    unique("category_budget_year_unique").on(t.categoryId, t.year),
+    foreignKey({
+      columns: [t.categoryId, t.bookId],
+      foreignColumns: [category.id, category.bookId],
+    }),
+    foreignKey({
+      columns: [t.profileId, t.bookId],
+      foreignColumns: [budgetProfile.id, budgetProfile.bookId],
+    }),
+    foreignKey({
+      columns: [t.accountId, t.bookId],
+      foreignColumns: [bookAccount.id, bookAccount.bookId],
+    }),
+    index("category_budget_book_year_idx").on(t.bookId, t.year),
+    check(
+      "category_budget_type_check",
+      sql`(${t.type} = 'periodic' AND ${t.amount} IS NOT NULL AND ${t.profileId} IS NOT NULL
+          AND ${t.consumption} IS NOT NULL)
+        OR (${t.type} = 'scheduled' AND ${t.amount} IS NULL AND ${t.profileId} IS NULL
+          AND ${t.consumption} IS NULL AND ${t.accountId} IS NULL)`,
+    ),
+    check(
+      "category_budget_rate_check",
+      sql`(${t.accountId} IS NULL) = (${t.exchangeRate} IS NULL) AND (${t.exchangeRate} IS NULL OR ${t.exchangeRate} > 0)`,
+    ),
   ],
 );

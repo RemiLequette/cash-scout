@@ -47,7 +47,7 @@ How the database side works:
 - Migrations run as the database owner. The API then runs every query as the role `cashscout_app`, which is not the table owner and cannot bypass row-level security.
 - Each request touching book data runs in a transaction that sets `app.user_id` (`withUser` in `apps/api/src/db/client.ts`). Without it, no book row is visible.
 - Policies call `app_book_ids(min_role)`, the books of the current user with at least a role. Reading needs membership; changing a book or its members needs the owner role.
-- Every other book-owned table gets the same policies, with `editor` for writes (reference data since `0004_reference_isolation.sql`, the journal since `0006_journal_isolation.sql`).
+- Every other book-owned table gets the same policies, with `editor` for writes (reference data since `0004_reference_isolation.sql`, the journal since `0006_journal_isolation.sql`, budgets since `0008_budgets_isolation.sql`).
 - A child item refers to its parent through a composite foreign key `(parent_id, book_id)`, so it cannot point to another book's item even through a bug.
 - Tests check it directly: unfiltered queries, and writes into another user's book that bypass the API.
 

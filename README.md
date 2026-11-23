@@ -152,7 +152,7 @@ A **category budget** is the plan of one category for one year:
 | Profile     | periodic   | How the annual amount is spread over the 12 months                                                                                                                                                         |
 | Consumption | periodic   | **Lapse**: what a month did not use, or overspent, is gone. **Roll over**: it moves to the next month. **Annual pool**: the whole year is one envelope                                                     |
 | Account     | periodic   | The account where the remaining budget is expected to be spent, for the projection                                                                                                                         |
-| Rate        | periodic   | Exchange rate from the book's currency to the account's currency, kept with the budget, to convert it for the projection when the account is in another currency. A first version: it can be refined later |
+| Rate        | periodic   | Exchange rate of the account's currency into the book's currency, as for entries (1 when they are the same). It is kept with the budget to convert it for the projection; a first version, to refine later |
 
 Budgets of every past year are kept: reports compare each year with its own plan.
 

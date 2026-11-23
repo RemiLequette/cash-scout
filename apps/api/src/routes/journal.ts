@@ -16,19 +16,7 @@ import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
 import { book, bookAccount, journalEntry, paymentType, subCategory } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
-import { idOf, requireRole } from "./access.js";
-
-/** Runs a calculation whose RangeError is the user's to fix, as a 400. */
-function checked<T>(fn: () => T): T {
-  try {
-    return fn();
-  } catch (error) {
-    if (error instanceof RangeError) {
-      throw new HTTPException(400, { message: error.message });
-    }
-    throw error;
-  }
-}
+import { checked, idOf, requireRole } from "./access.js";
 
 async function bookCurrencyOf(tx: Tx, bookId: string): Promise<string> {
   const [row] = await tx.select({ currency: book.currency }).from(book).where(eq(book.id, bookId));
