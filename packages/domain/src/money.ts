@@ -98,3 +98,25 @@ export function convert(amount: Money, rate: string, target: string): Money {
   const minor = divideRounded(amount.minor * rateUnits * targetScale, rateScale * sourceScale);
   return { minor, currency: target };
 }
+
+/**
+ * The reverse of {@link convert}: the amount in `target` that a `source` amount
+ * comes from, at the same rate (1 unit of the target currency = rate units of
+ * the source currency). Rounded half away from zero to the target's minor unit.
+ */
+export function unconvert(amount: Money, rate: string, target: string): Money {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(rate.trim());
+  if (!match) {
+    throw new RangeError(`Invalid rate: ${rate}`);
+  }
+  const [, whole = "0", fraction = ""] = match;
+  const rateUnits = BigInt(whole + fraction);
+  if (rateUnits === 0n) {
+    throw new RangeError(`Invalid rate: ${rate}`);
+  }
+  const rateScale = 10n ** BigInt(fraction.length);
+  const sourceScale = 10n ** BigInt(currencyDigits(amount.currency));
+  const targetScale = 10n ** BigInt(currencyDigits(target));
+  const minor = divideRounded(amount.minor * rateScale * targetScale, rateUnits * sourceScale);
+  return { minor, currency: target };
+}

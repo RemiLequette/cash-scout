@@ -52,11 +52,15 @@ import {
   useJournal,
   useFrequent,
   useJournalChange,
+  useMonthEnds,
   useMonths,
+  useSettle,
   type Entry,
+  type MonthEnd,
 } from "../journal";
 import { currencyOptions } from "../options";
 import { useNameOf, useReference, type Reference } from "../reference";
+import { AccountChart } from "./AccountChart";
 
 function ErrorAlert({ error }: { error: Error | null }) {
   const { t } = useTranslation();
@@ -1206,6 +1210,119 @@ const CardEntry = memo(function CardEntry({
 });
 
 /**
+ * The month-end line of a periodic category: what its budget left unused in the
+ * month, on its reference account. It is computed, never edited; settling it
+ * ("reconciled") lets the unused budget go and sets the line to 0.
+ */
+interface MonthEndViewProps {
+  line: MonthEnd;
+  category: string;
+  categoryCode?: string;
+  account: string;
+  bookCurrency: string;
+  canEdit: boolean;
+  onSettle: (line: MonthEnd, reconciled: boolean) => void;
+}
+
+function MonthEndAmount({ line, bookCurrency }: Pick<MonthEndViewProps, "line" | "bookCurrency">) {
+  const { t } = useTranslation();
+  const formatAmount = useMoney();
+  return (
+    <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+      <Text size="sm" fw={600} c={line.reconciled ? "dimmed" : undefined}>
+        {formatAmount(line.amount, line.currency)}
+      </Text>
+      {line.currency !== bookCurrency && !line.reconciled && (
+        <Text size="xs" c="dimmed">
+          {formatAmount(line.bookAmount, bookCurrency)}
+        </Text>
+      )}
+      {line.reconciled && Number(line.unused) !== 0 && (
+        <Text size="xs" c="dimmed">
+          {t("journal.monthEndLetGo", { amount: formatAmount(line.unused, bookCurrency) })}
+        </Text>
+      )}
+    </div>
+  );
+}
+
+function MonthEndStatus({
+  line,
+  canEdit,
+  onSettle,
+}: Pick<MonthEndViewProps, "line" | "canEdit" | "onSettle">) {
+  return (
+    <Status
+      reconciled={line.reconciled}
+      canEdit={canEdit}
+      onToggle={() => onSettle(line, !line.reconciled)}
+    />
+  );
+}
+
+const MonthEndTableRow = memo(function MonthEndTableRow(props: MonthEndViewProps) {
+  const { t, i18n } = useTranslation();
+  const { line } = props;
+  return (
+    <Table.Tr bg="var(--mantine-color-default-hover)" title={t("journal.monthEndHint")}>
+      <Table.Td style={{ whiteSpace: "nowrap" }}>{formatDay(line.date, i18n.language)}</Table.Td>
+      <Table.Td>
+        <Group gap={6} wrap="nowrap">
+          <Badge size="xs" variant="light" color="gray" style={{ overflow: "visible" }}>
+            {t("journal.monthEndBadge")}
+          </Badge>
+          <Text size="sm" fs="italic" span>
+            {t("journal.monthEnd")}
+          </Text>
+        </Group>
+      </Table.Td>
+      <Table.Td>
+        <Text size="sm" span style={{ whiteSpace: "nowrap" }}>
+          {props.categoryCode && (
+            <Text span size="xs" c="dimmed" mr={6}>
+              {props.categoryCode}
+            </Text>
+          )}
+          {props.category}
+        </Text>
+      </Table.Td>
+      <Table.Td />
+      <Table.Td style={{ whiteSpace: "nowrap" }}>{props.account}</Table.Td>
+      <Table.Td />
+      <Table.Td>
+        <MonthEndAmount line={line} bookCurrency={props.bookCurrency} />
+      </Table.Td>
+      <Table.Td>
+        <MonthEndStatus line={line} canEdit={props.canEdit} onSettle={props.onSettle} />
+      </Table.Td>
+    </Table.Tr>
+  );
+});
+
+const MonthEndCard = memo(function MonthEndCard(props: MonthEndViewProps) {
+  const { t, i18n } = useTranslation();
+  const { line } = props;
+  return (
+    <Paper radius="md" p="xs" bg="var(--mantine-color-default-hover)">
+      <Group justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Text size="sm" fw={500} fs="italic" truncate>
+            {t("journal.monthEnd")} · {props.category}
+          </Text>
+          <Text size="xs" c="dimmed" truncate>
+            {[formatDay(line.date, i18n.language), props.account].filter(Boolean).join(" · ")}
+          </Text>
+        </div>
+        <Stack gap={4} align="flex-end">
+          <MonthEndAmount line={line} bookCurrency={props.bookCurrency} />
+          <MonthEndStatus line={line} canEdit={props.canEdit} onSettle={props.onSettle} />
+        </Stack>
+      </Group>
+    </Paper>
+  );
+});
+
+/**
  * "New entry", with an arrow that lists the descriptions most used lately:
  * picking one starts a new entry from the latest one, dated today.
  */
@@ -1302,6 +1419,7 @@ export function Journal({
 }) {
   const { t, i18n } = useTranslation();
   const reference = useReference(bookId);
+  const nameOf = useNameOf(reference.data?.defaultLanguage);
   const change = useJournalChange(bookId);
   const isMobile = useMediaQuery("(max-width: 48em)", false, { getInitialValueInEffect: false });
 
@@ -1335,6 +1453,31 @@ export function Journal({
     () =>
       list.data && reference.data ? toRows(list.data.entries, reference.data, i18n.language) : [],
     [list.data, reference.data, i18n.language],
+  );
+  // The month-end lines of the unused budgets: of the years the period reaches, and of the
+  // last two, whatever the period, so that a past month left unreconciled is always reported.
+  const monthsWithEntries = useMonths(bookId);
+  const thisYear = Number(today().slice(0, 4));
+  const years = [
+    ...new Set([
+      thisYear - 1,
+      thisYear,
+      ...(months ? [...months] : (monthsWithEntries.data ?? []).map((m) => m.month)).map((m) =>
+        Number(m.slice(0, 4)),
+      ),
+    ]),
+  ].sort();
+  const monthEnds = useMonthEnds(bookId, years);
+  const { mutate: settleMonth } = useSettle(bookId);
+  const onSettle = useCallback(
+    (line: MonthEnd, reconciled: boolean) =>
+      settleMonth({
+        categoryId: line.categoryId,
+        year: Number(line.date.slice(0, 4)),
+        month: line.month,
+        reconciled,
+      }),
+    [settleMonth],
   );
   const { mutate } = change;
   const onReconcile = useCallback(
@@ -1370,12 +1513,57 @@ export function Journal({
     if (inMonth) inMonth.push(row);
     else byMonth.set(month, [row]);
   }
+
+  // The month-end lines follow the journal's filters, except the search, which looks in
+  // descriptions they do not have.
+  const categoryOf = new Map(ref.categories.map((c) => [c.id, c]));
+  const accountName = new Map(ref.accounts.map((a) => [a.id, nameOf(a.names)]));
+  const subsOfCategory = new Map<string, string[]>();
+  for (const sub of ref.subCategories) {
+    subsOfCategory.set(sub.categoryId, [...(subsOfCategory.get(sub.categoryId) ?? []), sub.id]);
+  }
+  const linesByMonth = new Map<string, MonthEnd[]>();
+  for (const line of monthEnds.data ?? []) {
+    const month = line.date.slice(0, 7);
+    if (
+      q ||
+      (months && !months.has(month)) ||
+      (accountId && line.accountId !== accountId) ||
+      (status !== "all" && String(line.reconciled) !== status) ||
+      (subCategories && !subsOfCategory.get(line.categoryId)?.some((id) => subCategories.has(id)))
+    ) {
+      continue;
+    }
+    linesByMonth.set(month, [...(linesByMonth.get(month) ?? []), line]);
+  }
+  const monthKeys = [...new Set([...byMonth.keys(), ...linesByMonth.keys()])].sort();
+  const hasLines = linesByMonth.size > 0;
+  const monthEndProps = (line: MonthEnd): MonthEndViewProps => ({
+    line,
+    category: nameOf(categoryOf.get(line.categoryId)?.names ?? {}),
+    categoryCode: categoryOf.get(line.categoryId)?.code,
+    account: accountName.get(line.accountId) ?? "",
+    bookCurrency,
+    canEdit,
+    onSettle,
+  });
+  // Past months whose unused budget is still a forecast: to be reconciled or settled.
+  const pending = [
+    ...new Set(
+      (monthEnds.data ?? [])
+        .filter(
+          (line) =>
+            !line.reconciled && Number(line.amount) !== 0 && line.date.slice(0, 7) < currentMonth(),
+        )
+        .map((line) => line.date.slice(0, 7)),
+    ),
+  ].sort();
   // Only on a period holding today: elsewhere every entry is on the same side.
   const dividerAfter = containsToday(months) ? lastPastIndex(rows) : -1;
   const dividerId = rows[dividerAfter]?.entry.id;
   /** Months drawn at once: a short period, or the one holding the today line. */
   const eager = (inMonth: Row[]) =>
-    byMonth.size <= 2 || inMonth.some((row) => row.entry.id === dividerId);
+    monthKeys.length <= 2 || inMonth.some((row) => row.entry.id === dividerId);
 
   const canAdd =
     ref.accounts.some((a) => !a.archived) && ref.subCategories.some((s) => !s.archived);
@@ -1465,7 +1653,35 @@ export function Journal({
         </Group>
       )}
       {canEdit && !canAdd && <Text c="dimmed">{t("journal.needsReference")}</Text>}
-      <ErrorAlert error={list.error ?? change.error} />
+      <ErrorAlert error={list.error ?? change.error ?? monthEnds.error} />
+      {pending.length > 0 && (
+        <Alert color="orange" variant="light" py={6}>
+          <Group justify="space-between" wrap="nowrap" gap="xs">
+            <Text size="sm">
+              {t("journal.monthEndPending", {
+                months:
+                  pending.length > 3
+                    ? `${formatMonth(pending[0]!, i18n.language)} – ${formatMonth(pending[pending.length - 1]!, i18n.language)}`
+                    : pending.map((month) => formatMonth(month, i18n.language)).join(", "),
+                count: pending.length,
+              })}
+            </Text>
+            <Button
+              size="compact-xs"
+              variant="default"
+              onClick={() => {
+                setMonths(new Set(pending));
+                setStatus("all");
+                setSubCategories(null);
+                setAccountId(null);
+                setSearch("");
+              }}
+            >
+              {t("journal.monthEndShow")}
+            </Button>
+          </Group>
+        </Alert>
+      )}
       {truncated && (
         <Text size="xs" c="dimmed">
           {t("journal.truncated", { shown: entries.length, total })}
@@ -1491,42 +1707,57 @@ export function Journal({
           {top}
         </div>
       )}
-      {list.data && entries.length === 0 && <Text c="dimmed">{t("journal.empty")}</Text>}
+      {list.data && entries.length === 0 && !hasLines && (
+        <Text c="dimmed">{t("journal.empty")}</Text>
+      )}
 
-      {entries.length > 0 && isMobile && (
+      {(entries.length > 0 || hasLines) && isMobile && (
         <Stack gap="lg">
-          {[...byMonth].map(([month, inMonth], monthIndex) => (
-            <CardMonth
-              key={month}
-              eager={eager(inMonth)}
-              count={inMonth.length}
-              header={
-                <div>
-                  <Title order={4}>{formatMonth(month, i18n.language)}</Title>
-                  {!(truncated && monthIndex === 0) && (
-                    <MonthTotals rows={inMonth} bookCurrency={bookCurrency} />
-                  )}
-                </div>
-              }
-            >
-              {() =>
-                inMonth.map((row) => (
-                  <Fragment key={row.entry.id}>
-                    <CardEntry {...entryProps(row)} />
-                    {row.entry.id === dividerId && (
-                      <div ref={todayRef as Ref<HTMLDivElement>}>
-                        <TodayDivider />
-                      </div>
+          {monthKeys.map((month, monthIndex) => {
+            const inMonth = byMonth.get(month) ?? [];
+            const ends = linesByMonth.get(month) ?? [];
+            return (
+              <CardMonth
+                key={month}
+                eager={eager(inMonth)}
+                count={inMonth.length + ends.length}
+                header={
+                  <div>
+                    <Title order={4}>{formatMonth(month, i18n.language)}</Title>
+                    {inMonth.length > 0 && !(truncated && monthIndex === 0) && (
+                      <MonthTotals rows={inMonth} bookCurrency={bookCurrency} />
                     )}
-                  </Fragment>
-                ))
-              }
-            </CardMonth>
-          ))}
+                  </div>
+                }
+              >
+                {() =>
+                  inMonth
+                    .map((row) => (
+                      <Fragment key={row.entry.id}>
+                        <CardEntry {...entryProps(row)} />
+                        {row.entry.id === dividerId && (
+                          <div ref={todayRef as Ref<HTMLDivElement>}>
+                            <TodayDivider />
+                          </div>
+                        )}
+                      </Fragment>
+                    ))
+                    .concat(
+                      ends.map((line) => (
+                        <MonthEndCard
+                          key={`end-${line.categoryId}-${line.month}`}
+                          {...monthEndProps(line)}
+                        />
+                      )),
+                    )
+                }
+              </CardMonth>
+            );
+          })}
         </Stack>
       )}
 
-      {entries.length > 0 && !isMobile && (
+      {(entries.length > 0 || hasLines) && !isMobile && (
         <Table
           highlightOnHover
           verticalSpacing={3}
@@ -1547,45 +1778,60 @@ export function Journal({
               <Table.Th w={96}>{t("journal.status")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
-          {[...byMonth].map(([month, inMonth], monthIndex) => (
-            <TableMonth
-              key={month}
-              eager={eager(inMonth)}
-              count={inMonth.length}
-              columns={columns}
-              header={
-                <Table.Tr bg="var(--mantine-color-default-hover)">
-                  <Table.Td colSpan={columns} py={4}>
-                    <Group justify="space-between" wrap="wrap">
-                      <Text size="sm" fw={700}>
-                        {formatMonth(month, i18n.language)}
-                      </Text>
-                      {!(truncated && monthIndex === 0) && (
-                        <MonthTotals rows={inMonth} bookCurrency={bookCurrency} />
-                      )}
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              }
-            >
-              {() =>
-                inMonth.map((row) => (
-                  <Fragment key={row.entry.id}>
-                    <TableEntry {...entryProps(row)} />
-                    {row.entry.id === dividerId && (
-                      <Table.Tr ref={todayRef as Ref<HTMLTableRowElement>}>
-                        <Table.Td colSpan={columns}>
-                          <TodayDivider />
-                        </Table.Td>
-                      </Table.Tr>
-                    )}
-                  </Fragment>
-                ))
-              }
-            </TableMonth>
-          ))}
+          {monthKeys.map((month, monthIndex) => {
+            const inMonth = byMonth.get(month) ?? [];
+            const ends = linesByMonth.get(month) ?? [];
+            return (
+              <TableMonth
+                key={month}
+                eager={eager(inMonth)}
+                count={inMonth.length + ends.length}
+                columns={columns}
+                header={
+                  <Table.Tr bg="var(--mantine-color-default-hover)">
+                    <Table.Td colSpan={columns} py={4}>
+                      <Group justify="space-between" wrap="wrap">
+                        <Text size="sm" fw={700}>
+                          {formatMonth(month, i18n.language)}
+                        </Text>
+                        {inMonth.length > 0 && !(truncated && monthIndex === 0) && (
+                          <MonthTotals rows={inMonth} bookCurrency={bookCurrency} />
+                        )}
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                }
+              >
+                {() =>
+                  inMonth
+                    .map((row) => (
+                      <Fragment key={row.entry.id}>
+                        <TableEntry {...entryProps(row)} />
+                        {row.entry.id === dividerId && (
+                          <Table.Tr ref={todayRef as Ref<HTMLTableRowElement>}>
+                            <Table.Td colSpan={columns}>
+                              <TodayDivider />
+                            </Table.Td>
+                          </Table.Tr>
+                        )}
+                      </Fragment>
+                    ))
+                    .concat(
+                      ends.map((line) => (
+                        <MonthEndTableRow
+                          key={`end-${line.categoryId}-${line.month}`}
+                          {...monthEndProps(line)}
+                        />
+                      )),
+                    )
+                }
+              </TableMonth>
+            );
+          })}
         </Table>
       )}
+
+      <AccountChart bookId={bookId} reference={ref} accountId={accountId} />
 
       <Modal
         size="lg"

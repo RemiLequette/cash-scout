@@ -150,6 +150,7 @@ function problemOf(
   }
   if (minor < 0n && category.direction !== "saving") return "budget.problemNegative";
   if (!draft.profileId) return "budget.problemProfile";
+  if (!draft.accountId) return "budget.problemAccount";
   const account = accounts.find((a) => a.id === draft.accountId);
   if (account && account.currency !== bookCurrency && draft.exchangeRate.trim() === "") {
     return "budget.problemRate";
@@ -633,7 +634,8 @@ function BudgetEditor({
                                     label={t("budget.account")}
                                     description={t("budget.accountHint")}
                                     disabled={!canEdit}
-                                    clearable
+                                    withAsterisk
+                                    error={problem === "budget.problemAccount"}
                                     data={accountOptions}
                                     value={draft.accountId}
                                     onChange={(value) => update(category, { accountId: value })}

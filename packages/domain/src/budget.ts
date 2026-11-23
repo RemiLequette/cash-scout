@@ -39,7 +39,10 @@ export const categoryBudgetInputSchema = z
     amount: amountTextSchema.optional(),
     profileId: z.uuid().optional(),
     consumption: consumptionModeSchema.optional(),
-    /** Account where the remaining budget is expected to be spent (periodic). */
+    /**
+     * The category's reference account (periodic): where the remaining budget is
+     * expected to be spent, and where a month's unused budget is shown.
+     */
     accountId: z.uuid().optional(),
     /** Account currency into book currency, as for entries; required when they differ. */
     exchangeRate: rateSchema.optional(),
@@ -60,7 +63,7 @@ export const categoryBudgetInputSchema = z
       }
       return;
     }
-    for (const key of ["amount", "profileId", "consumption"] as const) {
+    for (const key of ["amount", "profileId", "consumption", "accountId"] as const) {
       if (input[key] === undefined) {
         ctx.addIssue({ code: "custom", path: [key], message: "Required for a periodic budget" });
       }
@@ -114,6 +117,30 @@ export type BudgetBatch = z.infer<typeof budgetBatchSchema>;
 export const budgetQuerySchema = z.object({
   year: z.coerce.number().pipe(budgetYearSchema),
 });
+
+/**
+ * Settles the unused budget of one month of a periodic category, which is
+ * what "reconciled" means for the month-end line of the journal: the budget
+ * is let go and the line goes to 0. `reconciled: false` takes it back.
+ */
+export const settlementSchema = z.object({
+  categoryId: z.uuid(),
+  year: budgetYearSchema,
+  month: z.number().int().min(1).max(MONTHS),
+  reconciled: z.boolean(),
+});
+export type SettlementInput = z.infer<typeof settlementSchema>;
+
+/**
+ * Months of a periodic budget that get a month-end line for their unused
+ * budget. A lapsing month's unused budget is gone at month end, so each
+ * month has its own. What rolls over or sits in the annual pool moves on to
+ * the next months, and only what is left at the year's end is a line:
+ * a line in every month would count the same money again and again.
+ */
+export function settlementMonths(mode: ConsumptionMode): number[] {
+  return mode === "lapse" ? Array.from({ length: MONTHS }, (_, m) => m + 1) : [MONTHS];
+}
 
 /**
  * Spreads an annual amount over the 12 months by the profile's weights, in

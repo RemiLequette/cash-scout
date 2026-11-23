@@ -151,7 +151,7 @@ A **category budget** is the plan of one category for one year:
 | Amount      | periodic   | The annual amount, in the book's currency                                                                                                                                                                  |
 | Profile     | periodic   | How the annual amount is spread over the 12 months                                                                                                                                                         |
 | Consumption | periodic   | **Lapse**: what a month did not use, or overspent, is gone. **Roll over**: it moves to the next month. **Annual pool**: the whole year is one envelope                                                     |
-| Account     | periodic   | The account where the remaining budget is expected to be spent, for the projection                                                                                                                         |
+| Account     | periodic   | The category's **reference account**, required: where the remaining budget is expected to be spent, for the projection, and where a month's unused budget is shown in the journal                          |
 | Rate        | periodic   | Exchange rate of the account's currency into the book's currency, as for entries (1 when they are the same). It is kept with the budget to convert it for the projection; a first version, to refine later |
 
 Budgets of every past year are kept: reports compare each year with its own plan.
@@ -176,6 +176,7 @@ A **profile** is a set of 12 monthly weights adding up to 100 %. Profiles are re
 - **Allocation**: each month gets annual amount × the profile's weight for that month. Amounts are in minor units, so the rounding remainder goes to the last month and the 12 months always add up to the annual amount. Revising the amount re-spreads it over the whole year.
 - **Consumption**: every journal entry of the category consumes its month, whatever its date, reconciled or not. A future entry known in advance, such as a holiday deposit, consumes the budget like any other and appears at its date in the projection.
 - **Remaining** = allocated (after the consumption mode) − consumed.
+- **Month-end lines**: the journal shows, at the end of each month, what a periodic category's budget did not use, as a computed line on the budget's reference account, dated the month's last day. See [Month-end lines of the unused budget](#month-end-lines-of-the-unused-budget).
 
 ### Preparing and revising
 
@@ -205,14 +206,45 @@ Saving is budgeted like any other category, in a category of the saving directio
 
 For each account, in **the account's currency**, the expected daily balance is: reconciled entries + unreconciled entries + the **remaining** periodic budgets on that account, spread over what is left of each month. Past months count nothing: what was not spent is gone, or has moved on by the consumption mode.
 
+### Month-end lines of the unused budget
+
+For each periodic category, the journal adds a **month-end line** with what the month's budget did not use, in the account currency and on the budget's reference account (an income category's line is a forecast of income, an expense's a forecast of spending).
+
+- **Computed, not entered**: the line follows the budget and the entries, and cannot be edited. A month that used its whole budget, or went over it, has no line. Only a lapsing budget has a line every month; what a roll-over or an annual-pool budget leaves moves on to the next months, so it has one line, at the year's end, to avoid counting the same money again.
+- **Reconciling** is the only action: it lets the unused budget go and sets the line's amount to 0. It can be taken back.
+- **Past months**: a past month whose line is not reconciled is reported by a message above the journal, with a button to show those months. Such a line no longer counts in the projection: what was not spent is gone.
+- **Filters**: the line follows the journal's period, account, category and status filters, but not its text search.
+- **Budgets from before the reference account was required** have no line until one is chosen.
+
+### Account chart
+
+A section at the bottom of the journal, which can be hidden, charts the balance of the accounts day by day. Only the **account filter** acts on it; the journal's period, category, status and search do not. By default it is the cash projection over 4 months from the start of the current month, for every bank account; the start and the length can be changed.
+
+- The balance counts reconciled and unreconciled entries, and the month-end lines of the months not yet over.
+- **Overdrafts are shown loudly**: the part of a line under zero is red over a red band, and a message gives, per account, the stretch of the overdraft and its lowest point.
+- Accounts in different currencies each get their own chart, since their amounts are not comparable.
+
 ## Reports
 
 - **Yearly balance** (O1, O3): income, spending and saving, planned against actual.
 - **Pivot view** (O3): rows by group, category, sub-category, account or payment type; columns by month, quarter or year; measures: actual, planned, budget allocated, consumed, remaining, variance. Expand and collapse levels, filter by period, account and reconciled status, export to CSV.
-- **Year dashboard** (O3): per category, month by month: annual total, monthly average, current month against its budget, year to date against the annual budget, comparison with the previous year.
+- **Year dashboard** (O3): per category, month by month, for a chosen year; see [Year dashboard](#year-dashboard).
 - **Budget planning** (O1): next year's budgets and scheduled entries per category and month, against this year.
 - **Multi-year history** (O3): totals per group and category per year, with charts.
 - **Cash projection** (O2): daily balance of each account, with a "today" marker and the lowest point ahead; a warning when an account is projected to go below zero or below a threshold set per account.
+
+### Year dashboard
+
+A page for reading and analysing one year, replacing the yearly tabs of the sheets. It never changes data. Everything is in the book currency.
+
+- **Year**: a selector; the same page serves the current year, a past one and a year being budgeted.
+- **Columns**: the 12 months and the year's total. Summary columns (monthly average, budget, percentage of budget, previous year) come later.
+- **Rows**: group, category and sub-category, each level expandable and collapsible, with an expand-all and a collapse-all. A group or category row is the sum of what it contains. A row with nothing in the selected year (no entry, no budget allocation) is hidden, and so is a group left empty. Transfers are left out, as in every total; control and balance lines of the sheets are not rows.
+- **Cell**: for a scheduled category, the sum of the month's entries, reconciled or not; for a periodic category, what the month consumed up to the current month, and its allocation for later months. Future values are shown differently from past ones.
+- **Unused budget**: under an expanded periodic category, a line carries the allocation not yet consumed, so that its sub-categories and this line add up to the category.
+- **Account balances**: a block under the categories, with one line per bank account and a total, giving the balance at the end of each month. It is the sum of the entries' book amounts up to that date, adjustments included, and it is not revalued at today's rate. For future months it is the projected balance of the [cash projection](#cash-projection). Virtual accounts are left out.
+- **Detail panel**: a section at the bottom, resizable and hideable, lists the entries behind the selected cell: a row and a month, a row's year total, or an account's month. Its columns are the journal's, it is read-only, and each entry links to the journal.
+- **Access**: any member of the book, viewers included.
 
 ## Decisions
 

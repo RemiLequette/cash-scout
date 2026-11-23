@@ -86,6 +86,7 @@ async function bookWithCategories(owner?: User) {
         amount: "1200",
         profileId: profile.id,
         consumption: "lapse",
+        accountId: current.id,
         ...body,
       }),
       201,
@@ -192,7 +193,7 @@ describe("category budgets", () => {
     const { budgets, bookCurrency } = await b.year();
     expect(bookCurrency).toBe("EUR");
     const [food] = budgets;
-    expect(food).toMatchObject({ type: "periodic", amount: "1200.00", accountId: null });
+    expect(food).toMatchObject({ type: "periodic", amount: "1200.00", accountId: b.current.id });
     const months = food!.months!;
     expect(months).toHaveLength(12);
     expect(months[0]).toMatchObject({ allocated: "36.00", consumed: "0.00", remaining: "36.00" });
@@ -260,6 +261,7 @@ describe("category budgets", () => {
       amount: "-10",
       profileId: b.profile.id,
       consumption: "lapse",
+      accountId: b.current.id,
     });
     expect(negative.status).toBe(400);
   });
@@ -300,6 +302,26 @@ describe("category budgets", () => {
     });
     expect(again.status).toBe(409);
     await b.addBudget({ year: 2027 });
+  });
+
+  it("requires the reference account of a periodic budget", async () => {
+    const b = await bookWithCategories();
+    const refused = await b.owner.request("POST", b.budgets(), {
+      categoryId: b.food.id,
+      year: 2026,
+      type: "periodic",
+      amount: "1200",
+      profileId: b.profile.id,
+      consumption: "lapse",
+    });
+    expect(refused.status).toBe(400);
+    // A scheduled budget has none.
+    const scheduled = await b.owner.request("POST", b.budgets(), {
+      categoryId: b.food.id,
+      year: 2026,
+      type: "scheduled",
+    });
+    expect(scheduled.status).toBe(201);
   });
 
   it("keeps the rate for an account in another currency, and requires it", async () => {
@@ -382,6 +404,7 @@ describe("saving the budgets of a year at once", () => {
     amount: "600",
     profileId: b.profile.id,
     consumption: "lapse",
+    accountId: b.current.id,
   });
 
   it("creates, replaces and removes budgets together", async () => {

@@ -5,6 +5,7 @@ import {
   categoryBudgetInputSchema,
   profileInputSchema,
   raise,
+  settlementMonths,
   weightsSchema,
 } from "./budget.js";
 
@@ -98,17 +99,15 @@ describe("categoryBudgetInputSchema", () => {
     amount: "6000",
     profileId: ids.profile,
     consumption: "roll_over",
+    accountId: ids.account,
   };
 
-  it("accepts a periodic budget, with or without an account", () => {
+  it("accepts a periodic budget with its reference account", () => {
     expect(categoryBudgetInputSchema.safeParse(periodic).success).toBe(true);
-    expect(
-      categoryBudgetInputSchema.safeParse({ ...periodic, accountId: ids.account }).success,
-    ).toBe(true);
   });
 
-  it("needs amount, profile and consumption when periodic", () => {
-    for (const key of ["amount", "profileId", "consumption"]) {
+  it("needs amount, profile, consumption and account when periodic", () => {
+    for (const key of ["amount", "profileId", "consumption", "accountId"]) {
       const rest: Record<string, unknown> = { ...periodic };
       delete rest[key];
       expect(categoryBudgetInputSchema.safeParse(rest).success, key).toBe(false);
@@ -128,9 +127,11 @@ describe("categoryBudgetInputSchema", () => {
   });
 
   it("needs an account for a rate", () => {
-    expect(categoryBudgetInputSchema.safeParse({ ...periodic, exchangeRate: "0.2" }).success).toBe(
-      false,
-    );
+    const withoutAccount: Record<string, unknown> = { ...periodic };
+    delete withoutAccount.accountId;
+    expect(
+      categoryBudgetInputSchema.safeParse({ ...withoutAccount, exchangeRate: "0.2" }).success,
+    ).toBe(false);
   });
 });
 
@@ -141,5 +142,16 @@ describe("raise", () => {
     expect(raise(1_050n, 100)).toBe(1_061n); // 1060.5
     expect(raise(-1_050n, 100)).toBe(-1_061n);
     expect(raise(0n, 300)).toBe(0n);
+  });
+});
+
+describe("settlementMonths", () => {
+  it("gives a lapsing budget a line every month", () => {
+    expect(settlementMonths("lapse")).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  });
+
+  it("leaves what moves on to the year's end", () => {
+    expect(settlementMonths("roll_over")).toEqual([12]);
+    expect(settlementMonths("annual_pool")).toEqual([12]);
   });
 });

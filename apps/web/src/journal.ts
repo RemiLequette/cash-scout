@@ -1,5 +1,11 @@
 import type { EntryInput, EntryUpdate } from "@cash-scout/domain";
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { InferResponseType } from "hono/client";
 import { api, unwrap } from "./api";
 
@@ -7,6 +13,11 @@ const journal = api.books[":bookId"].journal;
 export type JournalPage = InferResponseType<typeof journal.$get, 200>;
 export type Entry = JournalPage["entries"][number];
 export type Balance = InferResponseType<typeof journal.balances.$get, 200>[number];
+
+const budgets = api.books[":bookId"].budgets;
+/** What a periodic category's budget left unused in a month: a line of the journal's month end. */
+export type MonthEnd = InferResponseType<(typeof budgets)["month-ends"]["$get"], 200>[number];
+export type Projection = InferResponseType<typeof journal.projection.$get, 200>[number];
 
 /** Filters of the journal list, as query parameters. */
 export interface JournalFilters {
@@ -65,6 +76,48 @@ export function useBalances(bookId: string) {
   return useQuery({
     queryKey: ["books", bookId, "journal", "balances"],
     queryFn: () => unwrap(journal.balances.$get({ param: { bookId } })),
+  });
+}
+
+/**
+ * The month-end lines of the given years. They come from the budgets, so they
+ * are reloaded with them whenever an entry or a budget changes.
+ */
+export function useMonthEnds(bookId: string, years: number[]) {
+  return useQueries({
+    queries: years.map((year) => ({
+      queryKey: ["books", bookId, "budgets", "month-ends", year],
+      queryFn: () =>
+        unwrap(budgets["month-ends"].$get({ param: { bookId }, query: { year: String(year) } })),
+    })),
+    combine: (results) => ({
+      data: results.some((r) => r.data) ? results.flatMap((r) => r.data ?? []) : undefined,
+      error: results.find((r) => r.error)?.error ?? null,
+    }),
+  });
+}
+
+/** Settles ("reconciles") a month's unused budget, or takes it back. */
+export function useSettle(bookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (line: { categoryId: string; year: number; month: number; reconciled: boolean }) =>
+      unwrap(budgets.settlements.$post({ param: { bookId }, json: line })),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId, "budgets"] }),
+  });
+}
+
+/**
+ * The balance of every account over a window, with what changes it day by day.
+ * Under the budgets' key, since the unused budgets move it as much as entries do.
+ */
+export function useProjection(bookId: string, from: string, to: string) {
+  const now = today();
+  return useQuery({
+    queryKey: ["books", bookId, "budgets", "projection", from, to, now],
+    queryFn: () =>
+      unwrap(journal.projection.$get({ param: { bookId }, query: { from, to, today: now } })),
+    placeholderData: keepPreviousData,
   });
 }
 
