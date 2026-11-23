@@ -38,7 +38,14 @@ import {
   type BudgetYear,
   type CategoryBudgetRow,
 } from "../budget";
+import { formatDate, useJournal, type Entry } from "../journal";
 import { useNameOf, useReference, type Reference } from "../reference";
+import {
+  draftOf as entryDraftOf,
+  emptyDraft,
+  EntryForm,
+  type Draft as EntryDraft,
+} from "./Journal";
 
 // ---------------------------------------------------------------------------
 // Drafts: what the page edits, one per category
@@ -673,6 +680,18 @@ function BudgetEditor({
           </Table>
         </Table.ScrollContainer>
       </Paper>
+      {categories.some((c) => draftOfCategory(c).type === "scheduled") && (
+        <PlannedEntries
+          bookId={bookId}
+          bookCurrency={bookCurrency}
+          canEdit={canEdit}
+          year={year}
+          reference={reference}
+          categoryIds={categories
+            .filter((c) => draftOfCategory(c).type === "scheduled")
+            .map((c) => c.id)}
+        />
+      )}
       <Paper withBorder p="sm">
         <Table>
           <Table.Thead>
@@ -933,5 +952,257 @@ function ProfileForm({
         </Group>
       </Stack>
     </Paper>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Planned entries: the plan of the scheduled categories
+// ---------------------------------------------------------------------------
+
+/** The same day one year later; 29 February becomes 28 February. */
+function yearAhead(date: string): string {
+  const [year, month, day] = date.split("-");
+  return `${Number(year) + 1}-${month}-${month === "02" && day === "29" ? "28" : day}`;
+}
+
+function PlannedEntries({
+  bookId,
+  bookCurrency,
+  canEdit,
+  year,
+  reference,
+  categoryIds,
+}: {
+  bookId: string;
+  bookCurrency: string;
+  canEdit: boolean;
+  year: number;
+  reference: Reference;
+  categoryIds: string[];
+}) {
+  const { t, i18n } = useTranslation();
+  const nameOf = useNameOf(reference.defaultLanguage);
+  const subCategories = reference.subCategories.filter((s) => categoryIds.includes(s.categoryId));
+  const filters = (y: number) => ({
+    from: `${y}-01-01`,
+    to: `${y}-12-31`,
+    subCategoryIds: subCategories.map((s) => s.id).join(","),
+    limit: 2000,
+    offset: 0,
+  });
+  const current = useJournal(bookId, filters(year));
+  const [editing, setEditing] = useState<EntryDraft | null>(null);
+  const [proposing, setProposing] = useState(false);
+
+  const entries = [...(current.data?.entries ?? [])].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id),
+  );
+  const format = (amount: string, currency: string) =>
+    formatMoney(parseAmount(amount, currency), i18n.language);
+  const subOf = new Map(reference.subCategories.map((s) => [s.id, s]));
+  const categoryOf = new Map(reference.categories.map((c) => [c.id, c]));
+  const accountOf = new Map(reference.accounts.map((a) => [a.id, a]));
+  const planned = (entry: Entry) => Number(entry.plannedAmount) !== 0;
+
+  return (
+    <Paper withBorder p="sm">
+      <Stack>
+        <Group justify="space-between">
+          <Title order={4}>{t("budget.plannedEntries", { year })}</Title>
+          {canEdit && (
+            <Group>
+              <Button variant="default" size="xs" onClick={() => setProposing(true)}>
+                {t("budget.startFrom", { year: year - 1 })}
+              </Button>
+              <Button
+                size="xs"
+                onClick={() => setEditing({ ...emptyDraft(), date: `${year}-01-01` })}
+              >
+                {t("budget.newPlanned")}
+              </Button>
+            </Group>
+          )}
+        </Group>
+        <Text size="sm" c="dimmed">
+          {t("budget.plannedEntriesHint")}
+        </Text>
+        {current.error && (
+          <Alert color="red">{t("common.error", { message: current.error.message })}</Alert>
+        )}
+        {entries.length === 0 && !current.isPending && (
+          <Text c="dimmed">{t("budget.noPlannedEntries")}</Text>
+        )}
+        {entries.length > 0 && (
+          <Table.ScrollContainer minWidth={700}>
+            <Table verticalSpacing={4} highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={110}>{t("journal.date")}</Table.Th>
+                  <Table.Th>{t("journal.subCategory")}</Table.Th>
+                  <Table.Th>{t("journal.description")}</Table.Th>
+                  <Table.Th>{t("journal.account")}</Table.Th>
+                  <Table.Th w={110} ta="right">
+                    {t("budget.plannedAmount")}
+                  </Table.Th>
+                  <Table.Th w={110} ta="right">
+                    {t("journal.amount")}
+                  </Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {entries.map((entry) => {
+                  const sub = subOf.get(entry.subCategoryId);
+                  const category = sub && categoryOf.get(sub.categoryId);
+                  return (
+                    <Table.Tr
+                      key={entry.id}
+                      style={{ cursor: canEdit ? "pointer" : undefined }}
+                      onClick={() => canEdit && setEditing(entryDraftOf(entry, "edit"))}
+                    >
+                      <Table.Td>{formatDate(entry.date, i18n.language)}</Table.Td>
+                      <Table.Td>
+                        <Text size="sm">
+                          {category ? `${category.code} ` : ""}
+                          {sub ? nameOf(sub.names) : ""}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>{entry.description}</Table.Td>
+                      <Table.Td>{nameOf(accountOf.get(entry.accountId)?.names ?? {})}</Table.Td>
+                      <Table.Td ta="right">
+                        {planned(entry) ? format(entry.plannedAmount, entry.currency) : "–"}
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        <Text size="sm" fw={600}>
+                          {format(entry.amount, entry.currency)}
+                        </Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        )}
+      </Stack>
+      <Modal
+        opened={editing !== null}
+        onClose={() => setEditing(null)}
+        title={editing?.id ? t("journal.editEntry") : t("budget.newPlanned")}
+        size="lg"
+      >
+        {editing && (
+          <EntryForm
+            key={editing.id ?? "new"}
+            bookId={bookId}
+            bookCurrency={bookCurrency}
+            reference={reference}
+            initial={editing}
+            planned
+            categoryIds={categoryIds}
+            onClose={() => setEditing(null)}
+          />
+        )}
+      </Modal>
+      <ProposeEntries
+        opened={proposing}
+        bookId={bookId}
+        bookCurrency={bookCurrency}
+        year={year}
+        filters={filters(year - 1)}
+        alreadyPlanned={new Set(entries.filter(planned).map((entry) => entry.subCategoryId))}
+        onClose={() => setProposing(false)}
+      />
+    </Paper>
+  );
+}
+
+/**
+ * Creates the plan of the year from the previous one: its planned entries, a
+ * year later, at the amount they ended at, with an increase. A sub-category
+ * that already has planned entries this year is left alone, so the proposal
+ * can be taken again without doubling.
+ */
+function ProposeEntries({
+  opened,
+  bookId,
+  bookCurrency,
+  year,
+  filters,
+  alreadyPlanned,
+  onClose,
+}: {
+  opened: boolean;
+  bookId: string;
+  bookCurrency: string;
+  year: number;
+  filters: Parameters<typeof useJournal>[1];
+  alreadyPlanned: Set<string>;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const previous = useJournal(bookId, filters);
+  const [percent, setPercent] = useState<number | string>(0);
+
+  const proposals = (previous.data?.entries ?? []).filter(
+    (entry) => Number(entry.plannedAmount) !== 0 && !alreadyPlanned.has(entry.subCategoryId),
+  );
+  const create = useMutation({
+    mutationFn: async () => {
+      const basisPoints = Math.round((Number(percent) || 0) * 100);
+      for (const entry of proposals) {
+        const minor = parseAmount(entry.amount, entry.currency).minor;
+        await unwrap(
+          api.books[":bookId"].journal.$post({
+            param: { bookId },
+            json: {
+              date: yearAhead(entry.date),
+              accountId: entry.accountId,
+              subCategoryId: entry.subCategoryId,
+              description: entry.description,
+              paymentTypeId: entry.paymentTypeId,
+              amount: toDecimalString(money(raise(minor, basisPoints), entry.currency)),
+              ...(entry.currency !== bookCurrency && { exchangeRate: entry.exchangeRate }),
+              planned: true,
+            },
+          }),
+        );
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId] }),
+    onSuccess: onClose,
+  });
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={t("budget.startFrom", { year: year - 1 })}>
+      <Stack>
+        <Text size="sm">
+          {t("budget.proposeHint", { year: year - 1, count: proposals.length })}
+        </Text>
+        {create.error && (
+          <Alert color="red">{t("common.error", { message: create.error.message })}</Alert>
+        )}
+        <NumberInput
+          label={t("budget.increase")}
+          suffix=" %"
+          decimalScale={2}
+          step={0.5}
+          value={percent}
+          onChange={setPercent}
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            disabled={proposals.length === 0}
+            loading={create.isPending}
+            onClick={() => create.mutate()}
+          >
+            {t("budget.createPlanned", { count: proposals.length })}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }

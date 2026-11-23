@@ -322,7 +322,7 @@ export function journalRoutes(db: Db) {
               description: input.description,
               paymentTypeId: input.paymentTypeId ?? null,
               amount: amount.minor,
-              plannedAmount: amount.minor,
+              plannedAmount: input.planned ? amount.minor : 0n,
               exchangeRate: rate,
               bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
               ...originalOf(input.originalAmount, input.originalCurrency),
