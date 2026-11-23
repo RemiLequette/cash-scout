@@ -71,9 +71,10 @@ function useMoney() {
 }
 
 /** Sub-categories grouped under their category, for a select; archived ones only if kept. */
-function useSubCategoryOptions(reference: Reference, keep?: string) {
+function useSubCategoryOptions(reference: Reference, keep?: string, categoryIds?: string[]) {
   const nameOf = useNameOf(reference.defaultLanguage);
   return reference.categories
+    .filter((category) => !categoryIds || categoryIds.includes(category.id))
     .map((category) => ({
       group: `${category.code} ${nameOf(category.names)}`,
       items: reference.subCategories
@@ -89,7 +90,7 @@ function useSubCategoryOptions(reference: Reference, keep?: string) {
 // ---------------------------------------------------------------------------
 
 /** What the form edits: an existing entry (id) or a new one, possibly a duplicate. */
-interface Draft {
+export interface Draft {
   id?: string;
   /** Revision of the entry as read, sent back with the change. */
   version?: number;
@@ -109,7 +110,7 @@ interface Draft {
   currency?: string;
 }
 
-function draftOf(entry: Entry, mode: "edit" | "duplicate"): Draft {
+export function draftOf(entry: Entry, mode: "edit" | "duplicate"): Draft {
   return {
     id: mode === "edit" ? entry.id : undefined,
     version: mode === "edit" ? entry.version : undefined,
@@ -131,7 +132,7 @@ function draftOf(entry: Entry, mode: "edit" | "duplicate"): Draft {
   };
 }
 
-const emptyDraft = (): Draft => ({
+export const emptyDraft = (): Draft => ({
   date: today(),
   accountId: null,
   subCategoryId: null,
@@ -201,13 +202,15 @@ function validate(
   return Object.keys(errors).length === 0 ? { body: candidate as EntryInput, errors } : { errors };
 }
 
-function EntryForm({
+export function EntryForm({
   bookId,
   bookCurrency,
   reference,
   initial,
   onClose,
   onDuplicate,
+  planned = false,
+  categoryIds,
 }: {
   bookId: string;
   bookCurrency: string;
@@ -215,7 +218,11 @@ function EntryForm({
   initial: Draft;
   onClose: () => void;
   /** Starts a new entry from the saved one. */
-  onDuplicate: (draft: Draft) => void;
+  onDuplicate?: (draft: Draft) => void;
+  /** The entries created are part of the budget's plan: their planned amount is their amount. */
+  planned?: boolean;
+  /** Only the sub-categories of these categories can be picked. */
+  categoryIds?: string[];
 }) {
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
@@ -236,6 +243,7 @@ function EntryForm({
   const subCategoryOptions = useSubCategoryOptions(
     reference,
     initial.id ? (initial.subCategoryId ?? undefined) : undefined,
+    categoryIds,
   );
   const paymentTypeOptions = reference.paymentTypes
     .filter((p) => !p.archived || p.id === initial.paymentTypeId)
@@ -260,7 +268,10 @@ function EntryForm({
         { onSuccess: onClose },
       );
     } else {
-      change.mutate({ action: "create", body }, { onSuccess: onClose });
+      change.mutate(
+        { action: "create", body: planned ? { ...body, planned: true } : body },
+        { onSuccess: onClose },
+      );
     }
   }
 
@@ -337,7 +348,7 @@ function EntryForm({
             onChange={(e) => set({ exchangeRate: e.currentTarget.value })}
           />
         )}
-        {draft.id && draft.plannedAmount && draft.currency && (
+        {draft.id && Number(draft.plannedAmount) !== 0 && draft.plannedAmount && draft.currency && (
           <Text size="sm" c="dimmed">
             {t("journal.plannedAndVariance", {
               planned: formatAmount(draft.plannedAmount, draft.currency),
@@ -384,22 +395,24 @@ function EntryForm({
           <Group gap="xs">
             {initial.id && (
               <>
-                <Button
-                  variant="subtle"
-                  onClick={() =>
-                    onDuplicate({
-                      ...initial,
-                      id: undefined,
-                      date: today(),
-                      reconciled: false,
-                      plannedAmount: undefined,
-                      variance: undefined,
-                      currency: undefined,
-                    })
-                  }
-                >
-                  {t("journal.duplicate")}
-                </Button>
+                {onDuplicate && (
+                  <Button
+                    variant="subtle"
+                    onClick={() =>
+                      onDuplicate({
+                        ...initial,
+                        id: undefined,
+                        date: today(),
+                        reconciled: false,
+                        plannedAmount: undefined,
+                        variance: undefined,
+                        currency: undefined,
+                      })
+                    }
+                  >
+                    {t("journal.duplicate")}
+                  </Button>
+                )}
                 <Button
                   variant="subtle"
                   color="red"
@@ -800,7 +813,7 @@ function Amount({ row, bookCurrency }: { row: Row; bookCurrency: string }) {
           {formatAmount(entry.bookAmount, bookCurrency)}
         </Text>
       )}
-      {Number(entry.variance) !== 0 && (
+      {Number(entry.plannedAmount) !== 0 && Number(entry.variance) !== 0 && (
         <Text size="xs" c="dimmed">
           {t("journal.plannedShort", {
             planned: formatAmount(entry.plannedAmount, entry.currency),

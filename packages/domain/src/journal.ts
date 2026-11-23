@@ -39,7 +39,7 @@ export const entryInputSchema = z
     subCategoryId: z.uuid(),
     description: descriptionSchema.default(""),
     paymentTypeId: z.uuid().nullable().optional(),
-    /** Signed, in the account's currency. Also becomes the planned amount. */
+    /** Signed, in the account's currency. */
     amount: amountTextSchema,
     /** Required when the account currency is not the book currency. */
     exchangeRate: rateSchema.optional(),
@@ -47,6 +47,11 @@ export const entryInputSchema = z
     originalAmount: amountTextSchema.nullable().optional(),
     originalCurrency: currencySchema.nullable().optional(),
     reconciled: z.boolean().optional(),
+    /**
+     * Part of the budget's plan: the planned amount is then the amount. An entry
+     * made in the journal is not planned, and its planned amount is 0.
+     */
+    planned: z.boolean().optional(),
   })
   .refine((e) => (e.originalAmount == null) === (e.originalCurrency == null), {
     message: "The original amount and its currency go together",

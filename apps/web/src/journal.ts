@@ -101,7 +101,12 @@ export function useJournalChange(bookId: string) {
           );
       }
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId, "journal"] }),
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["books", bookId, "journal"] }),
+        // The budgets read the journal: what an entry holds counts in them.
+        queryClient.invalidateQueries({ queryKey: ["books", bookId, "budgets"] }),
+      ]),
   });
 }
 

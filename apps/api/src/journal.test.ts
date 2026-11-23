@@ -102,15 +102,15 @@ async function bookWithReference(owner?: User) {
 }
 
 describe("journal entries", () => {
-  it("creates an entry with its planned amount and book amount", async () => {
+  it("creates an entry with its book amount, and no planned amount", async () => {
     const b = await bookWithReference();
     const entry = await b.add({ description: "Boulangerie", paymentTypeId: b.card.id });
     expect(entry).toMatchObject({
       date: "2026-11-02",
       currency: "EUR",
       amount: "-12.50",
-      plannedAmount: "-12.50",
-      variance: "0.00",
+      plannedAmount: "0.00",
+      variance: "-12.50",
       exchangeRate: "1",
       bookAmount: "-12.50",
       reconciled: false,
@@ -163,9 +163,15 @@ describe("journal entries", () => {
     expect(response.status).toBe(400);
   });
 
+  it("plans an entry made as part of the plan: the planned amount is the amount", async () => {
+    const b = await bookWithReference();
+    const entry = await b.add({ amount: "-120", planned: true });
+    expect(entry).toMatchObject({ amount: "-120.00", plannedAmount: "-120.00", variance: "0.00" });
+  });
+
   it("changes the amount but never the planned amount", async () => {
     const b = await bookWithReference();
-    const entry = await b.add({ amount: "-120" });
+    const entry = await b.add({ amount: "-120", planned: true });
     await json(b.owner.request("PATCH", b.journal(`/${entry.id}`), { amount: "-135" }));
     const updated = await json<Entry>(
       b.owner.request("PATCH", b.journal(`/${entry.id}`), {
