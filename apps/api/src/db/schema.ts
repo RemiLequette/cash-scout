@@ -158,7 +158,7 @@ export const bookLanguage = pgTable(
 // Names are stored per language in `names`: { "fr": "...", "en": "..." }.
 // ---------------------------------------------------------------------------
 
-export const direction = pgEnum("direction", ["expense", "income", "transfer"]);
+export const direction = pgEnum("direction", ["expense", "income", "saving", "transfer"]);
 export const accountKind = pgEnum("account_kind", ["bank", "virtual"]);
 export const budgetType = pgEnum("budget_type", ["scheduled", "periodic"]);
 export const consumptionMode = pgEnum("consumption_mode", ["lapse", "roll_over", "annual_pool"]);

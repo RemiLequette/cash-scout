@@ -120,6 +120,7 @@
   "directions": {
     "expense": "Dépense",
     "income": "Recette",
+    "saving": "Épargne",
     "transfer": "Virement"
   },
   "accountKinds": {

@@ -98,7 +98,7 @@ async function validNames(tx: Tx, bookId: string, names: Record<string, string>)
  */
 async function budgetValues(tx: Tx, bookId: string, input: CategoryBudgetInput) {
   const [categoryRow] = await tx
-    .select({ id: category.id })
+    .select({ id: category.id, direction: category.direction })
     .from(category)
     .where(and(eq(category.id, input.categoryId), eq(category.bookId, bookId)));
   if (!categoryRow) {
@@ -119,7 +119,8 @@ async function budgetValues(tx: Tx, bookId: string, input: CategoryBudgetInput) 
   }
   const bookCurrency = await bookCurrencyOf(tx, bookId);
   const amount = checked(() => parseAmount(input.amount!, bookCurrency)).minor;
-  if (amount < 0n) {
+  // Only saving can be negative: a planned withdrawal.
+  if (amount < 0n && categoryRow.direction !== "saving") {
     throw new HTTPException(400, { message: "A budget amount is positive" });
   }
   await usable(
