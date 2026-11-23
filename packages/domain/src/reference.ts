@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { currencySchema, languageSchema } from "./book.js";
+import { currencySchema, languageSchema, versionSchema } from "./book.js";
 import { parseAmount } from "./money.js";
 
 /** Names of a reference item, one per book language: { fr: "Alimentation", en: "Food" }. */
@@ -60,7 +60,7 @@ export const groupInputSchema = z.object({
 });
 export const groupUpdateSchema = groupInputSchema
   .partial()
-  .extend({ archived: archived.optional() });
+  .extend({ archived: archived.optional(), version: versionSchema.optional() });
 
 export const categoryInputSchema = z.object({
   groupId: z.uuid(),
@@ -72,7 +72,7 @@ export const categoryInputSchema = z.object({
 });
 export const categoryUpdateSchema = categoryInputSchema
   .partial()
-  .extend({ archived: archived.optional() });
+  .extend({ archived: archived.optional(), version: versionSchema.optional() });
 
 export const subCategoryInputSchema = z.object({
   categoryId: z.uuid(),
@@ -80,12 +80,12 @@ export const subCategoryInputSchema = z.object({
 });
 export const subCategoryUpdateSchema = subCategoryInputSchema
   .partial()
-  .extend({ archived: archived.optional() });
+  .extend({ archived: archived.optional(), version: versionSchema.optional() });
 
 export const paymentTypeInputSchema = z.object({ names: namesSchema });
 export const paymentTypeUpdateSchema = paymentTypeInputSchema
   .partial()
-  .extend({ archived: archived.optional() });
+  .extend({ archived: archived.optional(), version: versionSchema.optional() });
 
 /** Decimal amount as text ("-500.00"), checked against the account currency by the API. */
 const decimalSchema = z.string().regex(/^[+-]?\d+(\.\d+)?$/);
@@ -101,7 +101,7 @@ export const accountInputSchema = z.object({
 export const accountUpdateSchema = accountInputSchema
   .pick({ names: true, lowBalanceThreshold: true })
   .partial()
-  .extend({ archived: archived.optional() });
+  .extend({ archived: archived.optional(), version: versionSchema.optional() });
 
 /** Parses a threshold for an account currency into minor units, or null. */
 export function parseThreshold(value: string | null | undefined, currency: string): bigint | null {

@@ -91,6 +91,8 @@ function useSubCategoryOptions(reference: Reference, keep?: string) {
 /** What the form edits: an existing entry (id) or a new one, possibly a duplicate. */
 interface Draft {
   id?: string;
+  /** Revision of the entry as read, sent back with the change. */
+  version?: number;
   date: string;
   accountId: string | null;
   subCategoryId: string | null;
@@ -110,6 +112,7 @@ interface Draft {
 function draftOf(entry: Entry, mode: "edit" | "duplicate"): Draft {
   return {
     id: mode === "edit" ? entry.id : undefined,
+    version: mode === "edit" ? entry.version : undefined,
     date: mode === "edit" ? entry.date : today(),
     accountId: entry.accountId,
     subCategoryId: entry.subCategoryId,
@@ -252,7 +255,10 @@ function EntryForm({
     }
     if (draft.id) {
       // The planned amount is fixed: the API ignores it, so it is not sent.
-      change.mutate({ action: "update", id: draft.id, body }, { onSuccess: onClose });
+      change.mutate(
+        { action: "update", id: draft.id, body: { ...body, version: draft.version } },
+        { onSuccess: onClose },
+      );
     } else {
       change.mutate({ action: "create", body }, { onSuccess: onClose });
     }

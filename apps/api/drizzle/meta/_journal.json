@@ -64,6 +64,13 @@
       "when": 1795428595055,
       "tag": "0008_budgets_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795429839411,
+      "tag": "0009_versions",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,7 @@ import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
 import { book, bookAccount, journalEntry, paymentType, subCategory } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
-import { checked, idOf, requireRole } from "./access.js";
+import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
 
 async function bookCurrencyOf(tx: Tx, bookId: string): Promise<string> {
   const [row] = await tx.select({ currency: book.currency }).from(book).where(eq(book.id, bookId));
@@ -75,6 +75,7 @@ function originalOf(amount: string | null | undefined, currency: string | null |
 }
 
 const entryColumns = {
+  version: journalEntry.version,
   id: journalEntry.id,
   date: journalEntry.date,
   accountId: journalEntry.accountId,
@@ -352,7 +353,7 @@ export function journalRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Entry");
-        const input = c.req.valid("json");
+        const { version, ...input } = c.req.valid("json");
         const entry = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           const [current] = await tx
@@ -402,9 +403,10 @@ export function journalRoutes(db: Db) {
                 ? originalOf(input.originalAmount, input.originalCurrency)
                 : {}),
             })
-            .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)))
+            .where(rowOf(journalEntry, bookId, id, version))
             .returning(entryColumns);
-          return outEntry(updated!, current.currency, bookCurrency);
+          if (!updated) return missing("Entry", version);
+          return outEntry(updated, current.currency, bookCurrency);
         });
         return c.json(entry);
       })

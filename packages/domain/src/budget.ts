@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { versionSchema } from "./book.js";
 import { amountTextSchema, rateSchema } from "./journal.js";
 import { budgetTypeSchema, namesSchema } from "./reference.js";
 
@@ -24,7 +25,7 @@ export const profileInputSchema = z.object({
 });
 export const profileUpdateSchema = profileInputSchema
   .partial()
-  .extend({ archived: z.boolean().optional() });
+  .extend({ archived: z.boolean().optional(), version: versionSchema.optional() });
 
 export const budgetYearSchema = z.number().int().min(2000).max(2200);
 
@@ -83,6 +84,7 @@ export const categoryBudgetUpdateSchema = z.object({
   consumption: consumptionModeSchema.nullable().optional(),
   accountId: z.uuid().nullable().optional(),
   exchangeRate: rateSchema.nullable().optional(),
+  version: versionSchema.optional(),
 });
 
 export const budgetQuerySchema = z.object({

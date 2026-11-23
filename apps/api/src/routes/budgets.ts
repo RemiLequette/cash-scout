@@ -29,9 +29,10 @@ import {
   subCategory,
 } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
-import { checked, idOf, languagesOf, requireRole } from "./access.js";
+import { checked, idOf, languagesOf, missing, requireRole, rowOf } from "./access.js";
 
 const profileColumns = {
+  version: budgetProfile.version,
   id: budgetProfile.id,
   names: budgetProfile.names,
   weights: budgetProfile.weights,
@@ -46,6 +47,7 @@ const outProfile = ({
 });
 
 const budgetColumns = {
+  version: categoryBudget.version,
   id: categoryBudget.id,
   categoryId: categoryBudget.categoryId,
   year: categoryBudget.year,
@@ -210,7 +212,7 @@ export function budgetsRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Profile");
-        const { names, weights, archived } = c.req.valid("json");
+        const { names, weights, archived, version } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           const [updated] = await tx
@@ -220,11 +222,9 @@ export function budgetsRoutes(db: Db) {
               ...(weights && { weights }),
               ...(archived !== undefined && { archivedAt: archived ? new Date() : null }),
             })
-            .where(and(eq(budgetProfile.id, id), eq(budgetProfile.bookId, bookId)))
+            .where(rowOf(budgetProfile, bookId, id, version))
             .returning(profileColumns);
-          if (!updated) {
-            throw new HTTPException(404, { message: "Profile not found" });
-          }
+          if (!updated) return missing("Profile", version);
           return updated;
         });
         return c.json(outProfile(row));
@@ -338,7 +338,7 @@ export function budgetsRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Budget");
-        const patch = c.req.valid("json");
+        const { version, ...patch } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           const [current] = await tx
@@ -369,9 +369,10 @@ export function budgetsRoutes(db: Db) {
           const [updated] = await tx
             .update(categoryBudget)
             .set(values)
-            .where(and(eq(categoryBudget.id, id), eq(categoryBudget.bookId, bookId)))
+            .where(rowOf(categoryBudget, bookId, id, version))
             .returning(budgetColumns);
-          return outBudget(updated!, bookCurrency);
+          if (!updated) return missing("Budget", version);
+          return outBudget(updated, bookCurrency);
         });
         return c.json(row);
       })

@@ -9,10 +9,12 @@ import {
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { streamSSE } from "hono/streaming";
 import { withUser, type Db, type Tx } from "../db/client.js";
+import { scopeOfPath, type BookEvents } from "../events.js";
 import { book, bookLanguage, bookMember, user } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
-import { idOf, languagesOf, requireRole, roleOf } from "./access.js";
+import { idOf, languagesOf, missing, requireRole, roleOf } from "./access.js";
 import { budgetsRoutes } from "./budgets.js";
 import { journalRoutes } from "./journal.js";
 import { referenceRoutes } from "./reference.js";
@@ -26,6 +28,7 @@ async function ownerCount(tx: Tx, bookId: string): Promise<number> {
 }
 
 const bookColumns = {
+  version: book.version,
   id: book.id,
   name: book.name,
   currency: book.currency,
@@ -34,9 +37,21 @@ const bookColumns = {
 
 const bookIdOf = (param: string) => idOf(param);
 
-export function booksRoutes(db: Db) {
+/** How often an idle event stream sends a ping, so proxies keep the connection open. */
+const PING_MS = 25_000;
+
+export function booksRoutes(db: Db, events: BookEvents) {
   return (
     new Hono<AppEnv>()
+      // Every change made to a book is announced to the windows open on it, once
+      // its transaction has been committed.
+      .use("/:bookId/*", async (c, next) => {
+        await next();
+        if (c.req.method !== "GET" && c.res.status < 400) {
+          events.publish(c.req.param("bookId"), scopeOfPath(c.req.path));
+        }
+      })
+
       .get("/", async (c) => {
         const me = c.var.user.id;
         const books = await withUser(db, me, (tx) =>
@@ -80,19 +95,24 @@ export function booksRoutes(db: Db) {
       .patch("/:bookId", zValidator("json", bookUpdateSchema), async (c) => {
         const me = c.var.user.id;
         const bookId = bookIdOf(c.req.param("bookId"));
-        const { languages, ...input } = c.req.valid("json");
+        const { languages, version, ...input } = c.req.valid("json");
         const result = await withUser(db, me, async (tx) => {
           const role = await requireRole(tx, bookId, me, "owner");
           const [row] = await tx
             .update(book)
             .set(input)
-            .where(eq(book.id, bookId))
+            .where(
+              version === undefined
+                ? eq(book.id, bookId)
+                : and(eq(book.id, bookId), eq(book.version, version)),
+            )
             .returning(bookColumns);
+          if (!row) return missing("Book", version);
           // Names in a removed language are kept, so adding it back restores them.
           await tx.delete(bookLanguage).where(eq(bookLanguage.bookId, bookId));
           await tx.insert(bookLanguage).values(languages.map((language) => ({ bookId, language })));
           const current = await languagesOf(tx, bookId);
-          return { ...row!, languages: current.languages, role };
+          return { ...row, languages: current.languages, role };
         });
         return c.json(result);
       })
@@ -109,6 +129,24 @@ export function booksRoutes(db: Db) {
           await tx.delete(book).where(eq(book.id, bookId));
         });
         return c.body(null, 204);
+      })
+
+      // The changes made to a book by anyone, as a stream of server-sent events:
+      // `change` with the scope touched, and `ping` while idle.
+      .get("/:bookId/events", async (c) => {
+        const me = c.var.user.id;
+        const bookId = bookIdOf(c.req.param("bookId"));
+        await withUser(db, me, (tx) => requireRole(tx, bookId, me, "viewer"));
+        return streamSSE(c, async (stream) => {
+          const unsubscribe = events.subscribe(bookId, (scope) => {
+            void stream.writeSSE({ event: "change", data: scope });
+          });
+          stream.onAbort(unsubscribe);
+          while (!stream.aborted) {
+            await stream.writeSSE({ event: "ping", data: "" });
+            await stream.sleep(PING_MS);
+          }
+        });
       })
 
       .get("/:bookId/members", async (c) => {

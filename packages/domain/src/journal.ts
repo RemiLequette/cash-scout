@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { currencySchema } from "./book.js";
+import { currencySchema, versionSchema } from "./book.js";
 import { convert, currencyDigits, money, type Money } from "./money.js";
 
 /**
@@ -67,6 +67,7 @@ export const entryUpdateSchema = z
     originalAmount: amountTextSchema.nullable(),
     originalCurrency: currencySchema.nullable(),
     reconciled: z.boolean(),
+    version: versionSchema,
   })
   .partial()
   .refine(

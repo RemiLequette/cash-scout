@@ -84,6 +84,8 @@ interface EditorState {
   title: string;
   kind: ReferenceKind;
   id?: string;
+  /** Revision of the item as read; the API refuses the change if the item moved on. */
+  version?: number;
   names: Names;
   /** Other fields of the item, edited by `extra`. */
   fields: Record<string, unknown>;
@@ -115,7 +117,10 @@ function Editor({
         kind: state.kind,
         id: state.id,
         method: state.id ? "PATCH" : "POST",
-        body: state.body(cleanNames(names), fields),
+        body: {
+          ...(state.body(cleanNames(names), fields) as object),
+          ...(state.id && { version: state.version }),
+        },
       },
       { onSuccess: onClose },
     );
@@ -145,6 +150,7 @@ function ItemMenu({
   bookId,
   kind,
   id,
+  version,
   archived,
   canEdit,
   onEdit,
@@ -153,6 +159,7 @@ function ItemMenu({
   bookId: string;
   kind: ReferenceKind;
   id: string;
+  version: number;
   archived: boolean;
   canEdit: boolean;
   onEdit: () => void;
@@ -173,7 +180,7 @@ function ItemMenu({
         <Menu.Item onClick={onEdit}>{t("reference.edit")}</Menu.Item>
         <Menu.Item
           onClick={() =>
-            change.mutate({ kind, id, method: "PATCH", body: { archived: !archived } })
+            change.mutate({ kind, id, method: "PATCH", body: { archived: !archived, version } })
           }
         >
           {archived ? t("reference.restore") : t("reference.archive")}
@@ -224,6 +231,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
     title: group ? t("reference.editGroup") : t("reference.newGroup"),
     kind: "groups",
     id: group?.id,
+    version: group?.version,
     names: group?.names ?? {},
     fields: { position: group?.position ?? reference.groups.length },
     extra: (fields, set) => (
@@ -245,6 +253,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
     title: item ? t("reference.editCategory") : t("reference.newCategory"),
     kind: "categories",
     id: item?.id,
+    version: item?.version,
     names: item?.names ?? {},
     fields: {
       groupId: item?.groupId ?? groupId,
@@ -288,6 +297,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
     title: item ? t("reference.editSubCategory") : t("reference.newSubCategory"),
     kind: "sub-categories",
     id: item?.id,
+    version: item?.version,
     names: item?.names ?? {},
     fields: { categoryId: item?.categoryId ?? categoryId },
     extra: (fields, set) => (
@@ -327,6 +337,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
                 bookId={bookId}
                 kind="groups"
                 id={group.id}
+                version={group.version}
                 archived={group.archived}
                 canEdit={canEdit}
                 onEdit={() => openEditor(groupEditor(group))}
@@ -364,6 +375,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
                                 bookId={bookId}
                                 kind="sub-categories"
                                 id={sub.id}
+                                version={sub.version}
                                 archived={sub.archived}
                                 canEdit={canEdit}
                                 onEdit={() => openEditor(subCategoryEditor(item.id, sub))}
@@ -377,6 +389,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
                           bookId={bookId}
                           kind="categories"
                           id={item.id}
+                          version={item.version}
                           archived={item.archived}
                           canEdit={canEdit}
                           onEdit={() => openEditor(categoryEditor(group.id, item))}
@@ -413,6 +426,7 @@ function AccountsTab({ bookId, reference, canEdit, showArchived, openEditor }: T
     title: item ? t("reference.editAccount") : t("reference.newAccount"),
     kind: "accounts",
     id: item?.id,
+    version: item?.version,
     names: item?.names ?? {},
     fields: {
       kind: item?.kind ?? "bank",
@@ -505,6 +519,7 @@ function AccountsTab({ bookId, reference, canEdit, showArchived, openEditor }: T
                     bookId={bookId}
                     kind="accounts"
                     id={item.id}
+                    version={item.version}
                     archived={item.archived}
                     canEdit={canEdit}
                     onEdit={() => openEditor(editor(item))}
@@ -530,6 +545,7 @@ function PaymentTypesTab({ bookId, reference, canEdit, showArchived, openEditor 
     title: item ? t("reference.editPaymentType") : t("reference.newPaymentType"),
     kind: "payment-types",
     id: item?.id,
+    version: item?.version,
     names: item?.names ?? {},
     fields: {},
     body: (names) => ({ names }),
@@ -558,6 +574,7 @@ function PaymentTypesTab({ bookId, reference, canEdit, showArchived, openEditor 
                   bookId={bookId}
                   kind="payment-types"
                   id={item.id}
+                  version={item.version}
                   archived={item.archived}
                   canEdit={canEdit}
                   onEdit={() => openEditor(editor(item))}
