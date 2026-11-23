@@ -20,11 +20,11 @@ Two containers in Docker Compose: one Node container serving the API and the bui
 
 A pnpm workspace, TypeScript everywhere:
 
-| Package           | Content                                                                                                                                         |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`        | React front end                                                                                                                                 |
-| `apps/api`        | HTTP API, authentication, database access, import                                                                                               |
-| `packages/domain` | Types, zod validation schemas, and pure calculations: budget allocation by profile, consumption and carry-over, cash projection, yearly balance |
+| Package           | Content                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`        | React front end                                                                                                                          |
+| `apps/api`        | HTTP API, authentication, database access, import                                                                                        |
+| `packages/domain` | Types, zod validation schemas, and pure calculations: budget allocation by profile, consumption by mode, cash projection, yearly balance |
 
 `packages/domain` has no dependency on the database or the browser. The API and the front end use the same schemas, so a form validates exactly as the server does, and the calculations are tested in isolation.
 
@@ -67,7 +67,7 @@ Linked entries between two books are written in one transaction, after checking 
 ### Reports and projection
 
 - Pivots, dashboards and history are computed in SQL (`GROUP BY` over the journal joined with reference data) and returned as rows (O3).
-- Budget allocation, consumption and carry-over, and the cash projection, are computed on demand by `packages/domain` from the journal, schedules and budgets, so they are never stale (O1, O2).
+- Budget allocation and consumption, and the cash projection, are computed on demand by `packages/domain` from the journal, schedules and budgets, so they are never stale (O1, O2).
 - If volumes ever require it, aggregates can be cached per book and month; not needed at household scale.
 
 ### Import
