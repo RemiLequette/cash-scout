@@ -230,6 +230,18 @@ describe("transfers", () => {
     expect(changed.destination).toMatchObject({ amount: "1600.00", bookAmount: "320.00" });
   });
 
+  it("suggests the sub-category most used by the book's transfers", async () => {
+    const b = await bookWithAccounts();
+    const defaults = () =>
+      json<{ subCategoryId: string | null; paymentTypeId: string | null }>(
+        b.owner.request("GET", `${b.base}/defaults`),
+      );
+    expect(await defaults()).toEqual({ subCategoryId: null, paymentTypeId: null });
+    await b.create({});
+    await b.create({});
+    expect((await defaults()).subCategoryId).toBe(b.internal.id);
+  });
+
   it("is private to the members of the book", async () => {
     const b = await bookWithAccounts();
     const t = await b.create({});

@@ -8,11 +8,18 @@ import {
   transferInputSchema,
   transferUpdateSchema,
 } from "@cash-scout/domain";
-import { and, eq } from "drizzle-orm";
+import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
-import { bookAccount, category, journalEntry, subCategory, transfer } from "../db/schema.js";
+import {
+  bookAccount,
+  category,
+  journalEntry,
+  paymentType,
+  subCategory,
+  transfer,
+} from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
 import {
@@ -84,204 +91,241 @@ async function respond(tx: Tx, bookId: string, id: string) {
  * together. Each side is reconciled on its own, through the journal.
  */
 export function transferRoutes(db: Db) {
-  return new Hono<AppEnv>()
-    .get("/:id", async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const id = idOf(c.req.param("id"), "Transfer");
-      const result = await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "viewer");
-        return respond(tx, bookId, id);
-      });
-      return c.json(result);
-    })
-
-    .post("/", zValidator("json", transferInputSchema), async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const input = c.req.valid("json");
-      const result = await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "editor");
-        const source = await usable(accountOf(tx, bookId, input.sourceAccountId), "account");
-        const destination = await usable(
-          accountOf(tx, bookId, input.destinationAccountId),
-          "account",
-        );
-        await transferSubCategory(tx, bookId, input.subCategoryId, false);
-        if (input.paymentTypeId) {
-          await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
-        }
-        const bookCurrency = await bookCurrencyOf(tx, bookId);
-        const sameCurrency = source.currency === destination.currency;
-        if (!sameCurrency && input.destinationAmount === undefined) {
-          throw new HTTPException(400, {
-            message: "The accounts are in different currencies: give the destination amount",
-          });
-        }
-        const out = checked(() => parseAmount(input.amount, source.currency));
-        const into = checked(() =>
-          parseAmount(sameCurrency ? input.amount : input.destinationAmount!, destination.currency),
-        );
-        const sourceRate = checked(() =>
-          resolveRate(source.currency, bookCurrency, input.sourceRate),
-        );
-        const destinationRate = checked(() =>
-          resolveRate(destination.currency, bookCurrency, input.destinationRate),
-        );
-        const [created] = await tx
-          .insert(transfer)
-          .values({ bookId, delayDays: input.delayDays })
-          .returning({ id: transfer.id });
-        const shared = {
-          bookId,
-          transferId: created!.id,
-          subCategoryId: input.subCategoryId,
-          description: input.description,
-          paymentTypeId: input.paymentTypeId ?? null,
-        };
-        const side = (minor: bigint, currency: string, rate: string) => ({
-          amount: minor,
-          plannedAmount: input.planned ? minor : 0n,
-          exchangeRate: rate,
-          bookAmount: checked(() => bookAmount(money(minor, currency), rate, bookCurrency)).minor,
+  return (
+    new Hono<AppEnv>()
+      // The sub-category and payment type most used by the book's transfers, to
+      // start a new one from. Archived items are left out.
+      .get("/defaults", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "viewer");
+          const sides = and(
+            eq(journalEntry.bookId, bookId),
+            eq(journalEntry.transferLeg, "source"),
+          );
+          const [sub] = await tx
+            .select({ id: journalEntry.subCategoryId })
+            .from(journalEntry)
+            .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
+            .where(and(sides, isNull(subCategory.archivedAt)))
+            .groupBy(journalEntry.subCategoryId)
+            .orderBy(desc(count()), journalEntry.subCategoryId)
+            .limit(1);
+          const [payment] = await tx
+            .select({ id: journalEntry.paymentTypeId })
+            .from(journalEntry)
+            .innerJoin(paymentType, eq(paymentType.id, journalEntry.paymentTypeId))
+            .where(and(sides, isNull(paymentType.archivedAt)))
+            .groupBy(journalEntry.paymentTypeId)
+            .orderBy(desc(count()), journalEntry.paymentTypeId)
+            .limit(1);
+          return { subCategoryId: sub?.id ?? null, paymentTypeId: payment?.id ?? null };
         });
-        await tx.insert(journalEntry).values([
-          {
-            ...shared,
-            transferLeg: "source" as const,
-            date: input.date,
-            accountId: input.sourceAccountId,
-            ...side(-out.minor, source.currency, sourceRate),
-          },
-          {
-            ...shared,
-            transferLeg: "destination" as const,
-            date: addDays(input.date, input.delayDays),
-            accountId: input.destinationAccountId,
-            ...side(into.minor, destination.currency, destinationRate),
-          },
-        ]);
-        return respond(tx, bookId, created!.id);
-      });
-      return c.json(result, 201);
-    })
+        return c.json(result);
+      })
 
-    .patch("/:id", zValidator("json", transferUpdateSchema), async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const id = idOf(c.req.param("id"), "Transfer");
-      const { version, ...input } = c.req.valid("json");
-      const result = await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "editor");
-        const { header, source, destination } = await readTransfer(tx, bookId, id);
-        const sourceAccountId = input.sourceAccountId ?? source.accountId;
-        const destinationAccountId = input.destinationAccountId ?? destination.accountId;
-        if (sourceAccountId === destinationAccountId) {
-          throw new HTTPException(400, { message: "A transfer needs two different accounts" });
-        }
-        // As for an entry: an account the transfer already uses stays allowed once archived,
-        // and a side only moves to an account in the same currency.
-        for (const [side, accountId] of [
-          [source, sourceAccountId],
-          [destination, destinationAccountId],
-        ] as const) {
-          if (accountId === side.accountId) continue;
-          const account = await usable(accountOf(tx, bookId, accountId), "account");
-          if (account.currency !== side.currency) {
+      .get("/:id", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Transfer");
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "viewer");
+          return respond(tx, bookId, id);
+        });
+        return c.json(result);
+      })
+
+      .post("/", zValidator("json", transferInputSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const input = c.req.valid("json");
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const source = await usable(accountOf(tx, bookId, input.sourceAccountId), "account");
+          const destination = await usable(
+            accountOf(tx, bookId, input.destinationAccountId),
+            "account",
+          );
+          await transferSubCategory(tx, bookId, input.subCategoryId, false);
+          if (input.paymentTypeId) {
+            await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
+          }
+          const bookCurrency = await bookCurrencyOf(tx, bookId);
+          const sameCurrency = source.currency === destination.currency;
+          if (!sameCurrency && input.destinationAmount === undefined) {
             throw new HTTPException(400, {
-              message: "A transfer cannot move to an account in another currency",
+              message: "The accounts are in different currencies: give the destination amount",
             });
           }
-        }
-        const subCategoryId = input.subCategoryId ?? source.subCategoryId;
-        await transferSubCategory(
-          tx,
-          bookId,
-          subCategoryId,
-          subCategoryId === source.subCategoryId,
-        );
-        const paymentTypeId =
-          input.paymentTypeId === undefined ? source.paymentTypeId : input.paymentTypeId;
-        if (paymentTypeId && paymentTypeId !== source.paymentTypeId) {
-          await usable(paymentTypeOf(tx, bookId, paymentTypeId), "payment type");
-        }
-        const bookCurrency = await bookCurrencyOf(tx, bookId);
-        const sameCurrency = source.currency === destination.currency;
-        const outMinor = input.amount
-          ? checked(() => parseAmount(input.amount!, source.currency)).minor
-          : abs(source.amount);
-        const intoMinor = sameCurrency
-          ? outMinor
-          : input.destinationAmount
-            ? checked(() => parseAmount(input.destinationAmount!, destination.currency)).minor
-            : abs(destination.amount);
-        const sourceRate = checked(() =>
-          resolveRate(source.currency, bookCurrency, input.sourceRate ?? source.exchangeRate),
-        );
-        const destinationRate = checked(() =>
-          resolveRate(
-            destination.currency,
-            bookCurrency,
-            input.destinationRate ?? destination.exchangeRate,
-          ),
-        );
-        const delayDays = input.delayDays ?? header.delayDays;
-        const date = input.date ?? source.date;
-
-        const [updated] = await tx
-          .update(transfer)
-          .set({ delayDays })
-          .where(rowOf(transfer, bookId, id, version))
-          .returning({ id: transfer.id });
-        if (!updated) return missing("Transfer", version);
-
-        const shared = {
-          subCategoryId,
-          description: input.description ?? source.description,
-          paymentTypeId,
-        };
-        const side = (minor: bigint, currency: string, rate: string) => ({
-          amount: minor,
-          exchangeRate: rate,
-          bookAmount: checked(() => bookAmount(money(minor, currency), rate, bookCurrency)).minor,
+          const out = checked(() => parseAmount(input.amount, source.currency));
+          const into = checked(() =>
+            parseAmount(
+              sameCurrency ? input.amount : input.destinationAmount!,
+              destination.currency,
+            ),
+          );
+          const sourceRate = checked(() =>
+            resolveRate(source.currency, bookCurrency, input.sourceRate),
+          );
+          const destinationRate = checked(() =>
+            resolveRate(destination.currency, bookCurrency, input.destinationRate),
+          );
+          const [created] = await tx
+            .insert(transfer)
+            .values({ bookId, delayDays: input.delayDays })
+            .returning({ id: transfer.id });
+          const shared = {
+            bookId,
+            transferId: created!.id,
+            subCategoryId: input.subCategoryId,
+            description: input.description,
+            paymentTypeId: input.paymentTypeId ?? null,
+          };
+          const side = (minor: bigint, currency: string, rate: string) => ({
+            amount: minor,
+            plannedAmount: input.planned ? minor : 0n,
+            exchangeRate: rate,
+            bookAmount: checked(() => bookAmount(money(minor, currency), rate, bookCurrency)).minor,
+          });
+          await tx.insert(journalEntry).values([
+            {
+              ...shared,
+              transferLeg: "source" as const,
+              date: input.date,
+              accountId: input.sourceAccountId,
+              ...side(-out.minor, source.currency, sourceRate),
+            },
+            {
+              ...shared,
+              transferLeg: "destination" as const,
+              date: addDays(input.date, input.delayDays),
+              accountId: input.destinationAccountId,
+              ...side(into.minor, destination.currency, destinationRate),
+            },
+          ]);
+          return respond(tx, bookId, created!.id);
         });
-        const write = (leg: "source" | "destination", values: object) =>
-          tx
-            .update(journalEntry)
-            .set(values)
-            .where(and(eq(journalEntry.transferId, id), eq(journalEntry.transferLeg, leg)));
-        await write("source", {
-          ...shared,
-          date,
-          accountId: sourceAccountId,
-          ...side(-outMinor, source.currency, sourceRate),
-        });
-        await write("destination", {
-          ...shared,
-          date: addDays(date, delayDays),
-          accountId: destinationAccountId,
-          ...side(intoMinor, destination.currency, destinationRate),
-        });
-        return respond(tx, bookId, id);
-      });
-      return c.json(result);
-    })
+        return c.json(result, 201);
+      })
 
-    .delete("/:id", async (c) => {
-      const me = c.var.user.id;
-      const bookId = idOf(c.req.param("bookId"));
-      const id = idOf(c.req.param("id"), "Transfer");
-      await withUser(db, me, async (tx) => {
-        await requireRole(tx, bookId, me, "editor");
-        // Its two entries go with it.
-        const deleted = await tx
-          .delete(transfer)
-          .where(and(eq(transfer.id, id), eq(transfer.bookId, bookId)))
-          .returning({ id: transfer.id });
-        if (deleted.length === 0) {
-          throw new HTTPException(404, { message: "Transfer not found" });
-        }
-      });
-      return c.body(null, 204);
-    });
+      .patch("/:id", zValidator("json", transferUpdateSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Transfer");
+        const { version, ...input } = c.req.valid("json");
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const { header, source, destination } = await readTransfer(tx, bookId, id);
+          const sourceAccountId = input.sourceAccountId ?? source.accountId;
+          const destinationAccountId = input.destinationAccountId ?? destination.accountId;
+          if (sourceAccountId === destinationAccountId) {
+            throw new HTTPException(400, { message: "A transfer needs two different accounts" });
+          }
+          // As for an entry: an account the transfer already uses stays allowed once archived,
+          // and a side only moves to an account in the same currency.
+          for (const [side, accountId] of [
+            [source, sourceAccountId],
+            [destination, destinationAccountId],
+          ] as const) {
+            if (accountId === side.accountId) continue;
+            const account = await usable(accountOf(tx, bookId, accountId), "account");
+            if (account.currency !== side.currency) {
+              throw new HTTPException(400, {
+                message: "A transfer cannot move to an account in another currency",
+              });
+            }
+          }
+          const subCategoryId = input.subCategoryId ?? source.subCategoryId;
+          await transferSubCategory(
+            tx,
+            bookId,
+            subCategoryId,
+            subCategoryId === source.subCategoryId,
+          );
+          const paymentTypeId =
+            input.paymentTypeId === undefined ? source.paymentTypeId : input.paymentTypeId;
+          if (paymentTypeId && paymentTypeId !== source.paymentTypeId) {
+            await usable(paymentTypeOf(tx, bookId, paymentTypeId), "payment type");
+          }
+          const bookCurrency = await bookCurrencyOf(tx, bookId);
+          const sameCurrency = source.currency === destination.currency;
+          const outMinor = input.amount
+            ? checked(() => parseAmount(input.amount!, source.currency)).minor
+            : abs(source.amount);
+          const intoMinor = sameCurrency
+            ? outMinor
+            : input.destinationAmount
+              ? checked(() => parseAmount(input.destinationAmount!, destination.currency)).minor
+              : abs(destination.amount);
+          const sourceRate = checked(() =>
+            resolveRate(source.currency, bookCurrency, input.sourceRate ?? source.exchangeRate),
+          );
+          const destinationRate = checked(() =>
+            resolveRate(
+              destination.currency,
+              bookCurrency,
+              input.destinationRate ?? destination.exchangeRate,
+            ),
+          );
+          const delayDays = input.delayDays ?? header.delayDays;
+          const date = input.date ?? source.date;
+
+          const [updated] = await tx
+            .update(transfer)
+            .set({ delayDays })
+            .where(rowOf(transfer, bookId, id, version))
+            .returning({ id: transfer.id });
+          if (!updated) return missing("Transfer", version);
+
+          const shared = {
+            subCategoryId,
+            description: input.description ?? source.description,
+            paymentTypeId,
+          };
+          const side = (minor: bigint, currency: string, rate: string) => ({
+            amount: minor,
+            exchangeRate: rate,
+            bookAmount: checked(() => bookAmount(money(minor, currency), rate, bookCurrency)).minor,
+          });
+          const write = (leg: "source" | "destination", values: object) =>
+            tx
+              .update(journalEntry)
+              .set(values)
+              .where(and(eq(journalEntry.transferId, id), eq(journalEntry.transferLeg, leg)));
+          await write("source", {
+            ...shared,
+            date,
+            accountId: sourceAccountId,
+            ...side(-outMinor, source.currency, sourceRate),
+          });
+          await write("destination", {
+            ...shared,
+            date: addDays(date, delayDays),
+            accountId: destinationAccountId,
+            ...side(intoMinor, destination.currency, destinationRate),
+          });
+          return respond(tx, bookId, id);
+        });
+        return c.json(result);
+      })
+
+      .delete("/:id", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Transfer");
+        await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          // Its two entries go with it.
+          const deleted = await tx
+            .delete(transfer)
+            .where(and(eq(transfer.id, id), eq(transfer.bookId, bookId)))
+            .returning({ id: transfer.id });
+          if (deleted.length === 0) {
+            throw new HTTPException(404, { message: "Transfer not found" });
+          }
+        });
+        return c.body(null, 204);
+      })
+  );
 }

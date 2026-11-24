@@ -14,6 +14,7 @@ import {
   today,
   useJournalChange,
   useTransfer,
+  useTransferDefaults,
   type Transfer,
 } from "../journal";
 import { useNameOf, type Reference } from "../reference";
@@ -442,15 +443,24 @@ export function TransferForm({
 }) {
   const { t } = useTranslation();
   const loaded = useTransfer(bookId, transferId);
+  const defaults = useTransferDefaults(bookId, transferId === undefined);
   if (transferId !== undefined) {
     if (loaded.error) {
       return <Alert color="red">{t("common.error", { message: loaded.error.message })}</Alert>;
     }
     if (!loaded.data) return <Loader size="sm" />;
+  } else if (defaults.isPending) {
+    return <Loader size="sm" />;
   }
+  // A new transfer starts from what the book's transfers use most.
   const initial = loaded.data
     ? draftOf(loaded.data)
-    : { ...emptyDraft(), ...(initialDate && { date: initialDate }) };
+    : {
+        ...emptyDraft(),
+        subCategoryId: defaults.data?.subCategoryId ?? null,
+        paymentTypeId: defaults.data?.paymentTypeId ?? null,
+        ...(initialDate && { date: initialDate }),
+      };
   return (
     <TransferFields
       bookId={bookId}
