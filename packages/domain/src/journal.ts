@@ -84,6 +84,76 @@ export const entryUpdateSchema = z
   );
 export type EntryUpdate = z.input<typeof entryUpdateSchema>;
 
+/** Positive decimal amount as text: the size of a transfer, whose sign comes from its side. */
+export const positiveAmountSchema = amountTextSchema
+  .regex(/^\+?\d+(\.\d+)?$/, "The amount must be positive")
+  .refine((amount) => /[1-9]/.test(amount), "The amount must be above zero");
+
+/** The longest delay between the two sides of a transfer, in days. */
+export const maxTransferDelay = 60;
+
+const transferFields = {
+  /** The date of the source entry; the destination is credited `delayDays` later. */
+  date: entryDateSchema,
+  delayDays: z.number().int().min(0).max(maxTransferDelay),
+  sourceAccountId: z.uuid(),
+  destinationAccountId: z.uuid(),
+  subCategoryId: z.uuid(),
+  description: descriptionSchema,
+  paymentTypeId: z.uuid().nullable(),
+  /** Leaving the source account, in its currency. */
+  amount: positiveAmountSchema,
+  /** Reaching the destination account, in its currency; the amount when both have the same one. */
+  destinationAmount: positiveAmountSchema,
+  /** Rates of each side into the book currency, required for an account in another currency. */
+  sourceRate: rateSchema,
+  destinationRate: rateSchema,
+};
+
+/** Creating a transfer: the two sides of it are made together. */
+export const transferInputSchema = z
+  .object({
+    ...transferFields,
+    delayDays: transferFields.delayDays.default(0),
+    description: transferFields.description.default(""),
+    paymentTypeId: transferFields.paymentTypeId.optional(),
+    destinationAmount: transferFields.destinationAmount.optional(),
+    sourceRate: transferFields.sourceRate.optional(),
+    destinationRate: transferFields.destinationRate.optional(),
+    /** Part of the budget's plan: the planned amounts are then the amounts. */
+    planned: z.boolean().optional(),
+  })
+  .refine((t) => t.sourceAccountId !== t.destinationAccountId, {
+    message: "A transfer needs two different accounts",
+    path: ["destinationAccountId"],
+  });
+export type TransferInput = z.input<typeof transferInputSchema>;
+
+/** Changing a transfer changes both of its sides. */
+export const transferUpdateSchema = z
+  .object({ ...transferFields, version: versionSchema })
+  .partial()
+  .refine(
+    (t) =>
+      t.sourceAccountId === undefined ||
+      t.destinationAccountId === undefined ||
+      t.sourceAccountId !== t.destinationAccountId,
+    { message: "A transfer needs two different accounts", path: ["destinationAccountId"] },
+  );
+export type TransferUpdate = z.input<typeof transferUpdateSchema>;
+
+/** A calendar date moved by a number of days ("2026-11-30" + 2 = "2026-12-02"). */
+export function addDays(date: string, days: number): string {
+  const moved = new Date(`${date}T00:00:00Z`);
+  moved.setUTCDate(moved.getUTCDate() + days);
+  return moved.toISOString().slice(0, 10);
+}
+
+/** Days from one calendar date to another (negative when `to` is earlier). */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
 /** Marks several entries reconciled or not at once. */
 export const reconcileSchema = z.object({
   ids: z.array(z.uuid()).min(1).max(1000),

@@ -11,7 +11,20 @@ import {
   resolveRate,
   toDecimalString,
 } from "@cash-scout/domain";
-import { and, asc, count, desc, eq, gte, ilike, inArray, lte, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lte,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
@@ -20,7 +33,7 @@ import type { AppEnv } from "../http.js";
 import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
 import { monthEnds } from "./budget-months.js";
 
-async function bookCurrencyOf(tx: Tx, bookId: string): Promise<string> {
+export async function bookCurrencyOf(tx: Tx, bookId: string): Promise<string> {
   const [row] = await tx.select({ currency: book.currency }).from(book).where(eq(book.id, bookId));
   if (!row) {
     throw new HTTPException(404, { message: "Book not found" });
@@ -32,7 +45,7 @@ async function bookCurrencyOf(tx: Tx, bookId: string): Promise<string> {
  * An account, sub-category or payment type of the book, for an entry.
  * Archived items are refused, unless the entry already uses the item.
  */
-async function usable<T extends { archivedAt: Date | null }>(
+export async function usable<T extends { archivedAt: Date | null }>(
   rows: Promise<T[]>,
   what: string,
   allowArchived = false,
@@ -47,19 +60,19 @@ async function usable<T extends { archivedAt: Date | null }>(
   return row;
 }
 
-function accountOf(tx: Tx, bookId: string, id: string) {
+export function accountOf(tx: Tx, bookId: string, id: string) {
   return tx
     .select({ currency: bookAccount.currency, archivedAt: bookAccount.archivedAt })
     .from(bookAccount)
     .where(and(eq(bookAccount.id, id), eq(bookAccount.bookId, bookId)));
 }
-function subCategoryOf(tx: Tx, bookId: string, id: string) {
+export function subCategoryOf(tx: Tx, bookId: string, id: string) {
   return tx
     .select({ archivedAt: subCategory.archivedAt })
     .from(subCategory)
     .where(and(eq(subCategory.id, id), eq(subCategory.bookId, bookId)));
 }
-function paymentTypeOf(tx: Tx, bookId: string, id: string) {
+export function paymentTypeOf(tx: Tx, bookId: string, id: string) {
   return tx
     .select({ archivedAt: paymentType.archivedAt })
     .from(paymentType)
@@ -76,7 +89,7 @@ function originalOf(amount: string | null | undefined, currency: string | null |
   };
 }
 
-const entryColumns = {
+export const entryColumns = {
   version: journalEntry.version,
   id: journalEntry.id,
   date: journalEntry.date,
@@ -93,13 +106,15 @@ const entryColumns = {
   reconciled: journalEntry.reconciled,
   scheduleId: journalEntry.scheduleId,
   linkId: journalEntry.linkId,
+  transferId: journalEntry.transferId,
+  transferLeg: journalEntry.transferLeg,
   createdAt: journalEntry.createdAt,
   updatedAt: journalEntry.updatedAt,
 };
-type EntryRow = Omit<typeof journalEntry.$inferSelect, "bookId">;
+export type EntryRow = Omit<typeof journalEntry.$inferSelect, "bookId">;
 
 /** Shapes an entry for JSON: amounts as decimal text in their currency. */
-function outEntry(row: EntryRow, currency: string, bookCurrency: string) {
+export function outEntry(row: EntryRow, currency: string, bookCurrency: string) {
   const text = (minor: bigint, cur: string) => toDecimalString(money(minor, cur));
   return {
     ...row,
@@ -214,6 +229,7 @@ export function journalRoutes(db: Db) {
               and(
                 eq(journalEntry.bookId, bookId),
                 eq(journalEntry.reconciled, true),
+                isNull(journalEntry.transferId),
                 sql`${key} <> ''`,
                 gte(journalEntry.date, sql`current_date - interval '12 months'`),
                 sql`${key} not in (${forecasts})`,
@@ -232,6 +248,7 @@ export function journalRoutes(db: Db) {
                 and(
                   eq(journalEntry.bookId, bookId),
                   eq(journalEntry.reconciled, true),
+                  isNull(journalEntry.transferId),
                   inArray(
                     key,
                     top.map((row) => row.key),
@@ -452,6 +469,12 @@ export function journalRoutes(db: Db) {
           if (!current) {
             throw new HTTPException(404, { message: "Entry not found" });
           }
+          // A side of a transfer changes with the transfer; only its reconciling is its own.
+          if (current.transferId && Object.keys(input).some((key) => key !== "reconciled")) {
+            throw new HTTPException(400, {
+              message: "This entry is one side of a transfer: change the transfer",
+            });
+          }
           // Items the entry already uses stay allowed even once archived.
           if (input.accountId && input.accountId !== current.accountId) {
             const account = await usable(accountOf(tx, bookId, input.accountId), "account");
@@ -505,6 +528,15 @@ export function journalRoutes(db: Db) {
         const id = idOf(c.req.param("id"), "Entry");
         await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
+          const [found] = await tx
+            .select({ transferId: journalEntry.transferId })
+            .from(journalEntry)
+            .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
+          if (found?.transferId) {
+            throw new HTTPException(400, {
+              message: "This entry is one side of a transfer: delete the transfer",
+            });
+          }
           const deleted = await tx
             .delete(journalEntry)
             .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)))

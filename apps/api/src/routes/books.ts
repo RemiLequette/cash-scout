@@ -18,6 +18,7 @@ import { idOf, languagesOf, missing, requireRole, roleOf } from "./access.js";
 import { budgetsRoutes } from "./budgets.js";
 import { dashboardRoutes } from "./dashboard.js";
 import { journalRoutes } from "./journal.js";
+import { transferRoutes } from "./transfers.js";
 import { referenceRoutes } from "./reference.js";
 
 async function ownerCount(tx: Tx, bookId: string): Promise<number> {
@@ -121,6 +122,7 @@ export function booksRoutes(db: Db, events: BookEvents) {
       .route("/:bookId/budgets", budgetsRoutes(db))
       .route("/:bookId/dashboard", dashboardRoutes(db))
       .route("/:bookId/journal", journalRoutes(db))
+      .route("/:bookId/transfers", transferRoutes(db))
       .route("/:bookId/reference", referenceRoutes(db))
 
       .delete("/:bookId", async (c) => {

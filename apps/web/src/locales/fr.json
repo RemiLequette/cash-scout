@@ -201,6 +201,7 @@
     "plannedEntriesHint": "Le plan des catégories planifiées : des écritures futures du journal. Chacune est prévue à son montant ; le changer ensuite apparaît comme un écart.",
     "noPlannedEntries": "Aucune écriture cette année dans les catégories planifiées.",
     "newPlanned": "Nouvelle écriture planifiée",
+    "newPlannedTransfer": "Nouveau virement planifié",
     "plannedAmount": "Prévu",
     "proposeHint": "Replanifie les écritures planifiées de {year}, un an plus tard et au montant où elles ont fini. {count, plural, =0 {Rien à proposer : les sous-catégories sont déjà planifiées cette année, ou n'avaient pas d'écriture planifiée.} one {# écriture sera créée.} other {# écritures seront créées.}}",
     "createPlanned": "{count, plural, one {Créer # écriture} other {Créer # écritures}}",
@@ -330,5 +331,41 @@
     "mismatch": "Les deux mots de passe sont différents.",
     "changeHint": "Vous restez connecté ici ; vos autres appareils sont déconnectés.",
     "changeFailed": "Le mot de passe actuel est faux, ou le nouveau n'est pas accepté."
+  },
+  "transfer": {
+    "new": "Nouveau virement",
+    "edit": "Modifier le virement",
+    "badge": "Virement",
+    "leg": {
+      "source": "Virement : sort de ce compte",
+      "destination": "Virement : arrive sur ce compte"
+    },
+    "source": "Compte source",
+    "destination": "Compte destination",
+    "date": "Date",
+    "dateHint": "Le jour où il quitte le compte source.",
+    "delay": "Délai (jours)",
+    "delayHint": "Jours avant l'arrivée sur la destination.",
+    "arrival": "Arrive sur la destination le {date}.",
+    "amount": "Montant",
+    "amountHint": "Positif : le montant qui sort du compte source.",
+    "amountPlaceholder": "300",
+    "destinationAmount": "Montant reçu",
+    "destinationAmountHint": "Les comptes ont des devises différentes : le montant qui arrive.",
+    "subCategoryHint": "Seulement les catégories de direction virement, exclues des totaux.",
+    "noCategory": "Ajoutez d'abord, dans les données de référence, une catégorie de direction virement avec une sous-catégorie.",
+    "reconcileHint": "Chaque côté se rapproche seul, avec sa propre ligne de relevé. Modifier le virement modifie les deux côtés.",
+    "deleteConfirm": "Supprimer ce virement et ses deux écritures ?",
+    "invalid": {
+      "date": "Saisissez une date.",
+      "delayDays": "Saisissez un nombre entier de jours, de 0 à 60.",
+      "sourceAccountId": "Choisissez le compte source.",
+      "destinationAccountId": "Choisissez un compte destination, différent de la source.",
+      "subCategoryId": "Choisissez une sous-catégorie.",
+      "amount": "Saisissez un montant positif avec au plus les décimales de la devise.",
+      "destinationAmount": "Saisissez le montant reçu, positif.",
+      "sourceRate": "Saisissez un taux supérieur à zéro, ex. 0,2.",
+      "destinationRate": "Saisissez un taux supérieur à zéro, ex. 0,2."
+    }
   }
 }

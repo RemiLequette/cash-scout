@@ -275,6 +275,30 @@ export const bookAccount = pgTable(
 // Year, month, category, group and direction are derived, never stored.
 // ---------------------------------------------------------------------------
 
+/**
+ * A transfer between two accounts of a book: two journal entries, a source
+ * (negative) and a destination (positive), that change together. The source
+ * date is the transfer's date; the destination is credited `delayDays` later.
+ */
+export const transfer = pgTable(
+  "transfer",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    /** Days between the source entry and the destination entry. */
+    delayDays: integer("delay_days").notNull().default(0),
+    ...timestamps,
+    version: version(),
+  },
+  (t) => [
+    unique().on(t.id, t.bookId),
+    index("transfer_book_idx").on(t.bookId),
+    check("transfer_delay_check", sql`${t.delayDays} BETWEEN 0 AND 60`),
+  ],
+);
+
+export const transferLeg = pgEnum("transfer_leg", ["source", "destination"]);
+
 export const journalEntry = pgTable(
   "journal_entry",
   {
@@ -302,10 +326,22 @@ export const journalEntry = pgTable(
     scheduleId: uuid("schedule_id"),
     /** Matching entry in another book (linked entries come in a later version). */
     linkId: uuid("link_id"),
+    /** The transfer this entry is one side of, and which side. */
+    transferId: uuid("transfer_id"),
+    transferLeg: transferLeg("transfer_leg"),
     ...timestamps,
     version: version(),
   },
   (t) => [
+    foreignKey({
+      columns: [t.transferId, t.bookId],
+      foreignColumns: [transfer.id, transfer.bookId],
+    }).onDelete("cascade"),
+    unique("journal_entry_transfer_leg_unique").on(t.transferId, t.transferLeg),
+    check(
+      "journal_entry_transfer_check",
+      sql`(${t.transferId} IS NULL) = (${t.transferLeg} IS NULL)`,
+    ),
     foreignKey({
       columns: [t.accountId, t.bookId],
       foreignColumns: [bookAccount.id, bookAccount.bookId],

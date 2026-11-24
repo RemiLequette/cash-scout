@@ -93,6 +93,7 @@ One entry per transaction, past or future, in a book:
 | Planned amount  | The amount first planned, in a [scheduled category](#scheduled-categories): equal to the amount for an entry made in the budget's plan, 0 for an entry made in the journal. Never changed afterwards; the difference with the amount is the variance, shown only when there is a planned amount |
 | Reconciled      | Matched with the bank statement. An unreconciled entry is a **forecast**                                                                                                                                                                                                                        |
 | Schedule        | The schedule that generated the entry, if any                                                                                                                                                                                                                                                   |
+| Transfer        | The transfer this entry is one side of, and which side, if any                                                                                                                                                                                                                                  |
 | Link            | The matching entry in another book, if any                                                                                                                                                                                                                                                      |
 
 **Categories** have three levels: group → category → sub-category. A category has a short code (`C01`, `P02`…) that sets its sort order. Each category has a **direction**: expense, income, saving or transfer. **Saving** is money that leaves the book's accounts for assets the book does not track, such as a life insurance: a negative saving is a withdrawal from them. A saving account that is in the book makes its movements **transfers**, which are left out of the totals, like any transfer between a book's own accounts.
@@ -116,6 +117,17 @@ Two ways of working, both supported:
 **Adjustments**: an opening balance or correction entry per account, so account balances match the bank.
 
 **Import**: CSV, OFX and QIF bank exports, with a saved column mapping per account and rules that set the sub-category from the bank label. An imported line that matches an unreconciled entry (same account, close date and amount) reconciles it instead of creating a new one. Importing the existing sheets' journals is the first migration path.
+
+### Transfers
+
+A **transfer** moves money between two accounts of a book. It is two journal entries, a **source** (negative) and a **destination** (positive), that are created, changed and deleted together.
+
+- **Delay**: the transfer has a date, the source's, and a delay in days (0 to 60). The destination is dated the source's date plus the delay. Changing the date of the transfer moves both sides; changing the delay moves only the destination.
+- **One change, two entries**: the amount, the accounts, the sub-category, the description and the payment type are edited on the transfer, never on one side. A side opened from the journal opens the whole transfer. Only reconciling is a side's own: each side is matched with its own bank statement line.
+- **Currencies**: between accounts of the same currency one amount is entered. Between two currencies both amounts are kept, which gives the real rate; each account not in the book currency also has its rate into it, as for any entry.
+- **Sub-category**: a sub-category of a category of the _transfer_ direction, so both sides are left out of the totals.
+- **Planning**: a transfer can be part of the budget's plan, from the list of planned entries. Both sides then get a planned amount equal to their amount, which add up to zero, and the cash projection sees them on their own dates and accounts. A transfer does not need a budget type: it changes no total.
+- **Between books** is another operation, the [linked entries](#linked-entries-between-books).
 
 ### Currencies
 

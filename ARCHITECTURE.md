@@ -62,6 +62,7 @@ Linked entries between two books are written in one transaction, after checking 
 - **Derived values** (year, month, category, group, direction) are never stored on an entry; they come from the date and the sub-category.
 - **Reference data names** are stored per item in a `names` JSON column, one name per language (`{"fr": "Alimentation", "en": "Food"}`). The API checks them against the book's languages and requires the default one; names in a language the book drops are kept. Entries, rules and reports reference items by id.
 - **Archiving** sets `archived_at`: the item stays for past data and is hidden from choices. A new entry cannot use an archived account, sub-category or payment type; an existing entry keeps the ones it has. Deleting is refused while an item is in use; merging a sub-category moves its entries to another one, then deletes it, in one transaction.
+- **Transfers** are a `transfer` row (the delay in days, a version) and two journal entries that point to it with `transfer_id` and `transfer_leg` (`source` or `destination`), at most one of each. `/books/:bookId/transfers` creates, changes and deletes the three in one transaction; deleting the transfer cascades to its entries. The journal API refuses to change or delete a side except its `reconciled` flag. A change is published as a `journal` event.
 - **Journal entries** reserve `schedule_id` and `link_id` for schedules and linked entries; they stay empty until those exist.
 
 ### Concurrent use
