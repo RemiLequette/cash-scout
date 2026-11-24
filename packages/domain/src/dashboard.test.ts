@@ -65,18 +65,16 @@ describe("monthEndBalances", () => {
 
 describe("dashboardRows", () => {
   const structure: DashboardStructure = {
-    groups: [{ id: "g-daily" }, { id: "g-empty" }, { id: "g-transfers" }],
+    groups: [{ id: "g-daily" }, { id: "g-empty" }],
     categories: [
-      { id: "c-food", groupId: "g-daily", direction: "expense" },
-      { id: "c-pay", groupId: "g-daily", direction: "income" },
-      { id: "c-unused", groupId: "g-empty", direction: "expense" },
-      { id: "c-move", groupId: "g-transfers", direction: "transfer" },
+      { id: "c-food", groupId: "g-daily" },
+      { id: "c-pay", groupId: "g-daily" },
+      { id: "c-unused", groupId: "g-empty" },
     ],
     subCategories: [
       { id: "s-bread", categoryId: "c-food" },
       { id: "s-meat", categoryId: "c-food" },
       { id: "s-pay", categoryId: "c-pay" },
-      { id: "s-move", categoryId: "c-move" },
     ],
   };
   const cell = (subCategoryId: string, month: number, total: bigint) => ({
@@ -107,11 +105,6 @@ describe("dashboardRows", () => {
   it("hides what has nothing in the year, an empty group included", () => {
     const rows = dashboardRows(structure, [cell("s-pay", 3, 1_000n)], []);
     expect(rows.map((r) => r.id)).toEqual(["g-daily", "c-pay", "s-pay"]);
-  });
-
-  it("leaves transfers out", () => {
-    const rows = dashboardRows(structure, [cell("s-move", 1, 500n)], []);
-    expect(rows).toEqual([]);
   });
 
   it("keeps an entry row whose months add up to zero", () => {
@@ -163,11 +156,11 @@ describe("dashboardRows with nested groups", () => {
       { id: "daily" },
     ],
     categories: [
-      { id: "rent", groupId: "rennes", direction: "income" },
-      { id: "loan", groupId: "rennes", direction: "expense" },
-      { id: "tax", groupId: "assets", direction: "expense" },
-      { id: "house", groupId: "maisons", direction: "income" },
-      { id: "food", groupId: "daily", direction: "expense" },
+      { id: "rent", groupId: "rennes" },
+      { id: "loan", groupId: "rennes" },
+      { id: "tax", groupId: "assets" },
+      { id: "house", groupId: "maisons" },
+      { id: "food", groupId: "daily" },
     ],
     subCategories: [
       { id: "s-rent", categoryId: "rent" },
@@ -239,7 +232,7 @@ describe("dashboardRows with nested groups", () => {
   it("does not loop on groups that point at each other", () => {
     const loop: DashboardStructure = {
       groups: [{ id: "a", parentId: "b" }, { id: "b", parentId: "a" }, { id: "c" }],
-      categories: [{ id: "k", groupId: "c", direction: "expense" }],
+      categories: [{ id: "k", groupId: "c" }],
       subCategories: [{ id: "s", categoryId: "k" }],
     };
     expect(dashboardRows(loop, [cell("s", 1, -5n)], []).map((r) => r.id)).toEqual(["c", "k", "s"]);
@@ -250,10 +243,10 @@ describe("dashboardLines", () => {
   const structure: DashboardStructure = {
     groups: [{ id: "daily" }, { id: "work" }, { id: "big" }],
     categories: [
-      { id: "food", groupId: "daily", direction: "expense", natureId: "spend" },
-      { id: "pay", groupId: "work", direction: "income", natureId: "earn" },
-      { id: "roof", groupId: "big", direction: "expense", natureId: "once" },
-      { id: "move", groupId: "daily", direction: "transfer", natureId: "xfer" },
+      { id: "food", groupId: "daily", natureId: "spend" },
+      { id: "pay", groupId: "work", natureId: "earn" },
+      { id: "roof", groupId: "big", natureId: "once" },
+      { id: "move", groupId: "daily", natureId: "xfer" },
     ],
     subCategories: [
       { id: "s-food", categoryId: "food" },
@@ -264,10 +257,10 @@ describe("dashboardLines", () => {
   };
   const lines: DashboardLines = {
     natures: [
-      { id: "earn", behavior: "income", sign: 1, position: 0 },
-      { id: "spend", behavior: "expense", sign: -1, position: 1 },
-      { id: "once", behavior: "expense", sign: -1, position: 3 },
-      { id: "xfer", behavior: "transfer", sign: 1, position: 5 },
+      { id: "earn", sign: 1, transfer: false, position: 0 },
+      { id: "spend", sign: -1, transfer: false, position: 1 },
+      { id: "once", sign: -1, transfer: false, position: 3 },
+      { id: "xfer", sign: 1, transfer: true, position: 5 },
     ],
     balances: [
       { id: "current", natureIds: ["earn", "spend"], position: 2 },
@@ -324,8 +317,8 @@ describe("dashboardLines", () => {
     const shared: DashboardStructure = {
       groups: [{ id: "home" }],
       categories: [
-        { id: "rent", groupId: "home", direction: "expense", natureId: "spend" },
-        { id: "roof", groupId: "home", direction: "expense", natureId: "once" },
+        { id: "rent", groupId: "home", natureId: "spend" },
+        { id: "roof", groupId: "home", natureId: "once" },
       ],
       subCategories: [
         { id: "s-rent", categoryId: "rent" },
@@ -364,8 +357,8 @@ describe("orderedLines", () => {
   it("sorts natures and balances on one position scale, natures first on a tie", () => {
     const order = orderedLines({
       natures: [
-        { id: "n1", behavior: "income", sign: 1, position: 1 },
-        { id: "n0", behavior: "expense", sign: -1, position: 0 },
+        { id: "n1", sign: 1, transfer: false, position: 1 },
+        { id: "n0", sign: -1, transfer: false, position: 0 },
       ],
       balances: [{ id: "b", natureIds: ["n0"], position: 1 }],
     });

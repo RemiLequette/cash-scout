@@ -14,8 +14,8 @@ interface Nature {
   id: string;
   version: number;
   names: Record<string, string>;
-  behavior: string;
   sign: number;
+  transfer: boolean;
   position: number;
   archived: boolean;
 }
@@ -30,7 +30,7 @@ interface Balance {
 interface Reference {
   natures: Nature[];
   balances: Balance[];
-  categories: { id: string; natureId: string; direction: string }[];
+  categories: { id: string; natureId: string }[];
 }
 
 async function setup() {
@@ -45,7 +45,7 @@ async function setup() {
     json<T>(owner.request("POST", ref(path), body), status);
   const group = await post<{ id: string }>("/groups", { names: { fr: "Courant" } });
   const category = (code: string, extra: object) =>
-    post<{ id: string; natureId: string; direction: string }>("/categories", {
+    post<{ id: string; natureId: string }>("/categories", {
       groupId: group.id,
       code,
       names: { fr: code },
@@ -55,14 +55,14 @@ async function setup() {
 }
 
 describe("natures", () => {
-  it("starts a book with one nature per direction, named in its language", async () => {
+  it("starts a book with four natures, named in its language", async () => {
     const { read } = await setup();
     const { natures } = await read();
-    expect(natures.map((n) => [n.names.fr, n.behavior, n.sign, n.position])).toEqual([
-      ["Revenus", "income", 1, 0],
-      ["Dépenses", "expense", -1, 1],
-      ["Épargne", "saving", -1, 2],
-      ["Virements", "transfer", 1, 3],
+    expect(natures.map((n) => [n.names.fr, n.sign, n.transfer, n.position])).toEqual([
+      ["Revenus", 1, false, 0],
+      ["Dépenses", -1, false, 1],
+      ["Épargne", -1, false, 2],
+      ["Virements", 1, true, 3],
     ]);
   });
 
@@ -70,7 +70,6 @@ describe("natures", () => {
     const { post, read } = await setup();
     const created = await post<Nature>("/natures", {
       names: { fr: "Exceptionnel" },
-      behavior: "expense",
       sign: -1,
     });
     expect(created.position).toBe(4);
@@ -79,107 +78,84 @@ describe("natures", () => {
 
   it("refuses a name without the book's default language, and a sign other than 1 or -1", async () => {
     const { post } = await setup();
-    await post("/natures", { names: { en: "Odd" }, behavior: "expense", sign: -1 }, 400);
-    await post("/natures", { names: { fr: "Odd" }, behavior: "expense", sign: 2 }, 400);
+    await post("/natures", { names: { en: "Odd" }, sign: -1 }, 400);
+    await post("/natures", { names: { fr: "Odd" }, sign: 2 }, 400);
   });
 
-  it("gives a category the nature asked for, with that nature's behaviour", async () => {
+  it("gives a category the nature asked for", async () => {
     const { post, category } = await setup();
     const once = await post<Nature>("/natures", {
       names: { fr: "Exceptionnel" },
-      behavior: "expense",
       sign: -1,
     });
     const roof = await category("E01", { natureId: once.id });
-    expect(roof).toMatchObject({ natureId: once.id, direction: "expense" });
+    expect(roof.natureId).toBe(once.id);
   });
 
-  it("gives a category the first nature of a direction when only the direction is given", async () => {
-    const { read, post, category } = await setup();
-    await post("/natures", { names: { fr: "Exceptionnel" }, behavior: "expense", sign: -1 });
-    const food = await category("C01", { direction: "expense" });
-    const { natures } = await read();
-    expect(food.natureId).toBe(natures.find((n) => n.names.fr === "Dépenses")!.id);
-    await post("/categories", { groupId: food.id, code: "X", names: { fr: "X" } }, 400);
-  });
-
-  it("refuses an unknown or archived nature", async () => {
-    const { owner, ref, post, category } = await setup();
-    await post(
-      "/categories",
-      {
-        groupId: crypto.randomUUID(),
-        code: "Z1",
-        names: { fr: "Z" },
-        natureId: crypto.randomUUID(),
-      },
-      400,
-    );
-    const once = await post<Nature>("/natures", {
-      names: { fr: "Exceptionnel" },
-      behavior: "expense",
-      sign: -1,
-    });
+  it("needs a known, active nature to make or move a category", async () => {
+    const { owner, ref, post, read, category } = await setup();
+    const [income] = (await read()).natures;
+    const base = await category("C01", { natureId: income!.id });
+    const { groups } = await json<{ groups: { id: string }[] }>(owner.request("GET", ref()));
+    const body = { groupId: groups[0]!.id, code: "C02", names: { fr: "C02" } };
+    await post("/categories", body, 400);
+    await post("/categories", { ...body, natureId: crypto.randomUUID() }, 400);
+    const once = await post<Nature>("/natures", { names: { fr: "Exceptionnel" }, sign: -1 });
     await json(
       owner.request("PATCH", ref(`/natures/${once.id}`), { archived: true, version: once.version }),
     );
-    const refused = await owner.request("POST", ref("/categories"), {
-      groupId: (await category("C01", { direction: "expense" })).id,
-      code: "E02",
-      names: { fr: "E02" },
+    await post("/categories", { ...body, natureId: once.id }, 400);
+    const moved = await owner.request("PATCH", ref(`/categories/${base.id}`), {
       natureId: once.id,
     });
-    expect(refused.status).toBe(400);
+    expect(moved.status).toBe(400);
   });
 
-  it("moves a category to another nature, and keeps its nature when only the same direction is sent", async () => {
+  it("moves a category to another nature", async () => {
     const { owner, ref, post, category } = await setup();
-    const once = await post<Nature>("/natures", {
-      names: { fr: "Exceptionnel" },
-      behavior: "expense",
-      sign: -1,
-    });
+    const once = await post<Nature>("/natures", { names: { fr: "Exceptionnel" }, sign: -1 });
+    const other = await post<Nature>("/natures", { names: { fr: "Autre" }, sign: 1 });
     const roof = await category("E01", { natureId: once.id });
-    const same = await json<{ natureId: string }>(
-      owner.request("PATCH", ref(`/categories/${roof.id}`), { direction: "expense" }),
+    const moved = await json<{ natureId: string }>(
+      owner.request("PATCH", ref(`/categories/${roof.id}`), { natureId: other.id }),
     );
-    expect(same.natureId).toBe(once.id);
-    const income = await json<{ natureId: string; direction: string }>(
-      owner.request("PATCH", ref(`/categories/${roof.id}`), { direction: "income" }),
-    );
-    expect(income.direction).toBe("income");
-    expect(income.natureId).not.toBe(once.id);
+    expect(moved.natureId).toBe(other.id);
   });
 
-  it("changes the behaviour of the categories when a nature changes its own", async () => {
-    const { owner, ref, post, read, category } = await setup();
-    const once = await post<Nature>("/natures", {
-      names: { fr: "Exceptionnel" },
-      behavior: "expense",
-      sign: -1,
-    });
+  it("keeps the nature of a category that is renamed", async () => {
+    const { owner, ref, post, category } = await setup();
+    const once = await post<Nature>("/natures", { names: { fr: "Exceptionnel" }, sign: -1 });
     const roof = await category("E01", { natureId: once.id });
-    await json(
-      owner.request("PATCH", ref(`/natures/${once.id}`), {
-        behavior: "saving",
-        version: once.version,
-      }),
+    const renamed = await json<{ natureId: string }>(
+      owner.request("PATCH", ref(`/categories/${roof.id}`), { names: { fr: "Toit" } }),
     );
-    expect((await read()).categories.find((c) => c.id === roof.id)!.direction).toBe("saving");
+    expect(renamed.natureId).toBe(once.id);
+  });
+
+  it("marks a nature as holding transfers", async () => {
+    const { owner, ref, post } = await setup();
+    const own = await post<Nature>("/natures", {
+      names: { fr: "Entre comptes" },
+      sign: 1,
+      transfer: true,
+    });
+    expect(own.transfer).toBe(true);
+    const back = await json<Nature>(
+      owner.request("PATCH", ref(`/natures/${own.id}`), { transfer: false, version: own.version }),
+    );
+    expect(back.transfer).toBe(false);
   });
 
   it("refuses to delete a nature that categories use, and deletes an unused one", async () => {
     const { owner, ref, post, category } = await setup();
     const once = await post<Nature>("/natures", {
       names: { fr: "Exceptionnel" },
-      behavior: "expense",
       sign: -1,
     });
     await category("E01", { natureId: once.id });
     expect((await owner.request("DELETE", ref(`/natures/${once.id}`))).status).toBe(409);
     const spare = await post<Nature>("/natures", {
       names: { fr: "Libre" },
-      behavior: "expense",
       sign: -1,
     });
     expect((await owner.request("DELETE", ref(`/natures/${spare.id}`))).status).toBe(204);
@@ -298,7 +274,6 @@ describe("the list of natures and balances", () => {
       (
         await viewer.request("POST", ref("/natures"), {
           names: { fr: "X" },
-          behavior: "expense",
           sign: -1,
         })
       ).status,

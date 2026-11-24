@@ -1,7 +1,7 @@
 /**
  * Import of reference data from CSV files (see docs/import.md).
  *
- * - categories.csv: group, category, code, direction, sub_category
+ * - categories.csv: group, category, code, nature, sub_category
  * - accounts.csv: name, kind, currency, low_balance_threshold
  * - payment_types.csv: name
  *
@@ -9,13 +9,7 @@
  * column suffixed with its language: `category@en`, `name@en`.
  * Items that already exist are left as they are, so an import can be re-run.
  */
-import {
-  checkNames,
-  currencySchema,
-  parseThreshold,
-  type Direction,
-  type Names,
-} from "@cash-scout/domain";
+import { checkNames, currencySchema, parseThreshold, type Names } from "@cash-scout/domain";
 import { parse } from "csv-parse/sync";
 import { asc, eq } from "drizzle-orm";
 import type { Tx } from "../db/client.js";
@@ -59,20 +53,6 @@ export function parseCsv(text: string): Row[] {
     trim: true,
   }) as Row[];
 }
-
-const directionAliases: Record<string, Direction> = {
-  expense: "expense",
-  income: "income",
-  saving: "saving",
-  transfer: "transfer",
-  dépense: "expense",
-  depense: "expense",
-  recette: "income",
-  revenu: "income",
-  épargne: "saving",
-  epargne: "saving",
-  virement: "transfer",
-};
 
 /** Names of a column: the base column in the default language, `column@xx` for the others. */
 function namesOf(row: Row, column: string, defaultLanguage: string): Names {
@@ -126,7 +106,7 @@ export async function importReference(
         c.id,
       ]),
     );
-    // A category takes the first nature of the book that has its direction.
+    // A category names its nature, in any of the languages of the book.
     const natures = await tx
       .select()
       .from(nature)
@@ -155,17 +135,13 @@ export async function importReference(
       const code = required(row, "code", line);
       let categoryId = categories.get(code);
       if (!categoryId) {
-        const direction = directionAliases[required(row, "direction", line).toLowerCase()];
-        if (!direction) {
-          throw new ImportError(
-            `Line ${line}: unknown direction "${row.direction}" (expense, income, saving or transfer)`,
-          );
-        }
-        const natureOf = natures.find((n) => n.behavior === direction && !n.archivedAt);
+        const wanted = required(row, "nature", line).toLowerCase();
+        const natureOf = natures.find(
+          (n) =>
+            !n.archivedAt && Object.values(n.names).some((name) => name.toLowerCase() === wanted),
+        );
         if (!natureOf) {
-          throw new ImportError(
-            `Line ${line}: the book has no nature for the direction ${direction}`,
-          );
+          throw new ImportError(`Line ${line}: the book has no nature named "${row.nature}"`);
         }
         const [created] = await tx
           .insert(category)
@@ -174,7 +150,6 @@ export async function importReference(
             groupId,
             code,
             natureId: natureOf.id,
-            direction,
             names: checked(namesOf(row, "category", defaultLanguage), line),
           })
           .returning({ id: category.id });

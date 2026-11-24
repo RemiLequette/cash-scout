@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { createHarness, household } from "../test/harness.js";
+import { createHarness, household, defaultNature } from "../test/harness.js";
 
 const h = createHarness();
 afterAll(() => h.sql.end());
@@ -47,13 +47,13 @@ async function bookWithCategories(owner?: User) {
   const food = await post<{ defaultBudgetType: string }>("/reference/categories", {
     groupId: group.id,
     code: "C01",
-    direction: "expense",
+    natureId: await defaultNature(owner, bookId, "expense"),
     names: { fr: "Alimentation" },
   });
   const salary = await post("/reference/categories", {
     groupId: group.id,
     code: "R01",
-    direction: "income",
+    natureId: await defaultNature(owner, bookId, "income"),
     names: { fr: "Salaires" },
   });
   const bakery = await post("/reference/sub-categories", {
@@ -124,7 +124,7 @@ describe("category default budget type", () => {
       b.owner.request("POST", `/books/${b.bookId}/reference/categories`, {
         groupId: b.group.id,
         code: "I01",
-        direction: "expense",
+        natureId: await defaultNature(b.owner, b.bookId, "expense"),
         defaultBudgetType: "scheduled",
         names: { fr: "Impôts" },
       }),
@@ -241,29 +241,21 @@ describe("category budgets", () => {
     expect(months[1]).toMatchObject({ allocated: "99.96", available: "-49.96" });
   });
 
-  it("accepts a negative amount only in a saving category: a planned withdrawal", async () => {
+  it("accepts a negative amount in any category: a planned withdrawal", async () => {
     const b = await bookWithCategories();
     const insurance = await json<{ id: string }>(
       b.owner.request("POST", `/books/${b.bookId}/reference/categories`, {
         groupId: b.group.id,
         code: "E01",
-        direction: "saving",
+        natureId: await defaultNature(b.owner, b.bookId, "saving"),
         names: { fr: "Assurance vie" },
       }),
       201,
     );
     const withdrawal = await b.addBudget({ categoryId: insurance.id, amount: "-3000" });
     expect(withdrawal.amount).toBe("-3000.00");
-    const negative = await b.owner.request("POST", b.budgets(), {
-      categoryId: b.food.id,
-      year: 2026,
-      type: "periodic",
-      amount: "-10",
-      profileId: b.profile.id,
-      consumption: "lapse",
-      accountId: b.current.id,
-    });
-    expect(negative.status).toBe(400);
+    const refund = await b.addBudget({ categoryId: b.food.id, amount: "-10" });
+    expect(refund.amount).toBe("-10.00");
   });
 
   it("keeps a scheduled budget to its type and assumptions", async () => {
@@ -434,7 +426,10 @@ describe("saving the budgets of a year at once", () => {
     const b = await bookWithCategories();
     const refused = await save(b, {
       year: 2027,
-      save: [periodic(b, b.food.id), { ...periodic(b, b.salary.id), amount: "-5" }],
+      save: [
+        periodic(b, b.food.id),
+        { ...periodic(b, b.salary.id), profileId: crypto.randomUUID() },
+      ],
     });
     expect(refused.status).toBe(400);
     expect((await b.year(2027)).budgets).toEqual([]);

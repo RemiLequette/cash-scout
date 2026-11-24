@@ -31,10 +31,6 @@ export function checkNames(
   return undefined;
 }
 
-export const directions = ["expense", "income", "saving", "transfer"] as const;
-export const directionSchema = z.enum(directions);
-export type Direction = z.infer<typeof directionSchema>;
-
 /** Scheduled: the plan is future journal entries. Periodic: an annual amount spread over months. */
 export const budgetTypes = ["scheduled", "periodic"] as const;
 export const budgetTypeSchema = z.enum(budgetTypes);
@@ -109,8 +105,8 @@ export function makesCycle(
 }
 
 /**
- * How a nature shows in the dashboard: +1 as entered (income), -1 reversed
- * so that spending reads as a positive number.
+ * How a nature reads: +1 as entered (income), -1 reversed so that spending
+ * reads as a positive number. It applies to the dashboard and to the budgets.
  */
 export const natureSigns = [1, -1] as const;
 export const natureSignSchema = z.union([z.literal(1), z.literal(-1)]);
@@ -118,13 +114,14 @@ export type NatureSign = z.infer<typeof natureSignSchema>;
 
 /**
  * A nature of a book's flows ("Revenus", "Dépenses", "Exceptionnel"…): a
- * name, a display sign and the behaviour it borrows from one of the four
- * built-in directions, which is what budgets and the journal rely on.
+ * name and the sign it reads with. A transfer nature holds the movements
+ * between the book's own accounts: they stay out of the dashboard and are the
+ * only ones a transfer can use.
  */
 export const natureInputSchema = z.object({
   names: namesSchema,
-  behavior: directionSchema,
   sign: natureSignSchema,
+  transfer: z.boolean().optional(),
 });
 export const natureUpdateSchema = natureInputSchema
   .partial()
@@ -152,23 +149,23 @@ export const lineOrderSchema = z.object({
 export function defaultNatures(
   languages: readonly string[],
   defaultLanguage: string,
-): { names: Names; behavior: Direction; sign: NatureSign }[] {
+): { names: Names; sign: NatureSign; transfer: boolean }[] {
   const titles: Record<string, [string, string, string, string]> = {
     fr: ["Revenus", "Dépenses", "Épargne", "Virements"],
     en: ["Income", "Expenses", "Savings", "Transfers"],
   };
   const known = (language: string) => titles[language.split("-")[0] ?? language];
   const fallback = known(defaultLanguage) ?? titles.en!;
-  const behaviors: [Direction, NatureSign][] = [
-    ["income", 1],
-    ["expense", -1],
-    ["saving", -1],
-    ["transfer", 1],
+  const shapes: [NatureSign, boolean][] = [
+    [1, false],
+    [-1, false],
+    [-1, false],
+    [1, true],
   ];
   const wanted = languages.includes(defaultLanguage) ? languages : [defaultLanguage, ...languages];
-  return behaviors.map(([behavior, sign], index) => ({
-    behavior,
+  return shapes.map(([sign, transfer], index) => ({
     sign,
+    transfer,
     names: Object.fromEntries(
       wanted.map((language) => [language, (known(language) ?? fallback)[index]!]),
     ),
@@ -178,10 +175,7 @@ export function defaultNatures(
 export const categoryInputSchema = z.object({
   groupId: z.uuid(),
   code: categoryCodeSchema,
-  /** The category's nature; a new category gives this or, failing that, a direction. */
-  natureId: z.uuid().optional(),
-  /** Picks the book's first nature with this behaviour; mostly for imports. */
-  direction: directionSchema.optional(),
+  natureId: z.uuid(),
   /** Budget type of a year not yet budgeted; periodic when omitted. */
   defaultBudgetType: budgetTypeSchema.optional(),
   names: namesSchema,

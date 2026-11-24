@@ -29,6 +29,14 @@ async function json<T>(response: Response | Promise<Response>, status = 200): Pr
   return (await res.json()) as T;
 }
 
+/** The id of one of the natures a new book starts with, in their order. */
+async function natureOf(owner: User, ref: (path?: string) => string, index: number) {
+  const { natures } = await json<{ natures: { id: string; position: number }[] }>(
+    owner.request("GET", ref()),
+  );
+  return [...natures].sort((a, b) => a.position - b.position)[index]!.id;
+}
+
 async function categoryTree(owner: User, ref: (path?: string) => string) {
   const group = await json<{ id: string }>(
     owner.request("POST", ref("/groups"), { names: { fr: "Vie courante", en: "Daily life" } }),
@@ -38,7 +46,7 @@ async function categoryTree(owner: User, ref: (path?: string) => string) {
     owner.request("POST", ref("/categories"), {
       groupId: group.id,
       code: "C01",
-      direction: "expense",
+      natureId: await natureOf(owner, ref, 1),
       names: { fr: "Alimentation", en: "Food" },
     }),
     201,
@@ -78,7 +86,7 @@ describe("categories", () => {
 
     const reference = await json<{
       groups: { id: string }[];
-      categories: { id: string; groupId: string; direction: string; names: object }[];
+      categories: { id: string; groupId: string; natureId: string; names: object }[];
       subCategories: { id: string; categoryId: string }[];
     }>(owner.request("GET", ref()));
     expect(reference.groups.map((g) => g.id)).toEqual([group.id]);
@@ -86,7 +94,7 @@ describe("categories", () => {
       expect.objectContaining({
         id: food.id,
         groupId: group.id,
-        direction: "expense",
+        natureId: await natureOf(owner, ref, 1),
         names: { fr: "Alimentation", en: "Food" },
       }),
     ]);
@@ -111,7 +119,7 @@ describe("categories", () => {
     const duplicate = await owner.request("POST", ref("/categories"), {
       groupId: group.id,
       code: "C01",
-      direction: "income",
+      natureId: await natureOf(owner, ref, 0),
       names: { fr: "Salaire" },
     });
     expect(duplicate.status).toBe(409);
@@ -124,7 +132,7 @@ describe("categories", () => {
       owner.request("POST", ref("/categories"), {
         groupId: group.id,
         code: "C02",
-        direction: "expense",
+        natureId: await natureOf(owner, ref, 1),
         names: { fr: "Maison" },
       }),
       201,

@@ -108,12 +108,13 @@
     "naturesIntro": "Natures split the dashboard into sections (income, spending, exceptional…). A balance adds up the natures you choose. Natures and balances share one order, which is the dashboard's.",
     "newNature": "New nature",
     "editNature": "Edit the nature",
-    "behavior": "Behaves like",
-    "behaviorHint": "The built-in direction the nature borrows: budgets and the journal treat its categories that way.",
+    "transfer": "Transfers between accounts",
+    "transferHint": "What this nature holds stays out of the dashboard; only its categories can be used by transfers.",
+    "transferBadge": "Transfers",
     "sign": "Display",
     "signAsEntered": "As entered",
     "signReversed": "Reversed",
-    "signHint": "Reversed shows spending as positive amounts in the dashboard. Balances always add up the amounts as entered.",
+    "signHint": "Reversed: amounts entered as negative (spending) read as positive, in the dashboard and in budgets. Balances always add up the amounts as entered.",
     "newBalance": "New balance",
     "editBalance": "Edit the balance",
     "balance": "Balance",
@@ -210,7 +211,6 @@
     "noProfile": "No profile yet. Create one (Profiles) before budgeting a periodic category.",
     "problems": "{count, plural, one {# budget to fix} other {# budgets to fix}}",
     "problemAmount": "The amount is not a valid number.",
-    "problemNegative": "Only a saving budget can be negative.",
     "problemProfile": "Pick a profile.",
     "problemAccount": "Choose the reference account of this budget.",
     "problemRate": "Give the exchange rate of this account's currency.",
@@ -230,12 +230,6 @@
     "even": "Even",
     "archive": "Archive",
     "unarchive": "Restore"
-  },
-  "directions": {
-    "expense": "Expense",
-    "income": "Income",
-    "saving": "Saving",
-    "transfer": "Transfer"
   },
   "accountKinds": {
     "bank": "Bank",

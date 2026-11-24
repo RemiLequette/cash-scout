@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
-import { createHarness, household } from "../test/harness.js";
+import { createHarness, household, defaultNature } from "../test/harness.js";
 import { withUser } from "./db/client.js";
 import { journalEntry } from "./db/schema.js";
 
@@ -48,13 +48,13 @@ async function bookWithReference(owner?: User) {
   const food = await post("/categories", {
     groupId: group.id,
     code: "C01",
-    direction: "expense",
+    natureId: await defaultNature(owner, bookId, "expense"),
     names: { fr: "Alimentation" },
   });
   const salary = await post("/categories", {
     groupId: group.id,
     code: "R01",
-    direction: "income",
+    natureId: await defaultNature(owner, bookId, "income"),
     names: { fr: "Salaires" },
   });
   const bakery = await post("/sub-categories", { categoryId: food.id, names: { fr: "Pain" } });

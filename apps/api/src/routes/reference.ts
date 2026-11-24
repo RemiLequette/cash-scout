@@ -21,7 +21,6 @@ import {
   subCategoryInputSchema,
   subCategoryUpdateSchema,
   toDecimalString,
-  type Direction,
   type Names,
   makesCycle,
 } from "@cash-scout/domain";
@@ -93,37 +92,20 @@ async function checkParent(tx: Tx, bookId: string, id: string | null, parentId?:
 }
 
 /**
- * The nature a category is given: the one asked for, or the first of the book
- * with the asked behaviour. Archived natures are not chosen, but a category
- * may keep the archived one it has.
+ * Checks the nature a category is given: it must be one of the book, and not
+ * archived, though a category may keep the archived one it has.
  */
-async function resolveNature(
-  tx: Tx,
-  bookId: string,
-  input: { natureId?: string; direction?: Direction },
-  current?: string,
-) {
-  const natures = await tx
-    .select({
-      id: nature.id,
-      behavior: nature.behavior,
-      archivedAt: nature.archivedAt,
-    })
+async function checkNature(tx: Tx, bookId: string, id: string, current?: string) {
+  const [found] = await tx
+    .select({ archivedAt: nature.archivedAt })
     .from(nature)
-    .where(eq(nature.bookId, bookId))
-    .orderBy(asc(nature.position));
-  const found = input.natureId
-    ? natures.find((n) => n.id === input.natureId)
-    : natures.find((n) => n.behavior === input.direction && !n.archivedAt);
+    .where(and(eq(nature.id, id), eq(nature.bookId, bookId)));
   if (!found) {
-    throw new HTTPException(400, {
-      message: input.natureId ? "Unknown nature" : `No nature for the direction ${input.direction}`,
-    });
+    throw new HTTPException(400, { message: "Unknown nature" });
   }
-  if (found.archivedAt && found.id !== current) {
+  if (found.archivedAt && id !== current) {
     throw new HTTPException(400, { message: "The nature is archived" });
   }
-  return found;
 }
 
 /** The next free place at the end of the list shared by the natures and balances. */
@@ -217,8 +199,8 @@ const natureColumns = {
   version: nature.version,
   id: nature.id,
   names: nature.names,
-  behavior: nature.behavior,
   sign: nature.sign,
+  transfer: nature.transfer,
   position: nature.position,
   archivedAt: nature.archivedAt,
 };
@@ -235,7 +217,6 @@ const categoryColumns = {
   groupId: category.groupId,
   code: category.code,
   natureId: category.natureId,
-  direction: category.direction,
   defaultBudgetType: category.defaultBudgetType,
   names: category.names,
   archivedAt: category.archivedAt,
@@ -387,13 +368,6 @@ export function referenceRoutes(db: Db) {
               .returning(natureColumns),
             version,
           );
-          // The categories carry their nature's behaviour: keep them in step.
-          if (input.behavior) {
-            await tx
-              .update(category)
-              .set({ direction: input.behavior })
-              .where(and(eq(category.bookId, bookId), eq(category.natureId, id)));
-          }
           return updated;
         });
         return c.json(out(row));
@@ -581,13 +555,10 @@ export function referenceRoutes(db: Db) {
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           const names = await validNames(tx, bookId, input.names);
-          if (!input.natureId && !input.direction) {
-            throw new HTTPException(400, { message: "A nature is required" });
-          }
-          const { id: natureId, behavior } = await resolveNature(tx, bookId, input);
+          await checkNature(tx, bookId, input.natureId);
           const [created] = await tx
             .insert(category)
-            .values({ ...input, bookId, names, natureId, direction: behavior })
+            .values({ ...input, bookId, names })
             .returning(categoryColumns);
           return created!;
         });
@@ -597,33 +568,21 @@ export function referenceRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Item");
-        const { names, archived, version, natureId, direction, ...input } = c.req.valid("json");
+        const { names, archived, version, ...input } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
-          let nature: { natureId: string; direction: Direction } | undefined;
-          if (natureId || direction) {
+          if (input.natureId) {
             const [current] = await tx
-              .select({ natureId: category.natureId, direction: category.direction })
+              .select({ natureId: category.natureId })
               .from(category)
               .where(and(eq(category.id, id), eq(category.bookId, bookId)));
-            // A direction alone changes nothing for a category that already has it.
-            if (natureId || current?.direction !== direction) {
-              const found = await resolveNature(
-                tx,
-                bookId,
-                { natureId, direction },
-                current?.natureId,
-              );
-              nature = { natureId: found.id, direction: found.behavior };
-            }
+            await checkNature(tx, bookId, input.natureId, current?.natureId);
           }
           return updatedOne(
             await tx
               .update(category)
               .set({
                 ...input,
-                // A direction the category already has is written back unchanged.
-                ...(nature ?? (direction ? { direction } : {})),
                 ...archiveValue(archived),
                 ...(names && { names: await mergedNames(tx, bookId, category, id, names) }),
               })

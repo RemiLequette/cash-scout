@@ -108,12 +108,13 @@
     "naturesIntro": "Les natures découpent le tableau de bord en sections (revenus, dépenses, exceptionnel…). Un solde additionne les natures choisies. Natures et soldes partagent un seul ordre, celui du tableau de bord.",
     "newNature": "Nouvelle nature",
     "editNature": "Modifier la nature",
-    "behavior": "Se comporte comme",
-    "behaviorHint": "Le sens intégré que la nature emprunte : les budgets et le journal traitent ses catégories ainsi.",
+    "transfer": "Virements entre comptes",
+    "transferHint": "Les mouvements de cette nature restent hors du tableau de bord ; seuls ses catégories servent aux virements.",
+    "transferBadge": "Virements",
     "sign": "Affichage",
     "signAsEntered": "Tel que saisi",
     "signReversed": "Inversé",
-    "signHint": "Inversé affiche les dépenses en positif dans le tableau de bord. Les soldes additionnent toujours les montants tels que saisis.",
+    "signHint": "Inversé : les montants saisis en négatif (dépenses) se lisent en positif, dans le tableau de bord et les budgets. Les soldes additionnent toujours les montants tels que saisis.",
     "newBalance": "Nouveau solde",
     "editBalance": "Modifier le solde",
     "balance": "Solde",
@@ -210,7 +211,6 @@
     "noProfile": "Aucun profil. Crée-en un (Profils) avant de budgéter une catégorie périodique.",
     "problems": "{count, plural, one {# budget à corriger} other {# budgets à corriger}}",
     "problemAmount": "Le montant n'est pas un nombre valide.",
-    "problemNegative": "Seul un budget d'épargne peut être négatif.",
     "problemProfile": "Choisis un profil.",
     "problemAccount": "Choisissez le compte de référence de ce budget.",
     "problemRate": "Indique le taux de change de la devise de ce compte.",
@@ -230,12 +230,6 @@
     "even": "Régulier",
     "archive": "Archiver",
     "unarchive": "Restaurer"
-  },
-  "directions": {
-    "expense": "Dépense",
-    "income": "Recette",
-    "saving": "Épargne",
-    "transfer": "Virement"
   },
   "accountKinds": {
     "bank": "Bancaire",

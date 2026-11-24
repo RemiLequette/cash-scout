@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { createHarness, household } from "../test/harness.js";
+import { createHarness, household, defaultNature, type DefaultNature } from "../test/harness.js";
 
 const h = createHarness();
 afterAll(() => h.sql.end());
@@ -31,11 +31,11 @@ async function setup() {
   const post = <T>(path: string, body: unknown) =>
     json<T & { id: string }>(owner.request("POST", `/books/${bookId}${path}`, body), 201);
   const group = await post("/reference/groups", { names: { fr: "Vie courante" } });
-  const category = (code: string, direction: string, name: string) =>
+  const category = async (code: string, kind: DefaultNature, name: string) =>
     post("/reference/categories", {
       groupId: group.id,
       code,
-      direction,
+      natureId: await defaultNature(owner, bookId, kind),
       names: { fr: name },
     });
   const food = await category("C01", "expense", "Alimentation");

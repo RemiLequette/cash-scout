@@ -16,6 +16,7 @@ import {
   bookAccount,
   category,
   journalEntry,
+  nature,
   paymentType,
   subCategory,
   transfer,
@@ -31,15 +32,16 @@ import {
   usable,
 } from "./journal.js";
 
-/** A sub-category of the book, which must belong to a category of the transfer direction. */
+/** A sub-category of the book, which must belong to a category of a transfer nature. */
 async function transferSubCategory(tx: Tx, bookId: string, id: string, allowArchived: boolean) {
   const [row] = await tx
-    .select({ archivedAt: subCategory.archivedAt, direction: category.direction })
+    .select({ archivedAt: subCategory.archivedAt, transfer: nature.transfer })
     .from(subCategory)
     .innerJoin(category, eq(category.id, subCategory.categoryId))
+    .innerJoin(nature, eq(nature.id, category.natureId))
     .where(and(eq(subCategory.id, id), eq(subCategory.bookId, bookId)));
   const found = await usable(Promise.resolve(row ? [row] : []), "sub-category", allowArchived);
-  if (found.direction !== "transfer") {
+  if (!found.transfer) {
     throw new HTTPException(400, {
       message: "A transfer needs a sub-category of a transfer category",
     });

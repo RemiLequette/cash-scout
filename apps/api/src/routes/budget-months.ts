@@ -17,6 +17,7 @@ import {
   category,
   categoryBudget,
   journalEntry,
+  nature,
   subCategory,
 } from "../db/schema.js";
 
@@ -43,9 +44,10 @@ export type Consumption = Awaited<ReturnType<typeof loadYear>>["consumption"];
 export async function loadYear(tx: Tx, bookId: string, year: number) {
   const [rows, profiles, consumption] = await Promise.all([
     tx
-      .select({ ...budgetColumns, code: category.code, direction: category.direction })
+      .select({ ...budgetColumns, code: category.code, sign: nature.sign })
       .from(categoryBudget)
       .innerJoin(category, eq(category.id, categoryBudget.categoryId))
+      .innerJoin(nature, eq(nature.id, category.natureId))
       .where(and(eq(categoryBudget.bookId, bookId), eq(categoryBudget.year, year)))
       .orderBy(asc(category.code)),
     tx
@@ -55,20 +57,21 @@ export async function loadYear(tx: Tx, bookId: string, year: number) {
     tx
       .select({
         categoryId: subCategory.categoryId,
-        direction: category.direction,
+        sign: nature.sign,
         month: MONTH,
         total: sql<string>`sum(${journalEntry.bookAmount})`,
       })
       .from(journalEntry)
       .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
       .innerJoin(category, eq(category.id, subCategory.categoryId))
+      .innerJoin(nature, eq(nature.id, category.natureId))
       .where(
         and(
           eq(journalEntry.bookId, bookId),
           sql`extract(year from ${journalEntry.date}) = ${year}`,
         ),
       )
-      .groupBy(subCategory.categoryId, category.direction, MONTH),
+      .groupBy(subCategory.categoryId, nature.sign, MONTH),
   ]);
   return {
     rows,
@@ -77,8 +80,8 @@ export async function loadYear(tx: Tx, bookId: string, year: number) {
   };
 }
 
-/** The sign that makes a category's consumption positive: spending and saving, income. */
-export const consumptionSign = (direction: string) => (direction === "income" ? 1n : -1n);
+/** The sign that makes a category's consumption read positive: its nature's sign. */
+export const consumptionSign = (sign: number) => BigInt(sign);
 
 /** The 12 months of a periodic budget, in minor units of the book currency. */
 export function monthsOf(
@@ -88,14 +91,14 @@ export function monthsOf(
     profileId: string | null;
     consumption: string | null;
   },
-  direction: string,
+  sign: number,
   weightsOf: Map<string, number[]>,
   consumption: Consumption,
 ): BudgetMonth[] {
-  const sign = consumptionSign(direction);
+  const factor = consumptionSign(sign);
   const used = Array<bigint>(MONTHS).fill(0n);
   for (const entry of consumption) {
-    if (entry.categoryId === row.categoryId) used[entry.month - 1] = sign * entry.total;
+    if (entry.categoryId === row.categoryId) used[entry.month - 1] = factor * entry.total;
   }
   return budgetMonths(
     allocate(row.amount!, weightsOf.get(row.profileId!)!),
@@ -161,12 +164,12 @@ export async function monthEnds(
     if (row.type !== "periodic" || !row.accountId) continue;
     const currency = currencyOf.get(row.accountId);
     if (!currency) continue;
-    const months = monthsOf(row, row.direction, weightsOf, consumption);
+    const months = monthsOf(row, row.sign, weightsOf, consumption);
     for (const month of settlementMonths(row.consumption!)) {
       const unused = months[month - 1]!.remaining;
       const reconciled = isSettled.has(`${row.categoryId}:${month}`);
       if (unused <= 0n && !reconciled) continue;
-      const bookMinor = reconciled ? 0n : consumptionSign(row.direction) * unused;
+      const bookMinor = reconciled ? 0n : consumptionSign(row.sign) * unused;
       const book = money(bookMinor, bookCurrency);
       const own = unconvert(book, row.exchangeRate ?? "1", currency);
       lines.push({

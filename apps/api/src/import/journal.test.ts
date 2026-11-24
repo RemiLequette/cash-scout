@@ -9,11 +9,11 @@ const h = createHarness();
 afterAll(() => h.sql.end());
 
 const categories = [
-  "group;category;code;direction;sub_category",
-  "Vie courante;Alimentation;C01;expense;Boulangerie",
-  "Vie courante;Alimentation;C01;expense;Divers",
-  "Loisirs;Sorties;C02;expense;Divers",
-  "Revenus;Salaires;R01;income;Paie",
+  "group;category;code;nature;sub_category",
+  "Vie courante;Alimentation;C01;Dépenses;Boulangerie",
+  "Vie courante;Alimentation;C01;Dépenses;Divers",
+  "Loisirs;Sorties;C02;Dépenses;Divers",
+  "Revenus;Salaires;R01;Revenus;Paie",
 ].join("\n");
 const accounts = ["name;currency", "Compte courant;EUR", "Compte MYR;MYR"].join("\n");
 

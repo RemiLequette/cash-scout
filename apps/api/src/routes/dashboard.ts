@@ -13,7 +13,7 @@ import { and, count, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db } from "../db/client.js";
-import { book, bookAccount, category, journalEntry, subCategory } from "../db/schema.js";
+import { book, bookAccount, category, journalEntry, nature, subCategory } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, requireRole } from "./access.js";
 import { consumptionSign, loadYear, monthEnds, monthsOf } from "./budget-months.js";
@@ -59,13 +59,8 @@ export function dashboardRoutes(db: Db) {
           .from(journalEntry)
           .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
           .innerJoin(category, eq(category.id, subCategory.categoryId))
-          .where(
-            and(
-              eq(journalEntry.bookId, bookId),
-              thisYear,
-              sql`${category.direction} <> 'transfer'`,
-            ),
-          )
+          .innerJoin(nature, eq(nature.id, category.natureId))
+          .where(and(eq(journalEntry.bookId, bookId), thisYear, eq(nature.transfer, false)))
           .groupBy(journalEntry.subCategoryId, MONTH),
         loadYear(tx, bookId, year),
         tx
@@ -102,13 +97,13 @@ export function dashboardRoutes(db: Db) {
       const weightsOf = new Map(budgets.profiles.map((p) => [p.id, p.weights]));
       const unused = budgets.rows.flatMap((row) => {
         if (row.type !== "periodic" || !row.amount) return [];
-        const months = monthsOf(row, row.direction, weightsOf, budgets.consumption);
+        const months = monthsOf(row, row.sign, weightsOf, budgets.consumption);
         const left = unusedBudget(
           months.map((m) => m.allocated),
           months.map((m) => m.consumed),
           current,
         );
-        const sign = consumptionSign(row.direction);
+        const sign = consumptionSign(row.sign);
         return [{ categoryId: row.categoryId, months: left.map((amount) => text(sign * amount)) }];
       });
 
