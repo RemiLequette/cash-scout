@@ -2,33 +2,42 @@ import { zValidator } from "@hono/zod-validator";
 import {
   accountInputSchema,
   accountUpdateSchema,
+  balanceInputSchema,
+  balanceUpdateSchema,
   categoryInputSchema,
   categoryUpdateSchema,
   checkNames,
   groupInputSchema,
   groupOrderSchema,
   groupUpdateSchema,
+  lineOrderSchema,
   mergeSchema,
   money,
+  natureInputSchema,
+  natureUpdateSchema,
   parseThreshold,
   paymentTypeInputSchema,
   paymentTypeUpdateSchema,
   subCategoryInputSchema,
   subCategoryUpdateSchema,
   toDecimalString,
+  type Direction,
   type Names,
   makesCycle,
 } from "@cash-scout/domain";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, max, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
 import {
+  balance,
+  balanceNature,
   bookAccount,
   category,
   categoryGroup,
   journalEntry,
+  nature,
   paymentType,
   subCategory,
 } from "../db/schema.js";
@@ -81,6 +90,68 @@ async function checkParent(tx: Tx, bookId: string, id: string | null, parentId?:
   if (id !== null && makesCycle(id, parentId, new Map(groups.map((g) => [g.id, g.parentId])))) {
     throw new HTTPException(400, { message: "A group cannot be inside itself" });
   }
+}
+
+/**
+ * The nature a category is given: the one asked for, or the first of the book
+ * with the asked behaviour. Archived natures are not chosen, but a category
+ * may keep the archived one it has.
+ */
+async function resolveNature(
+  tx: Tx,
+  bookId: string,
+  input: { natureId?: string; direction?: Direction },
+  current?: string,
+) {
+  const natures = await tx
+    .select({
+      id: nature.id,
+      behavior: nature.behavior,
+      archivedAt: nature.archivedAt,
+    })
+    .from(nature)
+    .where(eq(nature.bookId, bookId))
+    .orderBy(asc(nature.position));
+  const found = input.natureId
+    ? natures.find((n) => n.id === input.natureId)
+    : natures.find((n) => n.behavior === input.direction && !n.archivedAt);
+  if (!found) {
+    throw new HTTPException(400, {
+      message: input.natureId ? "Unknown nature" : `No nature for the direction ${input.direction}`,
+    });
+  }
+  if (found.archivedAt && found.id !== current) {
+    throw new HTTPException(400, { message: "The nature is archived" });
+  }
+  return found;
+}
+
+/** The next free place at the end of the list shared by the natures and balances. */
+async function nextLinePosition(tx: Tx, bookId: string) {
+  const [[natures], [balances]] = await Promise.all([
+    tx
+      .select({ at: max(nature.position) })
+      .from(nature)
+      .where(eq(nature.bookId, bookId)),
+    tx
+      .select({ at: max(balance.position) })
+      .from(balance)
+      .where(eq(balance.bookId, bookId)),
+  ]);
+  return Math.max(natures?.at ?? -1, balances?.at ?? -1) + 1;
+}
+
+/** Checks the natures a balance adds up: all of the book. */
+async function checkNatures(tx: Tx, bookId: string, ids: string[]) {
+  const unique = [...new Set(ids)];
+  const found = await tx
+    .select({ id: nature.id })
+    .from(nature)
+    .where(and(eq(nature.bookId, bookId), inArray(nature.id, unique)));
+  if (found.length !== unique.length) {
+    throw new HTTPException(400, { message: "Unknown nature" });
+  }
+  return unique;
 }
 
 /**
@@ -142,11 +213,28 @@ const groupColumns = {
   color: categoryGroup.color,
   archivedAt: categoryGroup.archivedAt,
 };
+const natureColumns = {
+  version: nature.version,
+  id: nature.id,
+  names: nature.names,
+  behavior: nature.behavior,
+  sign: nature.sign,
+  position: nature.position,
+  archivedAt: nature.archivedAt,
+};
+const balanceColumns = {
+  version: balance.version,
+  id: balance.id,
+  names: balance.names,
+  position: balance.position,
+  archivedAt: balance.archivedAt,
+};
 const categoryColumns = {
   version: category.version,
   id: category.id,
   groupId: category.groupId,
   code: category.code,
+  natureId: category.natureId,
   direction: category.direction,
   defaultBudgetType: category.defaultBudgetType,
   names: category.names,
@@ -203,25 +291,57 @@ export function referenceRoutes(db: Db) {
         const result = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "viewer");
           const byBook = <T extends ReferenceTable>(t: T) => eq(t.bookId, bookId);
-          const [languages, groups, categories, subCategories, paymentTypes, accounts] =
-            await Promise.all([
-              languagesOf(tx, bookId),
-              tx
-                .select(groupColumns)
-                .from(categoryGroup)
-                .where(byBook(categoryGroup))
-                .orderBy(asc(categoryGroup.position)),
-              tx
-                .select(categoryColumns)
-                .from(category)
-                .where(byBook(category))
-                .orderBy(asc(category.code)),
-              tx.select(subCategoryColumns).from(subCategory).where(byBook(subCategory)),
-              tx.select(paymentTypeColumns).from(paymentType).where(byBook(paymentType)),
-              tx.select(accountColumns).from(bookAccount).where(byBook(bookAccount)),
-            ]);
+          const [
+            languages,
+            natures,
+            balances,
+            balanceNatures,
+            groups,
+            categories,
+            subCategories,
+            paymentTypes,
+            accounts,
+          ] = await Promise.all([
+            languagesOf(tx, bookId),
+            tx
+              .select(natureColumns)
+              .from(nature)
+              .where(byBook(nature))
+              .orderBy(asc(nature.position)),
+            tx
+              .select(balanceColumns)
+              .from(balance)
+              .where(byBook(balance))
+              .orderBy(asc(balance.position)),
+            tx
+              .select({ balanceId: balanceNature.balanceId, natureId: balanceNature.natureId })
+              .from(balanceNature)
+              .where(eq(balanceNature.bookId, bookId)),
+            tx
+              .select(groupColumns)
+              .from(categoryGroup)
+              .where(byBook(categoryGroup))
+              .orderBy(asc(categoryGroup.position)),
+            tx
+              .select(categoryColumns)
+              .from(category)
+              .where(byBook(category))
+              .orderBy(asc(category.code)),
+            tx.select(subCategoryColumns).from(subCategory).where(byBook(subCategory)),
+            tx.select(paymentTypeColumns).from(paymentType).where(byBook(paymentType)),
+            tx.select(accountColumns).from(bookAccount).where(byBook(bookAccount)),
+          ]);
           return {
             ...languages,
+            natures: natures.map(out),
+            balances: balances.map((b) =>
+              out({
+                ...b,
+                natureIds: balanceNatures
+                  .filter((x) => x.balanceId === b.id)
+                  .map((x) => x.natureId),
+              }),
+            ),
             groups: groups.map(out),
             categories: categories.map(out),
             subCategories: subCategories.map(out),
@@ -230,6 +350,151 @@ export function referenceRoutes(db: Db) {
           };
         });
         return c.json(result);
+      })
+
+      // Natures and balances ---------------------------------------------------
+      .post("/natures", zValidator("json", natureInputSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const input = c.req.valid("json");
+        const row = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const names = await validNames(tx, bookId, input.names);
+          const [created] = await tx
+            .insert(nature)
+            .values({ ...input, bookId, names, position: await nextLinePosition(tx, bookId) })
+            .returning(natureColumns);
+          return created!;
+        });
+        return c.json(out(row), 201);
+      })
+      .patch("/natures/:id", zValidator("json", natureUpdateSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Item");
+        const { names, archived, version, ...input } = c.req.valid("json");
+        const row = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const updated = updatedOne(
+            await tx
+              .update(nature)
+              .set({
+                ...input,
+                ...archiveValue(archived),
+                ...(names && { names: await mergedNames(tx, bookId, nature, id, names) }),
+              })
+              .where(rowOf(nature, bookId, id, version))
+              .returning(natureColumns),
+            version,
+          );
+          // The categories carry their nature's behaviour: keep them in step.
+          if (input.behavior) {
+            await tx
+              .update(category)
+              .set({ direction: input.behavior })
+              .where(and(eq(category.bookId, bookId), eq(category.natureId, id)));
+          }
+          return updated;
+        });
+        return c.json(out(row));
+      })
+      .delete("/natures/:id", async (c) =>
+        deleteItem(c, db, nature, idOf(c.req.param("id"), "Item")),
+      )
+      .post("/balances", zValidator("json", balanceInputSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const input = c.req.valid("json");
+        const row = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const names = await validNames(tx, bookId, input.names);
+          const natureIds = await checkNatures(tx, bookId, input.natureIds);
+          const [created] = await tx
+            .insert(balance)
+            .values({ bookId, names, position: await nextLinePosition(tx, bookId) })
+            .returning(balanceColumns);
+          await tx
+            .insert(balanceNature)
+            .values(natureIds.map((natureId) => ({ bookId, balanceId: created!.id, natureId })));
+          return { ...created!, natureIds };
+        });
+        return c.json(out(row), 201);
+      })
+      .patch("/balances/:id", zValidator("json", balanceUpdateSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Item");
+        const { names, archived, version, natureIds } = c.req.valid("json");
+        const row = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const checked = natureIds && (await checkNatures(tx, bookId, natureIds));
+          const updated = updatedOne(
+            await tx
+              .update(balance)
+              .set({
+                ...archiveValue(archived),
+                ...(names && { names: await mergedNames(tx, bookId, balance, id, names) }),
+                // The version moves when only the natures change.
+                ...(checked && { version: sql`${balance.version} + 1` }),
+              })
+              .where(rowOf(balance, bookId, id, version))
+              .returning(balanceColumns),
+            version,
+          );
+          if (checked) {
+            await tx.delete(balanceNature).where(eq(balanceNature.balanceId, id));
+            await tx
+              .insert(balanceNature)
+              .values(checked.map((natureId) => ({ bookId, balanceId: id, natureId })));
+          }
+          const current = await tx
+            .select({ natureId: balanceNature.natureId })
+            .from(balanceNature)
+            .where(eq(balanceNature.balanceId, id));
+          return { ...updated, natureIds: current.map((n) => n.natureId) };
+        });
+        return c.json(out(row));
+      })
+      .delete("/balances/:id", async (c) =>
+        deleteItem(c, db, balance, idOf(c.req.param("id"), "Item")),
+      )
+      // The order of the natures and balances, which are one list.
+      .post("/lines/reorder", zValidator("json", lineOrderSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const { items } = c.req.valid("json");
+        if (new Set(items.map((i) => `${i.kind}:${i.id}`)).size !== items.length) {
+          throw new HTTPException(400, { message: "A line appears once" });
+        }
+        await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const idsOf = (kind: "nature" | "balance") =>
+            items.filter((i) => i.kind === kind).map((i) => i.id);
+          const [natures, balances] = await Promise.all([
+            tx
+              .select({ id: nature.id })
+              .from(nature)
+              .where(and(eq(nature.bookId, bookId), inArray(nature.id, idsOf("nature")))),
+            tx
+              .select({ id: balance.id })
+              .from(balance)
+              .where(and(eq(balance.bookId, bookId), inArray(balance.id, idsOf("balance")))),
+          ]);
+          if (
+            natures.length !== idsOf("nature").length ||
+            balances.length !== idsOf("balance").length
+          ) {
+            throw new HTTPException(400, { message: "Unknown line" });
+          }
+          for (const [position, { kind, id }] of items.entries()) {
+            const table = kind === "nature" ? nature : balance;
+            await tx
+              .update(table)
+              .set({ position })
+              .where(and(eq(table.id, id), eq(table.bookId, bookId)));
+          }
+        });
+        return c.body(null, 204);
       })
 
       // Groups ---------------------------------------------------------------
@@ -316,9 +581,13 @@ export function referenceRoutes(db: Db) {
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           const names = await validNames(tx, bookId, input.names);
+          if (!input.natureId && !input.direction) {
+            throw new HTTPException(400, { message: "A nature is required" });
+          }
+          const { id: natureId, behavior } = await resolveNature(tx, bookId, input);
           const [created] = await tx
             .insert(category)
-            .values({ ...input, bookId, names })
+            .values({ ...input, bookId, names, natureId, direction: behavior })
             .returning(categoryColumns);
           return created!;
         });
@@ -328,14 +597,33 @@ export function referenceRoutes(db: Db) {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Item");
-        const { names, archived, version, ...input } = c.req.valid("json");
+        const { names, archived, version, natureId, direction, ...input } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
+          let nature: { natureId: string; direction: Direction } | undefined;
+          if (natureId || direction) {
+            const [current] = await tx
+              .select({ natureId: category.natureId, direction: category.direction })
+              .from(category)
+              .where(and(eq(category.id, id), eq(category.bookId, bookId)));
+            // A direction alone changes nothing for a category that already has it.
+            if (natureId || current?.direction !== direction) {
+              const found = await resolveNature(
+                tx,
+                bookId,
+                { natureId, direction },
+                current?.natureId,
+              );
+              nature = { natureId: found.id, direction: found.behavior };
+            }
+          }
           return updatedOne(
             await tx
               .update(category)
               .set({
                 ...input,
+                // A direction the category already has is written back unchanged.
+                ...(nature ?? (direction ? { direction } : {})),
                 ...archiveValue(archived),
                 ...(names && { names: await mergedNames(tx, bookId, category, id, names) }),
               })

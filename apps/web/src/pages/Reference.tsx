@@ -18,6 +18,7 @@ import {
   Group,
   Menu,
   Modal,
+  MultiSelect,
   Paper,
   SegmentedControl,
   Select,
@@ -280,7 +281,10 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
     value: c.id,
     label: `${c.code} ${nameOf(c.names)}`,
   }));
-  const directionOptions = directions.map((d) => ({ value: d, label: t(`directions.${d}`) }));
+  const natureName = (id: string) => {
+    const found = reference.natures.find((n) => n.id === id);
+    return found ? nameOf(found.names) : "";
+  };
 
   /** "Patrimoine › Rennes": a group's name with those of the groups around it. */
   const groupPath = (id: string): string => {
@@ -371,7 +375,11 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
     fields: {
       groupId: item?.groupId ?? groupId,
       code: item?.code ?? "",
-      direction: item?.direction ?? "expense",
+      natureId:
+        item?.natureId ??
+        reference.natures.find((n) => n.behavior === "expense" && !n.archived)?.id ??
+        reference.natures[0]?.id ??
+        null,
     },
     extra: (fields, set) => (
       <>
@@ -384,12 +392,15 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
           onChange={(e) => set({ code: e.currentTarget.value })}
         />
         <Select
-          label={t("reference.direction")}
-          description={t("reference.directionHint")}
-          data={directionOptions}
+          label={t("reference.nature")}
+          description={t("reference.natureHint")}
+          required
+          data={reference.natures
+            .filter((n) => !n.archived || n.id === fields.natureId)
+            .map((n) => ({ value: n.id, label: nameOf(n.names) }))}
           allowDeselect={false}
-          value={fields.direction as string}
-          onChange={(value) => value && set({ direction: value as Direction })}
+          value={(fields.natureId as string | null) ?? null}
+          onChange={(value) => value && set({ natureId: value })}
         />
         <Select
           label={t("reference.group")}
@@ -543,7 +554,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
                       <Group gap="xs">
                         <Text fw={500}>{nameOf(item.names)}</Text>
                         <Badge size="xs" variant="dot">
-                          {t(`directions.${item.direction}`)}
+                          {natureName(item.natureId)}
                         </Badge>
                         <ArchivedBadge archived={item.archived} />
                       </Group>
@@ -792,6 +803,209 @@ function PaymentTypesTab({ bookId, reference, canEdit, showArchived, openEditor 
 }
 
 // ---------------------------------------------------------------------------
+// Natures and balances: one list, in the order the dashboard shows it
+// ---------------------------------------------------------------------------
+
+function NaturesTab({ bookId, reference, canEdit, showArchived, openEditor }: TabProps) {
+  const { t } = useTranslation();
+  const nameOf = useNameOf(reference.defaultLanguage);
+  const change = useReferenceChange(bookId);
+
+  const lines = [
+    ...reference.natures.map((n) => ({ kind: "nature" as const, item: n })),
+    ...reference.balances.map((b) => ({ kind: "balance" as const, item: b })),
+  ]
+    .filter(({ item }) => showArchived || !item.archived)
+    .sort((a, b) => a.item.position - b.item.position);
+  const natureName = (id: string) => {
+    const found = reference.natures.find((n) => n.id === id);
+    return found ? nameOf(found.names) : "";
+  };
+  const placeOf = (kind: "nature" | "balance", id: string) =>
+    reference.natures.some((n) => kind === "nature" && n.id === id)
+      ? reference.natures.find((n) => n.id === id)!.position
+      : (reference.balances.find((b) => b.id === id)?.position ?? 0);
+
+  /** Swaps a line with its neighbour: the whole list is renumbered at once. */
+  const move = (at: number, by: -1 | 1) => {
+    const to = at + by;
+    if (to < 0 || to >= lines.length) return;
+    const items = lines.map(({ kind, item }) => ({ kind, id: item.id }));
+    [items[at], items[to]] = [items[to]!, items[at]!];
+    change.mutate({ kind: "lines", id: "reorder", method: "POST", body: { items } });
+  };
+
+  const natureEditor = (item?: Reference["natures"][number]): EditorState => ({
+    title: item ? t("reference.editNature") : t("reference.newNature"),
+    kind: "natures",
+    id: item?.id,
+    version: item?.version,
+    names: item?.names ?? {},
+    fields: { behavior: item?.behavior ?? "expense", sign: item?.sign ?? -1 },
+    extra: (fields, set) => (
+      <>
+        <Select
+          label={t("reference.behavior")}
+          description={t("reference.behaviorHint")}
+          data={directions.map((d) => ({ value: d, label: t(`directions.${d}`) }))}
+          allowDeselect={false}
+          value={fields.behavior as string}
+          onChange={(value) => value && set({ behavior: value as Direction })}
+        />
+        <Stack gap={4}>
+          <Text size="sm" fw={500}>
+            {t("reference.sign")}
+          </Text>
+          <SegmentedControl
+            data={[
+              { value: "1", label: t("reference.signAsEntered") },
+              { value: "-1", label: t("reference.signReversed") },
+            ]}
+            value={String(fields.sign)}
+            onChange={(value) => set({ sign: Number(value) })}
+          />
+          <Text size="xs" c="dimmed">
+            {t("reference.signHint")}
+          </Text>
+        </Stack>
+      </>
+    ),
+    body: (names, fields) => ({ names, behavior: fields.behavior, sign: fields.sign }),
+  });
+
+  const balanceEditor = (item?: Reference["balances"][number]): EditorState => ({
+    title: item ? t("reference.editBalance") : t("reference.newBalance"),
+    kind: "balances",
+    id: item?.id,
+    version: item?.version,
+    names: item?.names ?? {},
+    fields: { natureIds: item?.natureIds ?? [] },
+    extra: (fields, set) => (
+      <MultiSelect
+        label={t("reference.balanceNatures")}
+        description={t("reference.balanceNaturesHint")}
+        required
+        data={reference.natures
+          .filter((n) => !n.archived || (fields.natureIds as string[]).includes(n.id))
+          .map((n) => ({ value: n.id, label: nameOf(n.names) }))}
+        value={fields.natureIds as string[]}
+        onChange={(natureIds) => set({ natureIds })}
+      />
+    ),
+    body: (names, fields) => ({ names, natureIds: fields.natureIds }),
+  });
+
+  return (
+    <Stack>
+      <Text size="sm" c="dimmed">
+        {t("reference.naturesIntro")}
+      </Text>
+      {canEdit && (
+        <Group>
+          <Button onClick={() => openEditor(natureEditor())}>{t("reference.newNature")}</Button>
+          <Button variant="default" onClick={() => openEditor(balanceEditor())}>
+            {t("reference.newBalance")}
+          </Button>
+        </Group>
+      )}
+      <Table>
+        <Table.Tbody>
+          {lines.map(({ kind, item }, at) => {
+            // A balance listed above one of its natures still adds it up: only a hint.
+            const early =
+              kind === "balance" &&
+              (item as Reference["balances"][number]).natureIds.some(
+                (id) => placeOf("nature", id) > item.position,
+              );
+            return (
+              <Table.Tr key={`${kind}:${item.id}`}>
+                {canEdit && (
+                  <Table.Td w={70}>
+                    <Group gap={0} wrap="nowrap">
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        size="sm"
+                        aria-label={t("reference.moveUp")}
+                        disabled={at === 0 || change.isPending}
+                        onClick={() => move(at, -1)}
+                      >
+                        ↑
+                      </ActionIcon>
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        size="sm"
+                        aria-label={t("reference.moveDown")}
+                        disabled={at === lines.length - 1 || change.isPending}
+                        onClick={() => move(at, 1)}
+                      >
+                        ↓
+                      </ActionIcon>
+                    </Group>
+                  </Table.Td>
+                )}
+                <Table.Td>
+                  <Group gap="xs">
+                    <Text fw={kind === "balance" ? 700 : 500}>{nameOf(item.names)}</Text>
+                    {kind === "nature" ? (
+                      <>
+                        <Badge size="xs" variant="dot">
+                          {t(`directions.${(item as Reference["natures"][number]).behavior}`)}
+                        </Badge>
+                        <Badge size="xs" variant="light" color="gray">
+                          {(item as Reference["natures"][number]).sign === -1
+                            ? t("reference.signReversed")
+                            : t("reference.signAsEntered")}
+                        </Badge>
+                      </>
+                    ) : (
+                      <>
+                        <Badge size="xs" variant="light" color="grape">
+                          {t("reference.balance")}
+                        </Badge>
+                        <Text size="sm" c="dimmed">
+                          {(item as Reference["balances"][number]).natureIds
+                            .map(natureName)
+                            .join(" + ")}
+                        </Text>
+                        {early && (
+                          <Badge size="xs" variant="outline" color="yellow">
+                            {t("reference.balanceAbove")}
+                          </Badge>
+                        )}
+                      </>
+                    )}
+                    <ArchivedBadge archived={item.archived} />
+                  </Group>
+                </Table.Td>
+                <Table.Td w={50}>
+                  <ItemMenu
+                    bookId={bookId}
+                    kind={kind === "nature" ? "natures" : "balances"}
+                    id={item.id}
+                    version={item.version}
+                    archived={item.archived}
+                    canEdit={canEdit}
+                    onEdit={() =>
+                      openEditor(
+                        kind === "nature"
+                          ? natureEditor(item as Reference["natures"][number])
+                          : balanceEditor(item as Reference["balances"][number]),
+                      )
+                    }
+                  />
+                </Table.Td>
+              </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+    </Stack>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -828,6 +1042,7 @@ export function ReferenceData({ bookId, canEdit }: { bookId: string; canEdit: bo
         <Group justify="space-between">
           <Tabs.List>
             <Tabs.Tab value="categories">{t("reference.categories")}</Tabs.Tab>
+            <Tabs.Tab value="natures">{t("reference.natures")}</Tabs.Tab>
             <Tabs.Tab value="accounts">{t("reference.accounts")}</Tabs.Tab>
             <Tabs.Tab value="paymentTypes">{t("reference.paymentTypes")}</Tabs.Tab>
           </Tabs.List>
@@ -839,6 +1054,9 @@ export function ReferenceData({ bookId, canEdit }: { bookId: string; canEdit: bo
         </Group>
         <Tabs.Panel value="categories" pt="md">
           <CategoriesTab {...props} />
+        </Tabs.Panel>
+        <Tabs.Panel value="natures" pt="md">
+          <NaturesTab {...props} />
         </Tabs.Panel>
         <Tabs.Panel value="accounts" pt="md">
           <AccountsTab {...props} />

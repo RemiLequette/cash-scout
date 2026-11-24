@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import {
   bookInputSchema,
   bookUpdateSchema,
+  defaultNatures,
   memberInputSchema,
   memberUpdateSchema,
   type BookRole,
@@ -12,7 +13,7 @@ import { HTTPException } from "hono/http-exception";
 import { streamSSE } from "hono/streaming";
 import { withUser, type Db, type Tx } from "../db/client.js";
 import { scopeOfPath, type BookEvents } from "../events.js";
-import { book, bookLanguage, bookMember, user } from "../db/schema.js";
+import { book, bookLanguage, bookMember, nature, user } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, languagesOf, missing, requireRole, roleOf } from "./access.js";
 import { budgetsRoutes } from "./budgets.js";
@@ -75,6 +76,13 @@ export function booksRoutes(db: Db, events: BookEvents) {
           await tx.insert(book).values({ id, ...input });
           await tx.insert(bookMember).values({ bookId: id, userId: me, role: "owner" });
           await tx.insert(bookLanguage).values({ bookId: id, language: input.defaultLanguage });
+          await tx.insert(nature).values(
+            defaultNatures([input.defaultLanguage], input.defaultLanguage).map((n, position) => ({
+              ...n,
+              bookId: id,
+              position,
+            })),
+          );
         });
         return c.json(
           { id, ...input, languages: [input.defaultLanguage], role: "owner" as BookRole },

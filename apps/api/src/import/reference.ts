@@ -17,9 +17,16 @@ import {
   type Names,
 } from "@cash-scout/domain";
 import { parse } from "csv-parse/sync";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { Tx } from "../db/client.js";
-import { bookAccount, category, categoryGroup, paymentType, subCategory } from "../db/schema.js";
+import {
+  bookAccount,
+  category,
+  categoryGroup,
+  nature,
+  paymentType,
+  subCategory,
+} from "../db/schema.js";
 import { languagesOf } from "../routes/access.js";
 
 export interface ReferenceCsv {
@@ -119,6 +126,12 @@ export async function importReference(
         c.id,
       ]),
     );
+    // A category takes the first nature of the book that has its direction.
+    const natures = await tx
+      .select()
+      .from(nature)
+      .where(eq(nature.bookId, bookId))
+      .orderBy(asc(nature.position));
     const subCategories = new Set(
       (await tx.select().from(subCategory).where(eq(subCategory.bookId, bookId))).map(
         (s) => `${s.categoryId}|${key(s.names)}`,
@@ -148,12 +161,19 @@ export async function importReference(
             `Line ${line}: unknown direction "${row.direction}" (expense, income, saving or transfer)`,
           );
         }
+        const natureOf = natures.find((n) => n.behavior === direction && !n.archivedAt);
+        if (!natureOf) {
+          throw new ImportError(
+            `Line ${line}: the book has no nature for the direction ${direction}`,
+          );
+        }
         const [created] = await tx
           .insert(category)
           .values({
             bookId,
             groupId,
             code,
+            natureId: natureOf.id,
             direction,
             names: checked(namesOf(row, "category", defaultLanguage), line),
           })

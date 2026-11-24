@@ -1,6 +1,6 @@
 import {
   currencyDigits,
-  dashboardRows,
+  dashboardLines,
   formatMoney,
   parseAmount,
   type DashboardRow,
@@ -20,7 +20,7 @@ const MONTH_WIDTH = 84;
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const pad = (n: number) => String(n).padStart(2, "0");
-const rowKey = (row: DashboardRow) => `${row.kind}:${row.id}`;
+const rowKey = (row: DashboardRow) => row.key;
 
 /** What the detail panel shows the entries of. */
 type Selection =
@@ -68,7 +68,7 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
   const nameOf = useNameOf(reference.data?.defaultLanguage);
   const [year, setYear] = useState(() => new Date().getFullYear());
   const dashboard = useDashboard(bookId, year);
-  // null: the default, groups open and categories closed.
+  // null: the default, natures and groups open and categories closed.
   const [expanded, setExpanded] = useState<Set<string> | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [panel, setPanel] = usePanel();
@@ -84,8 +84,12 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
     const subCategories = [...refData.subCategories].sort(byName);
     // Siblings keep the order the book gave its groups.
     const groups = [...refData.groups].sort((a, b) => a.position - b.position || byName(a, b));
-    return dashboardRows(
+    return dashboardLines(
       { groups, categories: refData.categories, subCategories },
+      {
+        natures: refData.natures,
+        balances: refData.balances.filter((b) => !b.archived),
+      },
       data.cells.map((cell) => ({
         subCategoryId: cell.subCategoryId,
         month: cell.month,
@@ -99,12 +103,13 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
     // `nameOf` changes with the language and the book's default one, both listed here.
   }, [data, refData, bookCurrency, i18n.language]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isExpanded = (key: string) => (expanded ? expanded.has(key) : key.startsWith("group:"));
+  const opensByDefault = (key: string) => key.startsWith("group:") || key.startsWith("nature:");
+  const isExpanded = (key: string) => (expanded ? expanded.has(key) : opensByDefault(key));
   // A row shows when its parent is shown and open.
   const visible: DashboardRow[] = [];
   const shown = new Set<string>();
   for (const row of rows) {
-    const parent = row.parentId === null ? null : `${row.parentKind}:${row.parentId}`;
+    const parent = row.parentKey;
     if (parent === null || (shown.has(parent) && isExpanded(parent))) {
       visible.push(row);
       shown.add(rowKey(row));
@@ -112,15 +117,17 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
   }
 
   const toggle = (key: string) => {
-    const next = new Set(
-      expanded ?? rows.filter((r) => r.kind === "group").map((r) => `group:${r.id}`),
-    );
+    const next = new Set(expanded ?? rows.map(rowKey).filter(opensByDefault));
     if (!next.delete(key)) next.add(key);
     setExpanded(next);
   };
   const expandAll = () =>
     setExpanded(
-      new Set(rows.filter((r) => r.kind === "group" || r.kind === "category").map(rowKey)),
+      new Set(
+        rows
+          .filter((r) => r.kind === "nature" || r.kind === "group" || r.kind === "category")
+          .map(rowKey),
+      ),
     );
 
   const error = reference.error ?? dashboard.error;
@@ -278,6 +285,8 @@ function Grid(props: {
   const monthNames = useMonthNames("short");
   const amount = useAmount(bookCurrency);
 
+  const natures = new Map(reference.natures.map((n) => [n.id, n]));
+  const balances = new Map(reference.balances.map((b) => [b.id, b]));
   const groups = new Map(reference.groups.map((g) => [g.id, g]));
   const categories = new Map(reference.categories.map((c) => [c.id, c]));
   const subCategories = new Map(reference.subCategories.map((s) => [s.id, s]));
@@ -288,14 +297,15 @@ function Grid(props: {
     for (let at: DashboardRow | undefined = row; at;) {
       const color = at.kind === "group" ? groups.get(at.id)?.color : null;
       if (color) return color;
-      at = at.parentId === null ? undefined : byKey.get(`${at.parentKind}:${at.parentId}`);
+      at = at.parentKey === null ? undefined : byKey.get(at.parentKey);
     }
     return null;
   };
   const hasChildren = (row: DashboardRow) =>
+    row.kind === "nature" ||
     row.kind === "group" ||
     (row.kind === "category" &&
-      rows.some((r) => r.parentId === row.id && (r.kind === "sub" || r.kind === "unused")));
+      rows.some((r) => r.parentKey === row.key && (r.kind === "sub" || r.kind === "unused")));
 
   // Months ahead show what is planned: they read differently from the past ones.
   const ahead = (month: number) => month > data.currentMonth;
@@ -304,6 +314,10 @@ function Grid(props: {
 
   function label(row: DashboardRow): string {
     switch (row.kind) {
+      case "nature":
+        return nameOf(natures.get(row.id)?.names ?? {});
+      case "balance":
+        return nameOf(balances.get(row.id)?.names ?? {});
       case "group":
         return nameOf(groups.get(row.id)?.names ?? {});
       case "category":
@@ -344,25 +358,38 @@ function Grid(props: {
         )}
         {visible.map((row) => {
           const key = rowKey(row);
-          const bold = row.kind === "group" || row.kind === "category";
+          const top = row.kind === "nature" || row.kind === "balance";
+          const bold = top || row.kind === "group" || row.kind === "category";
           const rowStyle: CSSProperties = {
-            fontWeight: row.kind === "group" ? 700 : row.kind === "category" ? 600 : 400,
+            fontWeight: top || row.kind === "group" ? 700 : row.kind === "category" ? 600 : 400,
           };
           const color = colorOf(row);
           // A group's line is tinted: over the page's own colour, so that the sticky
           // label stays opaque while the months scroll under it.
-          const tint = color
-            ? `linear-gradient(var(--mantine-color-${color}-light), var(--mantine-color-${color}-light)), var(--mantine-color-body)`
-            : "var(--mantine-color-default-hover)";
+          const tint = top
+            ? "linear-gradient(var(--mantine-color-gray-light), var(--mantine-color-gray-light)), var(--mantine-color-body)"
+            : color
+              ? `linear-gradient(var(--mantine-color-${color}-light), var(--mantine-color-${color}-light)), var(--mantine-color-body)`
+              : "var(--mantine-color-default-hover)";
+          const tinted = top || row.kind === "group";
           return (
-            <Table.Tr key={key} style={row.kind === "group" ? { background: tint } : {}}>
+            <Table.Tr
+              key={key}
+              style={{
+                ...(tinted ? { background: tint } : {}),
+                // A balance closes the section above it.
+                ...(row.kind === "balance"
+                  ? { borderTop: "2px solid var(--mantine-color-default-border)" }
+                  : {}),
+              }}
+            >
               <Table.Td
                 style={{
                   ...stickyLabel,
                   ...rowStyle,
                   paddingLeft: 8 + row.depth * 16,
                   ...(color ? { borderLeft: `4px solid var(--mantine-color-${color}-6)` } : {}),
-                  ...(row.kind === "group" ? { background: tint } : {}),
+                  ...(tinted ? { background: tint } : {}),
                   ...(isSelected(selection, key, null) ? selectedCell : {}),
                 }}
               >
@@ -521,6 +548,8 @@ function DetailPanel({
   const nameOf = useNameOf(reference.defaultLanguage);
   const monthNames = useMonthNames("long");
 
+  const natures = new Map(reference.natures.map((n) => [n.id, n]));
+  const balances = new Map(reference.balances.map((b) => [b.id, b]));
   const groups = new Map(reference.groups.map((g) => [g.id, g]));
   const categories = new Map(reference.categories.map((c) => [c.id, c]));
   const subCategories = new Map(reference.subCategories.map((s) => [s.id, s]));
@@ -531,18 +560,26 @@ function DetailPanel({
   const byKey = new Map(rows.map((r) => [rowKey(r), r]));
   // Whether `r` is inside `ancestor`, however deep the groups nest.
   const isInside = (r: DashboardRow, ancestor: DashboardRow) => {
-    for (let at: DashboardRow | undefined = r; at && at.parentId !== null;) {
-      const parent = `${at.parentKind}:${at.parentId}`;
-      if (parent === rowKey(ancestor)) return true;
-      at = byKey.get(parent);
+    for (let at: DashboardRow | undefined = r; at && at.parentKey !== null;) {
+      if (at.parentKey === ancestor.key) return true;
+      at = byKey.get(at.parentKey);
     }
     return false;
   };
+  // A balance adds up the natures it lists: the entries of all their rows.
+  const within =
+    row?.kind === "balance"
+      ? rows.filter((r) => r.kind === "nature" && balances.get(row.id)?.natureIds.includes(r.id))
+      : row
+        ? [row]
+        : [];
   const subIds = !row
     ? []
     : row.kind === "sub"
       ? [row.id]
-      : rows.filter((r) => r.kind === "sub" && isInside(r, row)).map((r) => r.id);
+      : rows
+          .filter((r) => r.kind === "sub" && within.some((ancestor) => isInside(r, ancestor)))
+          .map((r) => r.id);
   const unusedOnly = row?.kind === "unused";
 
   const month = selection?.month ?? null;
@@ -567,13 +604,17 @@ function DetailPanel({
         ? nameOf(accounts.get(selection.accountId)?.names ?? {})
         : !row
           ? ""
-          : row.kind === "group"
-            ? nameOf(groups.get(row.id)?.names ?? {})
-            : row.kind === "unused"
-              ? `${nameOf(categories.get(row.id)?.names ?? {})} · ${t("dashboard.unused")}`
-              : row.kind === "category"
-                ? nameOf(categories.get(row.id)?.names ?? {})
-                : nameOf(subCategories.get(row.id)?.names ?? {});
+          : row.kind === "nature"
+            ? nameOf(natures.get(row.id)?.names ?? {})
+            : row.kind === "balance"
+              ? nameOf(balances.get(row.id)?.names ?? {})
+              : row.kind === "group"
+                ? nameOf(groups.get(row.id)?.names ?? {})
+                : row.kind === "unused"
+                  ? `${nameOf(categories.get(row.id)?.names ?? {})} · ${t("dashboard.unused")}`
+                  : row.kind === "category"
+                    ? nameOf(categories.get(row.id)?.names ?? {})
+                    : nameOf(subCategories.get(row.id)?.names ?? {});
     return `${what} · ${month === null ? year : `${monthNames[month - 1]} ${year}`}`;
   })();
 
