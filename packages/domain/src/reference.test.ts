@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bookUpdateSchema } from "./book.js";
-import { checkNames, displayName, parseThreshold } from "./reference.js";
+import { checkNames, defaultNatures, displayName, parseThreshold } from "./reference.js";
 
 describe("displayName", () => {
   const names = { fr: "Alimentation", en: "Food" };
@@ -35,5 +35,23 @@ describe("parseThreshold", () => {
     expect(parseThreshold("-500", "EUR")).toBe(-50000n);
     expect(parseThreshold("", "EUR")).toBeNull();
     expect(parseThreshold(null, "JPY")).toBeNull();
+  });
+});
+
+describe("defaultNatures", () => {
+  it("gives one nature per direction, named in each language of the book", () => {
+    const natures = defaultNatures(["fr", "en"], "fr");
+    expect(natures.map((n) => [n.behavior, n.sign])).toEqual([
+      ["income", 1],
+      ["expense", -1],
+      ["saving", -1],
+      ["transfer", 1],
+    ]);
+    expect(natures[1]!.names).toEqual({ fr: "Dépenses", en: "Expenses" });
+  });
+
+  it("falls back to English for a language it has no words for, and always names the default one", () => {
+    expect(defaultNatures(["de"], "de")[0]!.names).toEqual({ de: "Income" });
+    expect(defaultNatures(["fr"], "de")[0]!.names).toEqual({ de: "Income", fr: "Revenus" });
   });
 });

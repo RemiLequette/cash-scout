@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   currentMonthOf,
+  dashboardLines,
   dashboardRows,
+  orderedLines,
+  type DashboardLines,
   monthEndBalances,
   unusedBudget,
   type DashboardStructure,
@@ -240,5 +243,132 @@ describe("dashboardRows with nested groups", () => {
       subCategories: [{ id: "s", categoryId: "k" }],
     };
     expect(dashboardRows(loop, [cell("s", 1, -5n)], []).map((r) => r.id)).toEqual(["c", "k", "s"]);
+  });
+});
+
+describe("dashboardLines", () => {
+  const structure: DashboardStructure = {
+    groups: [{ id: "daily" }, { id: "work" }, { id: "big" }],
+    categories: [
+      { id: "food", groupId: "daily", direction: "expense", natureId: "spend" },
+      { id: "pay", groupId: "work", direction: "income", natureId: "earn" },
+      { id: "roof", groupId: "big", direction: "expense", natureId: "once" },
+      { id: "move", groupId: "daily", direction: "transfer", natureId: "xfer" },
+    ],
+    subCategories: [
+      { id: "s-food", categoryId: "food" },
+      { id: "s-pay", categoryId: "pay" },
+      { id: "s-roof", categoryId: "roof" },
+      { id: "s-move", categoryId: "move" },
+    ],
+  };
+  const lines: DashboardLines = {
+    natures: [
+      { id: "earn", behavior: "income", sign: 1, position: 0 },
+      { id: "spend", behavior: "expense", sign: -1, position: 1 },
+      { id: "once", behavior: "expense", sign: -1, position: 3 },
+      { id: "xfer", behavior: "transfer", sign: 1, position: 5 },
+    ],
+    balances: [
+      { id: "current", natureIds: ["earn", "spend"], position: 2 },
+      { id: "total", natureIds: ["earn", "spend", "once"], position: 4 },
+    ],
+  };
+  const cell = (subCategoryId: string, month: number, total: bigint) => ({
+    subCategoryId,
+    month,
+    total,
+  });
+  const all = [
+    cell("s-pay", 1, 1_000n),
+    cell("s-food", 1, -300n),
+    cell("s-roof", 2, -500n),
+    cell("s-move", 1, 99n),
+  ];
+
+  it("follows the user's order, mixing natures and balances", () => {
+    const rows = dashboardLines(structure, lines, all, []);
+    expect(rows.filter((r) => r.depth === 0).map((r) => [r.kind, r.id])).toEqual([
+      ["nature", "earn"],
+      ["nature", "spend"],
+      ["balance", "current"],
+      ["nature", "once"],
+      ["balance", "total"],
+    ]);
+  });
+
+  it("shows a nature with its sign, so spending reads as positive", () => {
+    const rows = dashboardLines(structure, lines, all, []);
+    const spend = rows.find((r) => r.kind === "nature" && r.id === "spend")!;
+    expect(spend.months[0]).toBe(300n);
+    const food = rows.find((r) => r.kind === "sub" && r.id === "s-food")!;
+    expect(food.months[0]).toBe(300n);
+    expect(food.depth).toBe(3);
+    const group = rows.find((r) => r.kind === "group" && r.id === "daily")!;
+    expect([group.parentKind, group.parentId, group.depth]).toEqual(["nature", "spend", 1]);
+  });
+
+  it("adds a balance up from the amounts as entered, ignoring display signs", () => {
+    const rows = dashboardLines(structure, lines, all, []);
+    expect(rows.find((r) => r.kind === "balance" && r.id === "current")!.months[0]).toBe(700n);
+    const total = rows.find((r) => r.kind === "balance" && r.id === "total")!;
+    expect(total.months.slice(0, 2)).toEqual([700n, -500n]);
+    expect(total.total).toBe(200n);
+  });
+
+  it("leaves out transfers and what has nothing in the year", () => {
+    expect(dashboardLines(structure, lines, [cell("s-move", 1, 99n)], [])).toEqual([]);
+  });
+
+  it("gives each row a unique key, a group shared by two natures included", () => {
+    const shared: DashboardStructure = {
+      groups: [{ id: "home" }],
+      categories: [
+        { id: "rent", groupId: "home", direction: "expense", natureId: "spend" },
+        { id: "roof", groupId: "home", direction: "expense", natureId: "once" },
+      ],
+      subCategories: [
+        { id: "s-rent", categoryId: "rent" },
+        { id: "s-roof", categoryId: "roof" },
+      ],
+    };
+    const rows = dashboardLines(
+      shared,
+      lines,
+      [cell("s-rent", 1, -10n), cell("s-roof", 1, -5n)],
+      [],
+    );
+    const keys = rows.map((r) => r.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    const homes = rows.filter((r) => r.kind === "group");
+    expect(homes.map((r) => [r.key, r.parentKey])).toEqual([
+      ["group:home@spend", "nature:spend"],
+      ["group:home@once", "nature:once"],
+    ]);
+    const roof = rows.find((r) => r.kind === "category" && r.id === "roof")!;
+    expect(roof.parentKey).toBe("group:home@once");
+  });
+
+  it("still adds up natures that come after the balance", () => {
+    const early: DashboardLines = {
+      ...lines,
+      balances: [{ id: "first", natureIds: ["earn", "spend"], position: -1 }],
+    };
+    const rows = dashboardLines(structure, early, all, []);
+    expect(rows[0]).toMatchObject({ kind: "balance", id: "first" });
+    expect(rows[0]!.months[0]).toBe(700n);
+  });
+});
+
+describe("orderedLines", () => {
+  it("sorts natures and balances on one position scale, natures first on a tie", () => {
+    const order = orderedLines({
+      natures: [
+        { id: "n1", behavior: "income", sign: 1, position: 1 },
+        { id: "n0", behavior: "expense", sign: -1, position: 0 },
+      ],
+      balances: [{ id: "b", natureIds: ["n0"], position: 1 }],
+    });
+    expect(order.map((l) => l.id)).toEqual(["n0", "n1", "b"]);
   });
 });

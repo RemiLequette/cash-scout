@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MONTHS, budgetYearSchema } from "./budget.js";
 import { entryDateSchema } from "./journal.js";
-import type { Direction } from "./reference.js";
+import type { Direction, NatureSign } from "./reference.js";
 
 /** The year dashboard of a book: `today` tells which months are still ahead. */
 export const dashboardQuerySchema = z.object({
@@ -54,7 +54,13 @@ export function monthEndBalances(opening: bigint, changes: readonly bigint[]): b
 export interface DashboardStructure {
   /** Groups nest: `parentId` is the group this one belongs to, if any. */
   groups: readonly { id: string; parentId?: string | null }[];
-  categories: readonly { id: string; groupId: string; direction: Direction }[];
+  categories: readonly {
+    id: string;
+    groupId: string;
+    direction: Direction;
+    /** Which nature the category belongs to; see `dashboardLines`. */
+    natureId?: string;
+  }[];
   subCategories: readonly { id: string; categoryId: string }[];
 }
 
@@ -72,7 +78,7 @@ export interface DashboardUnused {
   months: readonly bigint[];
 }
 
-export type DashboardRowKind = "group" | "category" | "sub" | "unused";
+export type DashboardRowKind = "nature" | "balance" | "group" | "category" | "sub" | "unused";
 
 /**
  * A line of the grid. `id` is the id of the group, category or sub-category;
@@ -81,14 +87,35 @@ export type DashboardRowKind = "group" | "category" | "sub" | "unused";
  * is, so a page can fold the tree.
  */
 export interface DashboardRow {
+  /**
+   * Unique in the dashboard, and what `parentKey` points at. A group that
+   * carries categories of several natures appears once under each, so the
+   * kind and id alone do not tell its rows apart.
+   */
+  key: string;
+  parentKey: string | null;
   kind: DashboardRowKind;
   id: string;
   parentId: string | null;
-  parentKind: "group" | "category" | null;
+  parentKind: "nature" | "group" | "category" | null;
   depth: number;
   /** 12 monthly amounts, in minor units. */
   months: bigint[];
   total: bigint;
+}
+
+/** A row before it is given its keys. */
+type BareRow = Omit<DashboardRow, "key" | "parentKey">;
+
+/** Gives rows their keys; the groups of a nature's section are scoped to it. */
+function withKeys(rows: readonly BareRow[], nature: string | null): DashboardRow[] {
+  const keyOf = (kind: string, id: string) =>
+    kind === "group" && nature ? `group:${id}@${nature}` : `${kind}:${id}`;
+  return rows.map((row) => ({
+    ...row,
+    key: keyOf(row.kind, row.id),
+    parentKey: row.parentId === null ? null : keyOf(row.parentKind!, row.parentId),
+  }));
 }
 
 const zeros = () => Array<bigint>(MONTHS).fill(0n);
@@ -112,6 +139,14 @@ export function dashboardRows(
   cells: readonly DashboardCell[],
   unused: readonly DashboardUnused[],
 ): DashboardRow[] {
+  return withKeys(bareRows(structure, cells, unused), null);
+}
+
+function bareRows(
+  structure: DashboardStructure,
+  cells: readonly DashboardCell[],
+  unused: readonly DashboardUnused[],
+): BareRow[] {
   const bySub = new Map<string, bigint[]>();
   for (const cell of cells) {
     const months = bySub.get(cell.subCategoryId) ?? zeros();
@@ -131,16 +166,16 @@ export function dashboardRows(
     group: { id: string },
     parent: string | null,
     depth: number,
-  ): { rows: DashboardRow[]; months: bigint[] } {
+  ): { rows: BareRow[]; months: bigint[] } {
     const groupMonths = zeros();
-    const inGroup: DashboardRow[] = [];
+    const inGroup: BareRow[] = [];
     if (inProgress.has(group.id)) return { rows: inGroup, months: groupMonths };
     inProgress.add(group.id);
 
     for (const category of structure.categories) {
       if (category.groupId !== group.id || category.direction === "transfer") continue;
       const categoryMonths = zeros();
-      const inCategory: DashboardRow[] = [];
+      const inCategory: BareRow[] = [];
       for (const sub of structure.subCategories) {
         const months = bySub.get(sub.id);
         if (sub.categoryId !== category.id || !months) continue;
@@ -211,4 +246,105 @@ export function dashboardRows(
   }
 
   return structure.groups.filter(isTop).flatMap((group) => groupRows(group, null, 0).rows);
+}
+
+// ---------------------------------------------------------------------------
+// Natures and balances
+// ---------------------------------------------------------------------------
+
+/** The natures and balances of a book, which make up the top level of the dashboard. */
+export interface DashboardLines {
+  natures: readonly { id: string; behavior: Direction; sign: NatureSign; position: number }[];
+  balances: readonly { id: string; natureIds: readonly string[]; position: number }[];
+}
+
+/** The natures and balances in the order the user set: they are one list. */
+export function orderedLines(lines: DashboardLines): { kind: "nature" | "balance"; id: string }[] {
+  const all = [
+    ...lines.natures.map((n) => ({ kind: "nature" as const, id: n.id, at: n.position })),
+    ...lines.balances.map((b) => ({ kind: "balance" as const, id: b.id, at: b.position })),
+  ];
+  // Array.sort is stable: on a tie, natures stay before balances.
+  return all.sort((a, b) => a.at - b.at).map(({ kind, id }) => ({ kind, id }));
+}
+
+/**
+ * The dashboard as the user ordered it: each nature with the groups,
+ * categories and sub-categories that carry it, shown with the nature's sign
+ * (spending reads as positive); each balance as the sum of the amounts as
+ * entered of its natures, so display signs do not touch it. A nature with
+ * nothing in the year is left out, and so is a balance none of whose natures
+ * has anything. Transfers are not shown. A balance placed before one of its
+ * natures still adds it up.
+ */
+export function dashboardLines(
+  structure: DashboardStructure,
+  lines: DashboardLines,
+  cells: readonly DashboardCell[],
+  unused: readonly DashboardUnused[],
+): DashboardRow[] {
+  const shown = new Map<string, { rows: DashboardRow[]; raw: bigint[] }>();
+  for (const nature of lines.natures) {
+    if (nature.behavior === "transfer") continue;
+    const rows = bareRows(
+      { ...structure, categories: structure.categories.filter((c) => c.natureId === nature.id) },
+      cells,
+      unused,
+    );
+    if (rows.length === 0) continue;
+    const raw = zeros();
+    for (const row of rows) if (row.depth === 0) addInto(raw, row.months);
+    const sign = BigInt(nature.sign);
+    shown.set(nature.id, {
+      raw,
+      rows: withKeys(
+        [
+          {
+            kind: "nature",
+            id: nature.id,
+            parentId: null,
+            parentKind: null,
+            depth: 0,
+            months: raw.map((m) => m * sign),
+            total: totalOf(raw) * sign,
+          },
+          ...rows.map((row) => ({
+            ...row,
+            parentId: row.parentId ?? nature.id,
+            parentKind: row.parentKind ?? ("nature" as const),
+            depth: row.depth + 1,
+            months: row.months.map((m) => m * sign),
+            total: row.total * sign,
+          })),
+        ],
+        nature.id,
+      ),
+    });
+  }
+
+  const balances = new Map(lines.balances.map((b) => [b.id, b]));
+  return orderedLines(lines).flatMap(({ kind, id }): DashboardRow[] => {
+    if (kind === "nature") return shown.get(id)?.rows ?? [];
+    const parts = balances
+      .get(id)!
+      .natureIds.map((n) => shown.get(n))
+      .filter((part) => part !== undefined);
+    if (parts.length === 0) return [];
+    const months = zeros();
+    for (const part of parts) addInto(months, part.raw);
+    return withKeys(
+      [
+        {
+          kind: "balance",
+          id,
+          parentId: null,
+          parentKind: null,
+          depth: 0,
+          months,
+          total: totalOf(months),
+        },
+      ],
+      null,
+    );
+  });
 }

@@ -16,7 +16,14 @@ export function useReference(bookId: string) {
 
 /** Kinds of reference items, as they appear in the API paths. */
 export type ReferenceKind =
-  "groups" | "categories" | "sub-categories" | "payment-types" | "accounts";
+  | "groups"
+  | "categories"
+  | "sub-categories"
+  | "payment-types"
+  | "accounts"
+  | "natures"
+  | "balances"
+  | "lines";
 
 /** Sends a change to the reference data API; the API validates the body. */
 async function send(bookId: string, method: string, path: string, body?: unknown) {

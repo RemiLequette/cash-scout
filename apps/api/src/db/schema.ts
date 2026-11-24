@@ -14,6 +14,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -195,6 +196,65 @@ export const categoryGroup = pgTable(
   ],
 );
 
+/**
+ * A nature of the book's flows (Income, Spending, Exceptional…). It borrows
+ * its behaviour from one of the four directions and shows with a sign in the
+ * dashboard. Natures and balances share one display order (`position`).
+ */
+export const nature = pgTable(
+  "nature",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    names: names(),
+    behavior: direction("behavior").notNull(),
+    /** 1 shows amounts as entered, -1 reverses them (spending reads as positive). */
+    sign: smallint("sign").$type<1 | -1>().notNull(),
+    position: integer("position").notNull().default(0),
+    archivedAt: archivedAt(),
+    version: version(),
+  },
+  (t) => [
+    unique().on(t.id, t.bookId),
+    index("nature_book_idx").on(t.bookId),
+    check("nature_sign_check", sql`${t.sign} IN (1, -1)`),
+  ],
+);
+
+/** An analytic balance: the sum of several natures, placed in the same list as the natures. */
+export const balance = pgTable(
+  "balance",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    names: names(),
+    position: integer("position").notNull().default(0),
+    archivedAt: archivedAt(),
+    version: version(),
+  },
+  (t) => [unique().on(t.id, t.bookId), index("balance_book_idx").on(t.bookId)],
+);
+
+export const balanceNature = pgTable(
+  "balance_nature",
+  {
+    bookId: bookId(),
+    balanceId: uuid("balance_id").notNull(),
+    natureId: uuid("nature_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.balanceId, t.natureId] }),
+    foreignKey({
+      columns: [t.balanceId, t.bookId],
+      foreignColumns: [balance.id, balance.bookId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.natureId, t.bookId],
+      foreignColumns: [nature.id, nature.bookId],
+    }),
+  ],
+);
+
 export const category = pgTable(
   "category",
   {
@@ -203,6 +263,8 @@ export const category = pgTable(
     groupId: uuid("group_id").notNull(),
     /** Short code setting the sort order, unique in the book. */
     code: text("code").notNull(),
+    natureId: uuid("nature_id").notNull(),
+    /** The behaviour of the category's nature, kept in step with it by the API. */
     direction: direction("direction").notNull(),
     /** Budget type given to the category in a year not yet budgeted. */
     defaultBudgetType: budgetType("default_budget_type").notNull().default("periodic"),
@@ -216,6 +278,10 @@ export const category = pgTable(
     foreignKey({
       columns: [t.groupId, t.bookId],
       foreignColumns: [categoryGroup.id, categoryGroup.bookId],
+    }),
+    foreignKey({
+      columns: [t.natureId, t.bookId],
+      foreignColumns: [nature.id, nature.bookId],
     }),
   ],
 );

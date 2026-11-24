@@ -113,6 +113,20 @@
       "when": 1795536945613,
       "tag": "0015_transfers_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795543303391,
+      "tag": "0016_natures",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795543400000,
+      "tag": "0017_natures_isolation",
+      "breakpoints": true
     }
   ]
 }
