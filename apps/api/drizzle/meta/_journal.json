@@ -92,6 +92,13 @@
       "when": 1795454850158,
       "tag": "0012_month_end_budgets_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795458849102,
+      "tag": "0013_group_tree",
+      "breakpoints": true
     }
   ]
 }

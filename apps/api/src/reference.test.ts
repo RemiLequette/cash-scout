@@ -270,3 +270,107 @@ describe("roles and isolation", () => {
     expect(updated.length).toBe(0);
   });
 });
+
+describe("nested groups", () => {
+  interface GroupOut {
+    id: string;
+    parentId: string | null;
+    color: string | null;
+    position: number;
+    version: number;
+  }
+  const newGroup = (owner: User, ref: (path?: string) => string, body: object, status = 201) =>
+    json<GroupOut>(owner.request("POST", ref("/groups"), body), status);
+
+  it("nests groups under a parent and gives them a colour", async () => {
+    const { owner, ref } = await bilingualBook();
+    const assets = await newGroup(owner, ref, { names: { fr: "Patrimoine" }, color: "blue" });
+    const rennes = await newGroup(owner, ref, { names: { fr: "Rennes" }, parentId: assets.id });
+    expect(assets).toMatchObject({ parentId: null, color: "blue" });
+    expect(rennes).toMatchObject({ parentId: assets.id, color: null });
+
+    const moved = await json<GroupOut>(
+      owner.request("PATCH", ref(`/groups/${rennes.id}`), { parentId: null, color: "teal" }),
+    );
+    expect(moved).toMatchObject({ parentId: null, color: "teal" });
+    const reference = await json<{ groups: GroupOut[] }>(owner.request("GET", ref()));
+    expect(reference.groups.find((g) => g.id === rennes.id)).toMatchObject({
+      parentId: null,
+      color: "teal",
+    });
+  });
+
+  it("refuses a colour outside the palette", async () => {
+    const { owner, ref } = await bilingualBook();
+    await newGroup(owner, ref, { names: { fr: "A" }, color: "gray" }, 400);
+    await newGroup(owner, ref, { names: { fr: "B" }, color: "#ff0000" }, 400);
+  });
+
+  it("refuses a group inside itself or inside one of its own descendants", async () => {
+    const { owner, ref } = await bilingualBook();
+    const a = await newGroup(owner, ref, { names: { fr: "A" } });
+    const b = await newGroup(owner, ref, { names: { fr: "B" }, parentId: a.id });
+    const c = await newGroup(owner, ref, { names: { fr: "C" }, parentId: b.id });
+    const patch = (id: string, parentId: string) =>
+      owner.request("PATCH", ref(`/groups/${id}`), { parentId });
+    expect((await patch(a.id, a.id)).status).toBe(400);
+    expect((await patch(a.id, c.id)).status).toBe(400);
+    expect((await patch(c.id, a.id)).status).toBe(200);
+  });
+
+  it("refuses a parent from another book, or an archived one", async () => {
+    const { owner, ref } = await bilingualBook();
+    const other = await bilingualBook();
+    const foreign = await newGroup(other.owner, other.ref, { names: { fr: "Ailleurs" } });
+    await newGroup(owner, ref, { names: { fr: "X" }, parentId: foreign.id }, 400);
+
+    const parent = await newGroup(owner, ref, { names: { fr: "Parent" } });
+    const child = await newGroup(owner, ref, { names: { fr: "Enfant" }, parentId: parent.id });
+    await json(
+      owner.request("PATCH", ref(`/groups/${parent.id}`), {
+        archived: true,
+        version: parent.version,
+      }),
+    );
+    // The child keeps its archived parent; nothing new can be put under it.
+    const renamed = await owner.request("PATCH", ref(`/groups/${child.id}`), {
+      names: { fr: "Enfant 2" },
+      parentId: parent.id,
+    });
+    expect(renamed.status).toBe(200);
+    await newGroup(owner, ref, { names: { fr: "Autre" }, parentId: parent.id }, 400);
+  });
+
+  it("keeps a group that has child groups until they are gone", async () => {
+    const { owner, ref } = await bilingualBook();
+    const parent = await newGroup(owner, ref, { names: { fr: "Parent" } });
+    const child = await newGroup(owner, ref, { names: { fr: "Enfant" }, parentId: parent.id });
+    expect((await owner.request("DELETE", ref(`/groups/${parent.id}`))).status).toBe(409);
+    expect((await owner.request("DELETE", ref(`/groups/${child.id}`))).status).toBe(204);
+    expect((await owner.request("DELETE", ref(`/groups/${parent.id}`))).status).toBe(204);
+  });
+
+  it("orders sibling groups in one call", async () => {
+    const { owner, ref } = await bilingualBook();
+    const a = await newGroup(owner, ref, { names: { fr: "A" } });
+    const b = await newGroup(owner, ref, { names: { fr: "B" } });
+    const c = await newGroup(owner, ref, { names: { fr: "C" } });
+    const order = await owner.request("POST", ref("/groups/reorder"), {
+      ids: [c.id, a.id, b.id],
+    });
+    expect(order.status).toBe(204);
+    const { groups } = await json<{ groups: GroupOut[] }>(owner.request("GET", ref()));
+    const position = (id: string) => groups.find((g) => g.id === id)!.position;
+    expect([position(c.id), position(a.id), position(b.id)]).toEqual([0, 1, 2]);
+
+    const stranger = await bilingualBook();
+    const foreign = await owner.request("POST", stranger.ref("/groups/reorder"), {
+      ids: [a.id],
+    });
+    expect(foreign.status).toBe(404);
+    const unknown = await owner.request("POST", ref("/groups/reorder"), {
+      ids: [a.id, crypto.randomUUID()],
+    });
+    expect(unknown.status).toBe(400);
+  });
+});

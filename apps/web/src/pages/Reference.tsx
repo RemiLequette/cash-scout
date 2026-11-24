@@ -2,9 +2,11 @@ import {
   accountKinds,
   directions,
   formatMoney,
+  groupColors,
   parseAmount,
   type AccountKind,
   type Direction,
+  type GroupColor,
   type Names,
 } from "@cash-scout/domain";
 import {
@@ -12,10 +14,10 @@ import {
   Alert,
   Badge,
   Button,
+  ColorSwatch,
   Group,
   Menu,
   Modal,
-  NumberInput,
   Paper,
   SegmentedControl,
   Select,
@@ -41,6 +43,51 @@ import {
 // ---------------------------------------------------------------------------
 // Shared pieces
 // ---------------------------------------------------------------------------
+
+/** The palette a group's colour is taken from, with "none" to inherit the parent's. */
+function ColorPicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (color: GroupColor | null) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Stack gap={4}>
+      <Text size="sm" fw={500}>
+        {t("reference.color")}
+      </Text>
+      <Group gap={6}>
+        <Button
+          size="compact-xs"
+          variant={value === null ? "filled" : "default"}
+          onClick={() => onChange(null)}
+        >
+          {t("reference.noColor")}
+        </Button>
+        {groupColors.map((color) => (
+          <ColorSwatch
+            key={color}
+            component="button"
+            type="button"
+            color={`var(--mantine-color-${color}-6)`}
+            size={22}
+            aria-label={color}
+            aria-pressed={value === color}
+            onClick={() => onChange(color)}
+            style={{ cursor: "pointer", color: "white" }}
+          >
+            {value === color ? "✓" : null}
+          </ColorSwatch>
+        ))}
+      </Group>
+      <Text size="xs" c="dimmed">
+        {t("reference.colorHint")}
+      </Text>
+    </Stack>
+  );
+}
 
 /** One name field per book language; the default language is required. */
 function NamesFields({
@@ -227,23 +274,81 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
   }));
   const directionOptions = directions.map((d) => ({ value: d, label: t(`directions.${d}`) }));
 
-  const groupEditor = (group?: Reference["groups"][number]): EditorState => ({
+  /** "Patrimoine › Rennes": a group's name with those of the groups around it. */
+  const groupPath = (id: string): string => {
+    const names: string[] = [];
+    for (
+      let at = reference.groups.find((g) => g.id === id);
+      at && names.length < 20;
+      at = at.parentId === null ? undefined : reference.groups.find((g) => g.id === at!.parentId)
+    ) {
+      names.unshift(nameOf(at.names));
+    }
+    return names.join(" › ");
+  };
+
+  /** The ids of a group's descendants, which cannot become its parent. */
+  const descendantsOf = (id: string): Set<string> => {
+    const found = new Set<string>();
+    for (let added = true; added;) {
+      added = false;
+      for (const g of reference.groups) {
+        if (
+          !found.has(g.id) &&
+          g.parentId !== null &&
+          (g.parentId === id || found.has(g.parentId))
+        ) {
+          found.add(g.id);
+          added = true;
+        }
+      }
+    }
+    return found;
+  };
+
+  const groupEditor = (
+    group?: Reference["groups"][number],
+    parentId: string | null = null,
+  ): EditorState => ({
     title: group ? t("reference.editGroup") : t("reference.newGroup"),
     kind: "groups",
     id: group?.id,
     version: group?.version,
     names: group?.names ?? {},
-    fields: { position: group?.position ?? reference.groups.length },
-    extra: (fields, set) => (
-      <NumberInput
-        label={t("reference.position")}
-        description={t("reference.positionHint")}
-        min={0}
-        value={fields.position as number}
-        onChange={(value) => set({ position: Number(value) || 0 })}
-      />
-    ),
-    body: (names, fields) => ({ names, position: fields.position }),
+    fields: {
+      position: reference.groups.filter((g) => g.parentId === parentId).length,
+      parentId: group ? group.parentId : parentId,
+      color: group?.color ?? null,
+    },
+    extra: (fields, set) => {
+      const excluded = group ? new Set([group.id, ...descendantsOf(group.id)]) : new Set<string>();
+      return (
+        <>
+          <Select
+            label={t("reference.parentGroup")}
+            description={t("reference.parentGroupHint")}
+            clearable
+            searchable
+            data={reference.groups
+              .filter((g) => !excluded.has(g.id) && (!g.archived || g.id === fields.parentId))
+              .map((g) => ({ value: g.id, label: groupPath(g.id) }))}
+            value={(fields.parentId as string | null) ?? null}
+            onChange={(value) => set({ parentId: value })}
+          />
+          <ColorPicker
+            value={(fields.color as string | null) ?? null}
+            onChange={(color) => set({ color })}
+          />
+        </>
+      );
+    },
+    // An existing group keeps its place among its siblings; the arrows move it.
+    body: (names, fields) => ({
+      names,
+      ...(group ? {} : { position: fields.position }),
+      parentId: (fields.parentId as string | null) ?? null,
+      color: (fields.color as string | null) ?? null,
+    }),
   });
 
   const categoryEditor = (
@@ -315,6 +420,154 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
   });
 
   const groups = visible(reference.groups);
+  const change = useReferenceChange(bookId);
+  /** The groups directly under a parent, in their order. */
+  const siblings = (parentId: string | null) =>
+    groups
+      .filter(
+        (g) =>
+          (g.parentId !== null && groups.some((p) => p.id === g.parentId) ? g.parentId : null) ===
+          parentId,
+      )
+      .sort((a, b) => a.position - b.position || nameOf(a.names).localeCompare(nameOf(b.names)));
+  /** Swaps a group with its neighbour: the whole row of siblings is renumbered at once. */
+  const move = (group: Reference["groups"][number], by: -1 | 1) => {
+    const row = siblings(group.parentId);
+    const at = row.findIndex((g) => g.id === group.id);
+    const to = at + by;
+    if (to < 0 || to >= row.length) return;
+    const ids = row.map((g) => g.id);
+    [ids[at], ids[to]] = [ids[to]!, ids[at]!];
+    change.mutate({ kind: "groups", id: "reorder", method: "POST", body: { ids } });
+  };
+
+  const renderGroup = (group: Reference["groups"][number], depth: number) => {
+    const row = siblings(group.parentId);
+    const at = row.findIndex((g) => g.id === group.id);
+    const categories = visible(reference.categories.filter((c) => c.groupId === group.id));
+    const children = siblings(group.id);
+    return (
+      <Paper
+        key={group.id}
+        withBorder
+        p="sm"
+        style={
+          group.color
+            ? { borderLeft: `4px solid var(--mantine-color-${group.color}-6)` }
+            : undefined
+        }
+      >
+        <Group justify="space-between" mb="xs">
+          <Group gap="xs">
+            {canEdit && (
+              <Group gap={0}>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  aria-label={t("reference.moveUp")}
+                  disabled={at <= 0 || change.isPending}
+                  onClick={() => move(group, -1)}
+                >
+                  ↑
+                </ActionIcon>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  aria-label={t("reference.moveDown")}
+                  disabled={at < 0 || at >= row.length - 1 || change.isPending}
+                  onClick={() => move(group, 1)}
+                >
+                  ↓
+                </ActionIcon>
+              </Group>
+            )}
+            <Title order={depth === 0 ? 4 : 5}>{nameOf(group.names)}</Title>
+            <ArchivedBadge archived={group.archived} />
+          </Group>
+          <ItemMenu
+            bookId={bookId}
+            kind="groups"
+            id={group.id}
+            version={group.version}
+            archived={group.archived}
+            canEdit={canEdit}
+            onEdit={() => openEditor(groupEditor(group))}
+          >
+            <Menu.Item onClick={() => openEditor(categoryEditor(group.id))}>
+              {t("reference.newCategory")}
+            </Menu.Item>
+            <Menu.Item onClick={() => openEditor(groupEditor(undefined, group.id))}>
+              {t("reference.newSubGroup")}
+            </Menu.Item>
+          </ItemMenu>
+        </Group>
+        <Table>
+          <Table.Tbody>
+            {categories.map((item) => {
+              const subCategories = visible(
+                reference.subCategories.filter((s) => s.categoryId === item.id),
+              ).sort((a, b) => nameOf(a.names).localeCompare(nameOf(b.names)));
+              return (
+                <Table.Tr key={item.id}>
+                  <Table.Td w={80} valign="top">
+                    <Badge variant="light">{item.code}</Badge>
+                  </Table.Td>
+                  <Table.Td valign="top">
+                    <Group gap="xs">
+                      <Text fw={500}>{nameOf(item.names)}</Text>
+                      <Badge size="xs" variant="dot">
+                        {t(`directions.${item.direction}`)}
+                      </Badge>
+                      <ArchivedBadge archived={item.archived} />
+                    </Group>
+                    <Stack gap={2} mt={4} pl="md">
+                      {subCategories.map((sub) => (
+                        <Group key={sub.id} gap="xs" wrap="nowrap">
+                          <Text size="sm">{nameOf(sub.names)}</Text>
+                          <ArchivedBadge archived={sub.archived} />
+                          <ItemMenu
+                            bookId={bookId}
+                            kind="sub-categories"
+                            id={sub.id}
+                            version={sub.version}
+                            archived={sub.archived}
+                            canEdit={canEdit}
+                            onEdit={() => openEditor(subCategoryEditor(item.id, sub))}
+                          />
+                        </Group>
+                      ))}
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td w={50} valign="top">
+                    <ItemMenu
+                      bookId={bookId}
+                      kind="categories"
+                      id={item.id}
+                      version={item.version}
+                      archived={item.archived}
+                      canEdit={canEdit}
+                      onEdit={() => openEditor(categoryEditor(group.id, item))}
+                    >
+                      <Menu.Item onClick={() => openEditor(subCategoryEditor(item.id))}>
+                        {t("reference.newSubCategory")}
+                      </Menu.Item>
+                    </ItemMenu>
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
+          </Table.Tbody>
+        </Table>
+        {children.length > 0 && (
+          <Stack mt="sm" ml="md">
+            {children.map((child) => renderGroup(child, depth + 1))}
+          </Stack>
+        )}
+      </Paper>
+    );
+  };
 
   return (
     <Stack>
@@ -324,89 +577,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
         </Group>
       )}
       {groups.length === 0 && <Text c="dimmed">{t("reference.emptyCategories")}</Text>}
-      {groups.map((group) => {
-        const categories = visible(reference.categories.filter((c) => c.groupId === group.id));
-        return (
-          <Paper key={group.id} withBorder p="sm">
-            <Group justify="space-between" mb="xs">
-              <Group gap="xs">
-                <Title order={4}>{nameOf(group.names)}</Title>
-                <ArchivedBadge archived={group.archived} />
-              </Group>
-              <ItemMenu
-                bookId={bookId}
-                kind="groups"
-                id={group.id}
-                version={group.version}
-                archived={group.archived}
-                canEdit={canEdit}
-                onEdit={() => openEditor(groupEditor(group))}
-              >
-                <Menu.Item onClick={() => openEditor(categoryEditor(group.id))}>
-                  {t("reference.newCategory")}
-                </Menu.Item>
-              </ItemMenu>
-            </Group>
-            <Table>
-              <Table.Tbody>
-                {categories.map((item) => {
-                  const subCategories = visible(
-                    reference.subCategories.filter((s) => s.categoryId === item.id),
-                  ).sort((a, b) => nameOf(a.names).localeCompare(nameOf(b.names)));
-                  return (
-                    <Table.Tr key={item.id}>
-                      <Table.Td w={80} valign="top">
-                        <Badge variant="light">{item.code}</Badge>
-                      </Table.Td>
-                      <Table.Td valign="top">
-                        <Group gap="xs">
-                          <Text fw={500}>{nameOf(item.names)}</Text>
-                          <Badge size="xs" variant="dot">
-                            {t(`directions.${item.direction}`)}
-                          </Badge>
-                          <ArchivedBadge archived={item.archived} />
-                        </Group>
-                        <Stack gap={2} mt={4} pl="md">
-                          {subCategories.map((sub) => (
-                            <Group key={sub.id} gap="xs" wrap="nowrap">
-                              <Text size="sm">{nameOf(sub.names)}</Text>
-                              <ArchivedBadge archived={sub.archived} />
-                              <ItemMenu
-                                bookId={bookId}
-                                kind="sub-categories"
-                                id={sub.id}
-                                version={sub.version}
-                                archived={sub.archived}
-                                canEdit={canEdit}
-                                onEdit={() => openEditor(subCategoryEditor(item.id, sub))}
-                              />
-                            </Group>
-                          ))}
-                        </Stack>
-                      </Table.Td>
-                      <Table.Td w={50} valign="top">
-                        <ItemMenu
-                          bookId={bookId}
-                          kind="categories"
-                          id={item.id}
-                          version={item.version}
-                          archived={item.archived}
-                          canEdit={canEdit}
-                          onEdit={() => openEditor(categoryEditor(group.id, item))}
-                        >
-                          <Menu.Item onClick={() => openEditor(subCategoryEditor(item.id))}>
-                            {t("reference.newSubCategory")}
-                          </Menu.Item>
-                        </ItemMenu>
-                      </Table.Td>
-                    </Table.Tr>
-                  );
-                })}
-              </Table.Tbody>
-            </Table>
-          </Paper>
-        );
-      })}
+      {siblings(null).map((group) => renderGroup(group, 0))}
     </Stack>
   );
 }

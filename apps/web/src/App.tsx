@@ -70,7 +70,9 @@ function BookTitle({ bookId, view }: { bookId: string; view: BookView }) {
               ? "book.referenceData"
               : view === "budget"
                 ? "book.budget"
-                : "book.settingsAndMembers",
+                : view === "dashboard"
+                  ? "book.dashboard"
+                  : "book.settingsAndMembers",
           )}
         </Text>
       )}
@@ -114,6 +116,9 @@ function NavMenu({
             </Menu.Label>
             <Menu.Item leftSection={mark(view === "journal")} onClick={() => open("journal")}>
               {t("book.journal")}
+            </Menu.Item>
+            <Menu.Item leftSection={mark(view === "dashboard")} onClick={() => open("dashboard")}>
+              {t("book.dashboard")}
             </Menu.Item>
             <Menu.Item leftSection={mark(view === "budget")} onClick={() => open("budget")}>
               {t("book.budget")}
@@ -216,7 +221,8 @@ function Layout() {
         </Container>
       </AppShell.Header>
       <AppShell.Main>
-        <Container size="lg">
+        {/* The dashboard's grid has 14 columns: it takes the whole width. */}
+        <Container size="lg" fluid={view === "dashboard"}>
           <HealthAlert />
           {session ? <Outlet /> : <SignIn />}
         </Container>
@@ -245,7 +251,10 @@ const bookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/books/$bookId",
   validateSearch: (search: Record<string, unknown>): { view?: Exclude<BookView, "journal"> } =>
-    search.view === "budget" || search.view === "reference" || search.view === "settings"
+    search.view === "dashboard" ||
+    search.view === "budget" ||
+    search.view === "reference" ||
+    search.view === "settings"
       ? { view: search.view }
       : {},
   component: function BookPage() {

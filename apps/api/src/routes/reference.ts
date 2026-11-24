@@ -6,6 +6,7 @@ import {
   categoryUpdateSchema,
   checkNames,
   groupInputSchema,
+  groupOrderSchema,
   groupUpdateSchema,
   mergeSchema,
   money,
@@ -16,6 +17,7 @@ import {
   subCategoryUpdateSchema,
   toDecimalString,
   type Names,
+  makesCycle,
 } from "@cash-scout/domain";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
@@ -50,6 +52,35 @@ async function validNames(tx: Tx, bookId: string, names: Names): Promise<Names> 
     throw new HTTPException(400, { message: problem });
   }
   return names;
+}
+
+/**
+ * Checks the parent a group is given: a group of the same book, not archived,
+ * and not the group itself or one of its own descendants. `id` is null for a
+ * group being created.
+ */
+async function checkParent(tx: Tx, bookId: string, id: string | null, parentId?: string | null) {
+  if (!parentId) return;
+  const groups = await tx
+    .select({
+      id: categoryGroup.id,
+      parentId: categoryGroup.parentId,
+      archivedAt: categoryGroup.archivedAt,
+    })
+    .from(categoryGroup)
+    .where(eq(categoryGroup.bookId, bookId));
+  const parent = groups.find((g) => g.id === parentId);
+  if (!parent) {
+    throw new HTTPException(400, { message: "Unknown parent group" });
+  }
+  // Keeping the archived parent a group already has stays possible; choosing one does not.
+  const kept = id !== null && groups.find((g) => g.id === id)?.parentId === parentId;
+  if (parent.archivedAt && !kept) {
+    throw new HTTPException(400, { message: "The parent group is archived" });
+  }
+  if (id !== null && makesCycle(id, parentId, new Map(groups.map((g) => [g.id, g.parentId])))) {
+    throw new HTTPException(400, { message: "A group cannot be inside itself" });
+  }
 }
 
 /**
@@ -107,6 +138,8 @@ const groupColumns = {
   id: categoryGroup.id,
   names: categoryGroup.names,
   position: categoryGroup.position,
+  parentId: categoryGroup.parentId,
+  color: categoryGroup.color,
   archivedAt: categoryGroup.archivedAt,
 };
 const categoryColumns = {
@@ -207,9 +240,16 @@ export function referenceRoutes(db: Db) {
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           const names = await validNames(tx, bookId, input.names);
+          await checkParent(tx, bookId, null, input.parentId);
           const [created] = await tx
             .insert(categoryGroup)
-            .values({ bookId, names, position: input.position ?? 0 })
+            .values({
+              bookId,
+              names,
+              position: input.position ?? 0,
+              parentId: input.parentId ?? null,
+              color: input.color ?? null,
+            })
             .returning(groupColumns);
           return created!;
         });
@@ -222,6 +262,7 @@ export function referenceRoutes(db: Db) {
         const { names, archived, version, ...input } = c.req.valid("json");
         const row = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
+          if (input.parentId !== undefined) await checkParent(tx, bookId, id, input.parentId);
           return updatedOne(
             await tx
               .update(categoryGroup)
@@ -236,6 +277,32 @@ export function referenceRoutes(db: Db) {
           );
         });
         return c.json(out(row));
+      })
+      // The order of sibling groups, in one go: each takes its place in the list.
+      .post("/groups/reorder", zValidator("json", groupOrderSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const { ids } = c.req.valid("json");
+        if (new Set(ids).size !== ids.length) {
+          throw new HTTPException(400, { message: "A group appears once" });
+        }
+        await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const found = await tx
+            .select({ id: categoryGroup.id })
+            .from(categoryGroup)
+            .where(and(eq(categoryGroup.bookId, bookId), inArray(categoryGroup.id, ids)));
+          if (found.length !== ids.length) {
+            throw new HTTPException(400, { message: "Unknown group" });
+          }
+          for (const [position, id] of ids.entries()) {
+            await tx
+              .update(categoryGroup)
+              .set({ position })
+              .where(and(eq(categoryGroup.id, id), eq(categoryGroup.bookId, bookId)));
+          }
+        });
+        return c.body(null, 204);
       })
       .delete("/groups/:id", async (c) =>
         deleteItem(c, db, categoryGroup, idOf(c.req.param("id"), "Item")),
