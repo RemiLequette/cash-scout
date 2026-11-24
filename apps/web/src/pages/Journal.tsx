@@ -292,6 +292,7 @@ export function EntryForm({
             value={draft.date}
             error={error("date")}
             onChange={(e) => set({ date: e.currentTarget.value })}
+            data-autofocus
           />
           <Select
             label={t("journal.account")}
@@ -312,7 +313,6 @@ export function EntryForm({
           value={draft.subCategoryId}
           error={error("subCategoryId")}
           onChange={(value) => set({ subCategoryId: value })}
-          data-autofocus
         />
         <TextInput
           label={t("journal.description")}

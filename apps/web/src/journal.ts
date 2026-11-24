@@ -79,6 +79,15 @@ export function useTransfer(bookId: string, id: string | undefined) {
   });
 }
 
+/** The sub-category and payment type most used by transfers, to start a new one from. */
+export function useTransferDefaults(bookId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "transfer-defaults"],
+    queryFn: () => unwrap(transfers.defaults.$get({ param: { bookId } })),
+    enabled,
+  });
+}
+
 /** The months holding entries, with their number. */
 export function useMonths(bookId: string) {
   return useQuery({
