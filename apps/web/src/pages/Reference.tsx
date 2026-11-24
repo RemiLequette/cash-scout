@@ -266,6 +266,14 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
   const nameOf = useNameOf(reference.defaultLanguage);
   const visible = <T extends { archived: boolean }>(items: T[]) =>
     showArchived ? items : items.filter((item) => !item.archived);
+  /** Groups the user has folded; everything starts open. */
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const toggleFold = (id: string) =>
+    setFolded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const groupOptions = reference.groups.map((g) => ({ value: g.id, label: nameOf(g.names) }));
   const categoryOptions = reference.categories.map((c) => ({
@@ -446,6 +454,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
     const at = row.findIndex((g) => g.id === group.id);
     const categories = visible(reference.categories.filter((c) => c.groupId === group.id));
     const children = siblings(group.id);
+    const isFolded = folded.has(group.id);
     return (
       <Paper
         key={group.id}
@@ -457,8 +466,18 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
             : undefined
         }
       >
-        <Group justify="space-between" mb="xs">
+        <Group justify="space-between" mb={isFolded ? 0 : "xs"}>
           <Group gap="xs">
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              aria-expanded={!isFolded}
+              aria-label={isFolded ? t("reference.expand") : t("reference.collapse")}
+              onClick={() => toggleFold(group.id)}
+            >
+              {isFolded ? "▸" : "▾"}
+            </ActionIcon>
             {canEdit && (
               <Group gap={0}>
                 <ActionIcon
@@ -485,6 +504,11 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
             )}
             <Title order={depth === 0 ? 4 : 5}>{nameOf(group.names)}</Title>
             <ArchivedBadge archived={group.archived} />
+            {isFolded && (
+              <Text size="sm" c="dimmed">
+                {t("reference.foldedCount", { count: categories.length })}
+              </Text>
+            )}
           </Group>
           <ItemMenu
             bookId={bookId}
@@ -503,64 +527,66 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
             </Menu.Item>
           </ItemMenu>
         </Group>
-        <Table>
-          <Table.Tbody>
-            {categories.map((item) => {
-              const subCategories = visible(
-                reference.subCategories.filter((s) => s.categoryId === item.id),
-              ).sort((a, b) => nameOf(a.names).localeCompare(nameOf(b.names)));
-              return (
-                <Table.Tr key={item.id}>
-                  <Table.Td w={80} valign="top">
-                    <Badge variant="light">{item.code}</Badge>
-                  </Table.Td>
-                  <Table.Td valign="top">
-                    <Group gap="xs">
-                      <Text fw={500}>{nameOf(item.names)}</Text>
-                      <Badge size="xs" variant="dot">
-                        {t(`directions.${item.direction}`)}
-                      </Badge>
-                      <ArchivedBadge archived={item.archived} />
-                    </Group>
-                    <Stack gap={2} mt={4} pl="md">
-                      {subCategories.map((sub) => (
-                        <Group key={sub.id} gap="xs" wrap="nowrap">
-                          <Text size="sm">{nameOf(sub.names)}</Text>
-                          <ArchivedBadge archived={sub.archived} />
-                          <ItemMenu
-                            bookId={bookId}
-                            kind="sub-categories"
-                            id={sub.id}
-                            version={sub.version}
-                            archived={sub.archived}
-                            canEdit={canEdit}
-                            onEdit={() => openEditor(subCategoryEditor(item.id, sub))}
-                          />
-                        </Group>
-                      ))}
-                    </Stack>
-                  </Table.Td>
-                  <Table.Td w={50} valign="top">
-                    <ItemMenu
-                      bookId={bookId}
-                      kind="categories"
-                      id={item.id}
-                      version={item.version}
-                      archived={item.archived}
-                      canEdit={canEdit}
-                      onEdit={() => openEditor(categoryEditor(group.id, item))}
-                    >
-                      <Menu.Item onClick={() => openEditor(subCategoryEditor(item.id))}>
-                        {t("reference.newSubCategory")}
-                      </Menu.Item>
-                    </ItemMenu>
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
-        {children.length > 0 && (
+        {!isFolded && (
+          <Table>
+            <Table.Tbody>
+              {categories.map((item) => {
+                const subCategories = visible(
+                  reference.subCategories.filter((s) => s.categoryId === item.id),
+                ).sort((a, b) => nameOf(a.names).localeCompare(nameOf(b.names)));
+                return (
+                  <Table.Tr key={item.id}>
+                    <Table.Td w={80} valign="top">
+                      <Badge variant="light">{item.code}</Badge>
+                    </Table.Td>
+                    <Table.Td valign="top">
+                      <Group gap="xs">
+                        <Text fw={500}>{nameOf(item.names)}</Text>
+                        <Badge size="xs" variant="dot">
+                          {t(`directions.${item.direction}`)}
+                        </Badge>
+                        <ArchivedBadge archived={item.archived} />
+                      </Group>
+                      <Stack gap={2} mt={4} pl="md">
+                        {subCategories.map((sub) => (
+                          <Group key={sub.id} gap="xs" wrap="nowrap">
+                            <Text size="sm">{nameOf(sub.names)}</Text>
+                            <ArchivedBadge archived={sub.archived} />
+                            <ItemMenu
+                              bookId={bookId}
+                              kind="sub-categories"
+                              id={sub.id}
+                              version={sub.version}
+                              archived={sub.archived}
+                              canEdit={canEdit}
+                              onEdit={() => openEditor(subCategoryEditor(item.id, sub))}
+                            />
+                          </Group>
+                        ))}
+                      </Stack>
+                    </Table.Td>
+                    <Table.Td w={50} valign="top">
+                      <ItemMenu
+                        bookId={bookId}
+                        kind="categories"
+                        id={item.id}
+                        version={item.version}
+                        archived={item.archived}
+                        canEdit={canEdit}
+                        onEdit={() => openEditor(categoryEditor(group.id, item))}
+                      >
+                        <Menu.Item onClick={() => openEditor(subCategoryEditor(item.id))}>
+                          {t("reference.newSubCategory")}
+                        </Menu.Item>
+                      </ItemMenu>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        )}
+        {!isFolded && children.length > 0 && (
           <Stack mt="sm" ml="md">
             {children.map((child) => renderGroup(child, depth + 1))}
           </Stack>
@@ -571,11 +597,17 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
 
   return (
     <Stack>
-      {canEdit && (
-        <Group>
+      <Group>
+        {canEdit && (
           <Button onClick={() => openEditor(groupEditor())}>{t("reference.newGroup")}</Button>
-        </Group>
-      )}
+        )}
+        <Button variant="default" onClick={() => setFolded(new Set())}>
+          {t("reference.expandAll")}
+        </Button>
+        <Button variant="default" onClick={() => setFolded(new Set(groups.map((g) => g.id)))}>
+          {t("reference.collapseAll")}
+        </Button>
+      </Group>
       {groups.length === 0 && <Text c="dimmed">{t("reference.emptyCategories")}</Text>}
       {siblings(null).map((group) => renderGroup(group, 0))}
     </Stack>
