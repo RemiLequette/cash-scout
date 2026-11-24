@@ -752,27 +752,32 @@ function BalanceCards({
 // Entries
 // ---------------------------------------------------------------------------
 
-type Direction = "expense" | "income" | "saving" | "transfer";
-
 /** What a row needs from the reference data, resolved once per entry. */
 interface Row {
   entry: Entry;
   sub: string;
   category: string;
   categoryCode?: string;
-  direction?: Direction;
+  /** The sign and transfer flag of the category's nature. */
+  natureSign?: 1 | -1;
+  transfer?: boolean;
   account: string;
   paymentType: string;
 }
 
-/** Income, spending and net of a month, in the book currency; transfers are left out. */
+/**
+ * What a month holds, in the book currency: the natures that read as entered
+ * ("income"), those that read reversed ("spending") and their net. Transfers
+ * are left out.
+ */
 function monthTotals(rows: Row[], bookCurrency: string) {
   let income = 0n;
   let spending = 0n;
   for (const row of rows) {
     const minor = parseAmount(row.entry.bookAmount, bookCurrency).minor;
-    if (row.direction === "income") income += minor;
-    if (row.direction === "expense") spending += minor;
+    if (row.transfer) continue;
+    if (row.natureSign === 1) income += minor;
+    if (row.natureSign === -1) spending += minor;
   }
   return {
     income: { minor: income, currency: bookCurrency },
@@ -807,9 +812,7 @@ function Amount({ row, bookCurrency }: { row: Row; bookCurrency: string }) {
       <Text
         size="sm"
         fw={600}
-        c={
-          row.direction === "income" ? "teal" : row.direction === "transfer" ? "dimmed" : undefined
-        }
+        c={row.transfer ? "dimmed" : row.natureSign === 1 ? "teal" : undefined}
       >
         {formatAmount(entry.amount, entry.currency)}
       </Text>
@@ -1034,6 +1037,7 @@ function toRows(entries: Entry[], reference: Reference, language: string): Row[]
   const byId = <T extends { id: string }>(items: T[]) => new Map(items.map((i) => [i.id, i]));
   const subs = byId(reference.subCategories);
   const categories = byId(reference.categories);
+  const natures = byId(reference.natures);
   const accounts = byId(reference.accounts);
   const paymentTypes = byId(reference.paymentTypes);
   return entries
@@ -1047,7 +1051,8 @@ function toRows(entries: Entry[], reference: Reference, language: string): Row[]
         sub: sub ? nameOf(sub.names) : "",
         category: category ? nameOf(category.names) : "",
         categoryCode: category?.code,
-        direction: category?.direction as Direction | undefined,
+        natureSign: category && natures.get(category.natureId)?.sign,
+        transfer: category && natures.get(category.natureId)?.transfer,
         account: account ? nameOf(account.names) : "",
         paymentType: paymentType ? nameOf(paymentType.names) : "",
       };

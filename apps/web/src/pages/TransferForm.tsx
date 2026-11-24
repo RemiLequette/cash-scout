@@ -206,7 +206,8 @@ function TransferFields({
       .map((a) => ({ value: a.id, label: `${nameOf(a.names)} (${a.currency})` }))
       .sort((a, b) => a.label.localeCompare(b.label));
   };
-  const transferCategories = reference.categories.filter((c) => c.direction === "transfer");
+  const transferNatures = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
+  const transferCategories = reference.categories.filter((c) => transferNatures.has(c.natureId));
   const subCategoryOptions = transferCategories
     .map((category) => ({
       group: `${category.code} ${nameOf(category.names)}`,

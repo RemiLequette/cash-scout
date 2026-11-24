@@ -81,7 +81,7 @@ async function validNames(tx: Tx, bookId: string, names: Record<string, string>)
  */
 async function budgetValues(tx: Tx, bookId: string, input: CategoryBudgetInput) {
   const [categoryRow] = await tx
-    .select({ id: category.id, direction: category.direction })
+    .select({ id: category.id })
     .from(category)
     .where(and(eq(category.id, input.categoryId), eq(category.bookId, bookId)));
   if (!categoryRow) {
@@ -102,10 +102,6 @@ async function budgetValues(tx: Tx, bookId: string, input: CategoryBudgetInput) 
   }
   const bookCurrency = await bookCurrencyOf(tx, bookId);
   const amount = checked(() => parseAmount(input.amount!, bookCurrency)).minor;
-  // Only saving can be negative: a planned withdrawal.
-  if (amount < 0n && categoryRow.direction !== "saving") {
-    throw new HTTPException(400, { message: "A budget amount is positive" });
-  }
   await usable(
     tx
       .select({ archivedAt: budgetProfile.archivedAt })
@@ -240,15 +236,15 @@ export function budgetsRoutes(db: Db) {
           const { rows, profiles, consumption } = await loadYear(tx, bookId, year);
           const weightsOf = new Map(profiles.map((p) => [p.id, p.weights]));
           const text = (minor: bigint) => toDecimalString(money(minor, bookCurrency));
-          const budgets = rows.map(({ code, direction, ...row }) => {
+          const budgets = rows.map(({ code, sign, ...row }) => {
             const base = {
               ...row,
               code,
               amount: row.amount === null ? null : text(row.amount),
             };
             if (row.type !== "periodic") return { ...base, months: null };
-            // Spending in an expense category, income in an income category, uses the budget.
-            const months = monthsOf(row, direction, weightsOf, consumption);
+            // What the category's entries hold, read with its nature's sign, uses the budget.
+            const months = monthsOf(row, sign, weightsOf, consumption);
             return {
               ...base,
               months: months.map((m) => ({
@@ -260,12 +256,12 @@ export function budgetsRoutes(db: Db) {
             };
           });
           // What the journal holds for the year in every category, budgeted or not, with the
-          // category's sign: spending and saving positive, income positive.
+          // sign of the category's nature.
           const totals = new Map<string, bigint>();
           for (const entry of consumption) {
             totals.set(
               entry.categoryId,
-              (totals.get(entry.categoryId) ?? 0n) + consumptionSign(entry.direction) * entry.total,
+              (totals.get(entry.categoryId) ?? 0n) + consumptionSign(entry.sign) * entry.total,
             );
           }
           const actuals = [...totals].map(([categoryId, total]) => ({

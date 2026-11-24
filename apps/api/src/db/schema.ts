@@ -159,7 +159,6 @@ export const bookLanguage = pgTable(
 // Names are stored per language in `names`: { "fr": "...", "en": "..." }.
 // ---------------------------------------------------------------------------
 
-export const direction = pgEnum("direction", ["expense", "income", "saving", "transfer"]);
 export const accountKind = pgEnum("account_kind", ["bank", "virtual"]);
 export const budgetType = pgEnum("budget_type", ["scheduled", "periodic"]);
 export const consumptionMode = pgEnum("consumption_mode", ["lapse", "roll_over", "annual_pool"]);
@@ -197,9 +196,10 @@ export const categoryGroup = pgTable(
 );
 
 /**
- * A nature of the book's flows (Income, Spending, Exceptional…). It borrows
- * its behaviour from one of the four directions and shows with a sign in the
- * dashboard. Natures and balances share one display order (`position`).
+ * A nature of the book's flows (Income, Spending, Exceptional…). Its sign sets
+ * how its amounts read (dashboard, budgets); a transfer nature holds the
+ * movements between the book's own accounts. Natures and balances share one
+ * display order (`position`).
  */
 export const nature = pgTable(
   "nature",
@@ -207,9 +207,10 @@ export const nature = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     bookId: bookId(),
     names: names(),
-    behavior: direction("behavior").notNull(),
     /** 1 shows amounts as entered, -1 reverses them (spending reads as positive). */
     sign: smallint("sign").$type<1 | -1>().notNull(),
+    /** Movements between the book's accounts: out of the dashboard, used by transfers. */
+    transfer: boolean("transfer").notNull().default(false),
     position: integer("position").notNull().default(0),
     archivedAt: archivedAt(),
     version: version(),
@@ -264,8 +265,6 @@ export const category = pgTable(
     /** Short code setting the sort order, unique in the book. */
     code: text("code").notNull(),
     natureId: uuid("nature_id").notNull(),
-    /** The behaviour of the category's nature, kept in step with it by the API. */
-    direction: direction("direction").notNull(),
     /** Budget type given to the category in a year not yet budgeted. */
     defaultBudgetType: budgetType("default_budget_type").notNull().default("periodic"),
     names: names(),
@@ -338,7 +337,7 @@ export const bookAccount = pgTable(
 
 // ---------------------------------------------------------------------------
 // Journal (see README, Journal). One entry per transaction, past or future.
-// Year, month, category, group and direction are derived, never stored.
+// Year, month, category, group and nature are derived, never stored.
 // ---------------------------------------------------------------------------
 
 /**

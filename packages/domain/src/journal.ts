@@ -6,9 +6,8 @@ import { convert, currencyDigits, money, type Money } from "./money.js";
  * Journal entries (see README, Journal).
  *
  * Amounts travel as decimal text with a dot ("-12.50"), checked against the
- * account currency by the API. The sign is kept as entered: whether an amount
- * is spending or income comes from the category's direction, never from the
- * sign, so nothing here compares the sign with the category.
+ * account currency by the API. The sign is kept as entered, and nothing here
+ * compares it with the category.
  */
 
 /** Decimal amount as text, signed: "-12.50", "1500". */

@@ -48,4 +48,19 @@ export function createHarness() {
   return { app, auth, db, sql, signedInUser };
 }
 
+/** The four natures a new book starts with, in their order. */
+export type DefaultNature = "income" | "expense" | "saving" | "transfer";
+
+/** The id of one of the natures a new book starts with. */
+export async function defaultNature(
+  user: { request: (method: string, path: string) => Response | Promise<Response> },
+  bookId: string,
+  kind: DefaultNature,
+): Promise<string> {
+  const response = await user.request("GET", `/books/${bookId}/reference`);
+  const { natures } = (await response.json()) as { natures: { id: string; position: number }[] };
+  const sorted = [...natures].sort((a, b) => a.position - b.position);
+  return sorted[["income", "expense", "saving", "transfer"].indexOf(kind)]!.id;
+}
+
 export const household = { name: "Household", currency: "EUR", defaultLanguage: "fr" };

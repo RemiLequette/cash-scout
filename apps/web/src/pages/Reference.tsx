@@ -1,11 +1,9 @@
 import {
   accountKinds,
-  directions,
   formatMoney,
   groupColors,
   parseAmount,
   type AccountKind,
-  type Direction,
   type GroupColor,
   type Names,
 } from "@cash-scout/domain";
@@ -377,7 +375,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
       code: item?.code ?? "",
       natureId:
         item?.natureId ??
-        reference.natures.find((n) => n.behavior === "expense" && !n.archived)?.id ??
+        reference.natures.find((n) => !n.transfer && !n.archived)?.id ??
         reference.natures[0]?.id ??
         null,
     },
@@ -841,17 +839,9 @@ function NaturesTab({ bookId, reference, canEdit, showArchived, openEditor }: Ta
     id: item?.id,
     version: item?.version,
     names: item?.names ?? {},
-    fields: { behavior: item?.behavior ?? "expense", sign: item?.sign ?? -1 },
+    fields: { sign: item?.sign ?? -1, transfer: item?.transfer ?? false },
     extra: (fields, set) => (
       <>
-        <Select
-          label={t("reference.behavior")}
-          description={t("reference.behaviorHint")}
-          data={directions.map((d) => ({ value: d, label: t(`directions.${d}`) }))}
-          allowDeselect={false}
-          value={fields.behavior as string}
-          onChange={(value) => value && set({ behavior: value as Direction })}
-        />
         <Stack gap={4}>
           <Text size="sm" fw={500}>
             {t("reference.sign")}
@@ -868,9 +858,15 @@ function NaturesTab({ bookId, reference, canEdit, showArchived, openEditor }: Ta
             {t("reference.signHint")}
           </Text>
         </Stack>
+        <Switch
+          label={t("reference.transfer")}
+          description={t("reference.transferHint")}
+          checked={fields.transfer === true}
+          onChange={(event) => set({ transfer: event.currentTarget.checked })}
+        />
       </>
     ),
-    body: (names, fields) => ({ names, behavior: fields.behavior, sign: fields.sign }),
+    body: (names, fields) => ({ names, sign: fields.sign, transfer: fields.transfer }),
   });
 
   const balanceEditor = (item?: Reference["balances"][number]): EditorState => ({
@@ -950,9 +946,11 @@ function NaturesTab({ bookId, reference, canEdit, showArchived, openEditor }: Ta
                     <Text fw={kind === "balance" ? 700 : 500}>{nameOf(item.names)}</Text>
                     {kind === "nature" ? (
                       <>
-                        <Badge size="xs" variant="dot">
-                          {t(`directions.${(item as Reference["natures"][number]).behavior}`)}
-                        </Badge>
+                        {(item as Reference["natures"][number]).transfer && (
+                          <Badge size="xs" variant="dot">
+                            {t("reference.transferBadge")}
+                          </Badge>
+                        )}
                         <Badge size="xs" variant="light" color="gray">
                           {(item as Reference["natures"][number]).sign === -1
                             ? t("reference.signReversed")

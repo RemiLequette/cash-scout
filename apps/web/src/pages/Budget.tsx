@@ -143,13 +143,11 @@ function problemOf(
   bookCurrency: string,
 ): string | undefined {
   if (!isPlanned(draft, category) || draft.type === "scheduled") return undefined;
-  let minor: bigint;
   try {
-    minor = parseAmount(draft.amount, bookCurrency).minor;
+    parseAmount(draft.amount, bookCurrency);
   } catch {
     return "budget.problemAmount";
   }
-  if (minor < 0n && category.direction !== "saving") return "budget.problemNegative";
   if (!draft.profileId) return "budget.problemProfile";
   if (!draft.accountId) return "budget.problemAccount";
   const account = accounts.find((a) => a.id === draft.accountId);
@@ -380,22 +378,33 @@ function BudgetEditor({
   const show = (value: string | undefined) =>
     value === undefined ? "–" : text(minorOf(value, bookCurrency));
 
-  // The year's plan, and last year's reality, by direction.
-  const totals = { income: 0n, expense: 0n, saving: 0n };
-  const lastYear = { income: 0n, expense: 0n, saving: 0n };
+  // The year's plan, and last year's reality, by nature: transfers are left out.
+  const natureById = new Map(reference.natures.map((n) => [n.id, n]));
+  const totals = new Map<string, bigint>();
+  const lastYear = new Map<string, bigint>();
   for (const category of categories) {
-    const bucket = category.direction === "transfer" ? undefined : category.direction;
-    if (!bucket) continue;
+    const nature = natureById.get(category.natureId);
+    if (!nature || nature.transfer) continue;
     const draft = draftOfCategory(category);
-    totals[bucket] +=
+    const planned =
       draft.type === "periodic"
         ? isPlanned(draft, category)
           ? minorOf(draft.amount, bookCurrency)
           : 0n
         : minorOf(entriesOf.get(category.id) ?? "0", bookCurrency);
-    lastYear[bucket] += minorOf(previousActual.get(category.id) ?? "0", bookCurrency);
+    totals.set(nature.id, (totals.get(nature.id) ?? 0n) + planned);
+    lastYear.set(
+      nature.id,
+      (lastYear.get(nature.id) ?? 0n) +
+        minorOf(previousActual.get(category.id) ?? "0", bookCurrency),
+    );
   }
-  const change = (v: typeof totals) => v.income - v.expense - v.saving;
+  const summaryNatures = [...reference.natures]
+    .filter((n) => !n.transfer && (!n.archived || totals.get(n.id) || lastYear.get(n.id)))
+    .sort((a, b) => a.position - b.position);
+  // The change adds each nature with its own sign: income up, spending down.
+  const change = (values: Map<string, bigint>) =>
+    summaryNatures.reduce((sum, n) => sum + BigInt(n.sign) * (values.get(n.id) ?? 0n), 0n);
 
   const profileOptions = profiles
     .filter((p) => !p.archived)
@@ -495,7 +504,7 @@ function BudgetEditor({
                             </Badge>
                             <Text size="sm">{nameOf(category.names)}</Text>
                             <Badge size="xs" variant="dot" style={{ flexShrink: 0 }}>
-                              {t(`directions.${category.direction}`)}
+                              {nameOf(natureById.get(category.natureId)?.names ?? {})}
                             </Badge>
                           </Group>
                         </Table.Td>
@@ -528,10 +537,7 @@ function BudgetEditor({
                                 disabled={!canEdit}
                                 inputMode="decimal"
                                 value={draft.amount}
-                                error={
-                                  problem === "budget.problemAmount" ||
-                                  problem === "budget.problemNegative"
-                                }
+                                error={problem === "budget.problemAmount"}
                                 onChange={(e) =>
                                   update(category, { amount: e.currentTarget.value })
                                 }
@@ -684,7 +690,7 @@ function BudgetEditor({
         </Table.ScrollContainer>
       </Paper>
       {(categories.some((c) => draftOfCategory(c).type === "scheduled") ||
-        reference.categories.some((c) => c.direction === "transfer")) && (
+        reference.categories.some((c) => natureById.get(c.natureId)?.transfer)) && (
         <PlannedEntries
           bookId={bookId}
           bookCurrency={bookCurrency}
@@ -706,11 +712,11 @@ function BudgetEditor({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {(["income", "expense", "saving"] as const).map((direction) => (
-              <Table.Tr key={direction}>
-                <Table.Td>{t(`directions.${direction}`)}</Table.Td>
-                <Table.Td ta="right">{text(lastYear[direction])}</Table.Td>
-                <Table.Td ta="right">{text(totals[direction])}</Table.Td>
+            {summaryNatures.map((nature) => (
+              <Table.Tr key={nature.id}>
+                <Table.Td>{nameOf(nature.names)}</Table.Td>
+                <Table.Td ta="right">{text(lastYear.get(nature.id) ?? 0n)}</Table.Td>
+                <Table.Td ta="right">{text(totals.get(nature.id) ?? 0n)}</Table.Td>
               </Table.Tr>
             ))}
             <Table.Tr>
@@ -987,8 +993,9 @@ function PlannedEntries({
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
   // Transfers are planned too: their two sides add up to zero, so they have no budget type.
+  const transferNatures = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
   const transferCategoryIds = reference.categories
-    .filter((c) => c.direction === "transfer")
+    .filter((c) => transferNatures.has(c.natureId))
     .map((c) => c.id);
   const subCategories = reference.subCategories.filter(
     (s) => categoryIds.includes(s.categoryId) || transferCategoryIds.includes(s.categoryId),

@@ -39,13 +39,13 @@ describe("parseThreshold", () => {
 });
 
 describe("defaultNatures", () => {
-  it("gives one nature per direction, named in each language of the book", () => {
+  it("gives four natures, the last for transfers, named in each language of the book", () => {
     const natures = defaultNatures(["fr", "en"], "fr");
-    expect(natures.map((n) => [n.behavior, n.sign])).toEqual([
-      ["income", 1],
-      ["expense", -1],
-      ["saving", -1],
-      ["transfer", 1],
+    expect(natures.map((n) => [n.sign, n.transfer])).toEqual([
+      [1, false],
+      [-1, false],
+      [-1, false],
+      [1, true],
     ]);
     expect(natures[1]!.names).toEqual({ fr: "Dépenses", en: "Expenses" });
   });

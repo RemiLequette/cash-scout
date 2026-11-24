@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MONTHS, budgetYearSchema } from "./budget.js";
 import { entryDateSchema } from "./journal.js";
-import type { Direction, NatureSign } from "./reference.js";
+import type { NatureSign } from "./reference.js";
 
 /** The year dashboard of a book: `today` tells which months are still ahead. */
 export const dashboardQuerySchema = z.object({
@@ -57,7 +57,6 @@ export interface DashboardStructure {
   categories: readonly {
     id: string;
     groupId: string;
-    direction: Direction;
     /** Which nature the category belongs to; see `dashboardLines`. */
     natureId?: string;
   }[];
@@ -131,8 +130,7 @@ const totalOf = (months: readonly bigint[]) => months.reduce((a, b) => a + b, 0n
  * categories, each followed by its sub-categories and, for a periodic
  * category, the line of its unused budget, then the groups nested in it, to
  * any depth. A row is the sum of what it contains. What has nothing in the
- * year (no entry, no budget) is left out, and so is a group left empty;
- * transfers are not part of the dashboard.
+ * year (no entry, no budget) is left out, and so is a group left empty.
  */
 export function dashboardRows(
   structure: DashboardStructure,
@@ -173,7 +171,7 @@ function bareRows(
     inProgress.add(group.id);
 
     for (const category of structure.categories) {
-      if (category.groupId !== group.id || category.direction === "transfer") continue;
+      if (category.groupId !== group.id) continue;
       const categoryMonths = zeros();
       const inCategory: BareRow[] = [];
       for (const sub of structure.subCategories) {
@@ -254,7 +252,7 @@ function bareRows(
 
 /** The natures and balances of a book, which make up the top level of the dashboard. */
 export interface DashboardLines {
-  natures: readonly { id: string; behavior: Direction; sign: NatureSign; position: number }[];
+  natures: readonly { id: string; transfer: boolean; sign: NatureSign; position: number }[];
   balances: readonly { id: string; natureIds: readonly string[]; position: number }[];
 }
 
@@ -285,7 +283,7 @@ export function dashboardLines(
 ): DashboardRow[] {
   const shown = new Map<string, { rows: DashboardRow[]; raw: bigint[] }>();
   for (const nature of lines.natures) {
-    if (nature.behavior === "transfer") continue;
+    if (nature.transfer) continue;
     const rows = bareRows(
       { ...structure, categories: structure.categories.filter((c) => c.natureId === nature.id) },
       cells,

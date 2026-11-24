@@ -19,10 +19,10 @@ async function bookOf() {
 }
 
 const categories = [
-  "group;group@en;category;category@en;code;direction;sub_category;sub_category@en",
-  "Vie courante;Daily life;Alimentation;Food;C01;Dépense;Boulangerie;Bakery",
-  "Vie courante;Daily life;Alimentation;Food;C01;Dépense;Supermarché;",
-  "Revenus;Income;Salaires;Salaries;R01;income;;",
+  "group;group@en;category;category@en;code;nature;sub_category;sub_category@en",
+  "Vie courante;Daily life;Alimentation;Food;C01;Dépenses;Boulangerie;Bakery",
+  "Vie courante;Daily life;Alimentation;Food;C01;Dépenses;Supermarché;",
+  "Revenus;Income;Salaires;Salaries;R01;Revenus;;",
 ].join("\n");
 
 const accounts = [
@@ -63,16 +63,18 @@ describe("importReference", () => {
     expect(again.existing).toBe(6);
 
     const reference = (await (await owner.request("GET", `/books/${bookId}/reference`)).json()) as {
-      categories: { code: string; direction: string; names: object }[];
+      natures: { id: string; names: Record<string, string> }[];
+      categories: { code: string; natureId: string; names: object }[];
       accounts: { kind: string; lowBalanceThreshold: string | null }[];
     };
+    const nature = (name: string) => reference.natures.find((n) => n.names.fr === name)!.id;
     expect(reference.categories).toEqual([
       expect.objectContaining({
         code: "C01",
-        direction: "expense",
+        natureId: nature("Dépenses"),
         names: { fr: "Alimentation", en: "Food" },
       }),
-      expect.objectContaining({ code: "R01", direction: "income" }),
+      expect.objectContaining({ code: "R01", natureId: nature("Revenus") }),
     ]);
     expect(reference.accounts).toEqual(
       expect.arrayContaining([
@@ -87,9 +89,7 @@ describe("importReference", () => {
     const bad = categories + "\nAutres;;Divers;;D01;sideways;;";
     await expect(
       withUser(h.db, owner.id, (tx) => importReference(tx, bookId, { categories: bad })),
-    ).rejects.toThrow(
-      new ImportError('Line 5: unknown direction "sideways" (expense, income, saving or transfer)'),
-    );
+    ).rejects.toThrow(new ImportError('Line 5: the book has no nature named "sideways"'));
 
     const reference = (await (await owner.request("GET", `/books/${bookId}/reference`)).json()) as {
       groups: unknown[];
