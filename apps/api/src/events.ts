@@ -9,6 +9,8 @@ export type BookScope = (typeof bookScopes)[number];
  */
 export function scopeOfPath(path: string): BookScope {
   const segment = /\/books\/[^/]+\/([^/]+)/.exec(path)?.[1];
+  // A transfer is two journal entries.
+  if (segment === "transfers") return "journal";
   return bookScopes.find((scope) => scope === segment) ?? "book";
 }
 

@@ -46,6 +46,7 @@ import {
   EntryForm,
   type Draft as EntryDraft,
 } from "./Journal";
+import { TransferForm } from "./TransferForm";
 
 // ---------------------------------------------------------------------------
 // Drafts: what the page edits, one per category
@@ -682,7 +683,8 @@ function BudgetEditor({
           </Table>
         </Table.ScrollContainer>
       </Paper>
-      {categories.some((c) => draftOfCategory(c).type === "scheduled") && (
+      {(categories.some((c) => draftOfCategory(c).type === "scheduled") ||
+        reference.categories.some((c) => c.direction === "transfer")) && (
         <PlannedEntries
           bookId={bookId}
           bookCurrency={bookCurrency}
@@ -984,7 +986,13 @@ function PlannedEntries({
 }) {
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
-  const subCategories = reference.subCategories.filter((s) => categoryIds.includes(s.categoryId));
+  // Transfers are planned too: their two sides add up to zero, so they have no budget type.
+  const transferCategoryIds = reference.categories
+    .filter((c) => c.direction === "transfer")
+    .map((c) => c.id);
+  const subCategories = reference.subCategories.filter(
+    (s) => categoryIds.includes(s.categoryId) || transferCategoryIds.includes(s.categoryId),
+  );
   const filters = (y: number) => ({
     from: `${y}-01-01`,
     to: `${y}-12-31`,
@@ -995,6 +1003,8 @@ function PlannedEntries({
   const current = useJournal(bookId, filters(year));
   const [editing, setEditing] = useState<EntryDraft | null>(null);
   const [proposing, setProposing] = useState(false);
+  /** A planned transfer being created (no id) or edited. */
+  const [transfer, setTransfer] = useState<{ id?: string } | null>(null);
 
   const entries = [...(current.data?.entries ?? [])].sort(
     (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id),
@@ -1016,6 +1026,11 @@ function PlannedEntries({
               <Button variant="default" size="xs" onClick={() => setProposing(true)}>
                 {t("budget.startFrom", { year: year - 1 })}
               </Button>
+              {transferCategoryIds.length > 0 && (
+                <Button variant="default" size="xs" onClick={() => setTransfer({})}>
+                  {t("budget.newPlannedTransfer")}
+                </Button>
+              )}
               <Button
                 size="xs"
                 onClick={() => setEditing({ ...emptyDraft(), date: `${year}-01-01` })}
@@ -1059,7 +1074,12 @@ function PlannedEntries({
                     <Table.Tr
                       key={entry.id}
                       style={{ cursor: canEdit ? "pointer" : undefined }}
-                      onClick={() => canEdit && setEditing(entryDraftOf(entry, "edit"))}
+                      onClick={() =>
+                        canEdit &&
+                        (entry.transferId
+                          ? setTransfer({ id: entry.transferId })
+                          : setEditing(entryDraftOf(entry, "edit")))
+                      }
                     >
                       <Table.Td>{formatDate(entry.date, i18n.language)}</Table.Td>
                       <Table.Td>
@@ -1102,6 +1122,25 @@ function PlannedEntries({
             planned
             categoryIds={categoryIds}
             onClose={() => setEditing(null)}
+          />
+        )}
+      </Modal>
+      <Modal
+        opened={transfer !== null}
+        onClose={() => setTransfer(null)}
+        title={transfer?.id ? t("transfer.edit") : t("budget.newPlannedTransfer")}
+        size="lg"
+      >
+        {transfer && (
+          <TransferForm
+            key={transfer.id ?? "new"}
+            bookId={bookId}
+            bookCurrency={bookCurrency}
+            reference={reference}
+            transferId={transfer.id}
+            planned
+            initialDate={`${year}-01-01`}
+            onClose={() => setTransfer(null)}
           />
         )}
       </Modal>

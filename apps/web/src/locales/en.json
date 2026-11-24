@@ -201,6 +201,7 @@
     "plannedEntriesHint": "The plan of the scheduled categories: future entries of the journal. Each is planned at its amount; changing the amount later shows as a variance.",
     "noPlannedEntries": "No entry this year in the scheduled categories.",
     "newPlanned": "New planned entry",
+    "newPlannedTransfer": "New planned transfer",
     "plannedAmount": "Planned",
     "proposeHint": "Plans again the planned entries of {year}, a year later and at the amount they ended at. {count, plural, =0 {Nothing to propose: the sub-categories are already planned this year, or had no planned entry.} one {# entry will be created.} other {# entries will be created.}}",
     "createPlanned": "{count, plural, one {Create # entry} other {Create # entries}}",
@@ -330,5 +331,41 @@
     "mismatch": "The two passwords are different.",
     "changeHint": "You stay signed in here; your other devices are signed out.",
     "changeFailed": "The current password is wrong, or the new one is not accepted."
+  },
+  "transfer": {
+    "new": "New transfer",
+    "edit": "Edit transfer",
+    "badge": "Transfer",
+    "leg": {
+      "source": "Transfer: leaves this account",
+      "destination": "Transfer: reaches this account"
+    },
+    "source": "From account",
+    "destination": "To account",
+    "date": "Date",
+    "dateHint": "The day it leaves the source account.",
+    "delay": "Delay (days)",
+    "delayHint": "Days before it reaches the destination.",
+    "arrival": "Reaches the destination on {date}.",
+    "amount": "Amount",
+    "amountHint": "Positive: the amount that leaves the source account.",
+    "amountPlaceholder": "300",
+    "destinationAmount": "Amount received",
+    "destinationAmountHint": "The accounts are in different currencies: the amount that arrives.",
+    "subCategoryHint": "Only the categories of the transfer direction, which are left out of the totals.",
+    "noCategory": "Add a category of the transfer direction, with a sub-category, in the reference data first.",
+    "reconcileHint": "Each side is reconciled on its own, with its own bank statement line. Changing the transfer changes both sides.",
+    "deleteConfirm": "Delete this transfer and both of its entries?",
+    "invalid": {
+      "date": "Enter a date.",
+      "delayDays": "Enter a whole number of days, 0 to 60.",
+      "sourceAccountId": "Pick the source account.",
+      "destinationAccountId": "Pick a destination account, different from the source.",
+      "subCategoryId": "Pick a sub-category.",
+      "amount": "Enter a positive amount with at most the currency's decimals.",
+      "destinationAmount": "Enter the positive amount received.",
+      "sourceRate": "Enter a rate above zero, e.g. 0.2.",
+      "destinationRate": "Enter a rate above zero, e.g. 0.2."
+    }
   }
 }

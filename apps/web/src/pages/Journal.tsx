@@ -61,6 +61,7 @@ import {
 import { currencyOptions } from "../options";
 import { useNameOf, useReference, type Reference } from "../reference";
 import { AccountChart } from "./AccountChart";
+import { TransferForm } from "./TransferForm";
 
 function ErrorAlert({ error }: { error: Error | null }) {
   const { t } = useTranslation();
@@ -858,6 +859,17 @@ function Status({
   );
 }
 
+/** Marks one side of a transfer: leaving the source account, or reaching the destination. */
+function TransferBadge({ leg }: { leg: "source" | "destination" | null }) {
+  const { t } = useTranslation();
+  const label = leg ? t(`transfer.leg.${leg}`) : t("transfer.badge");
+  return (
+    <Badge variant="light" color="grape" size="xs" mr={6} title={label}>
+      {leg === "source" ? "⇄ →" : leg === "destination" ? "→ ⇄" : "⇄"}
+    </Badge>
+  );
+}
+
 function CategoryLabel({ row }: { row: Row }) {
   return (
     <Text size="sm" span style={{ whiteSpace: "nowrap" }}>
@@ -1142,7 +1154,10 @@ const TableEntry = memo(function TableEntry({
       onClick={canEdit ? () => onOpen(entry) : undefined}
     >
       <Table.Td style={{ whiteSpace: "nowrap" }}>{formatDay(entry.date, i18n.language)}</Table.Td>
-      <Table.Td>{entry.description}</Table.Td>
+      <Table.Td>
+        {entry.transferId && <TransferBadge leg={entry.transferLeg} />}
+        {entry.description}
+      </Table.Td>
       <Table.Td>
         <CategoryLabel row={row} />
       </Table.Td>
@@ -1184,6 +1199,7 @@ const CardEntry = memo(function CardEntry({
           onClick={() => onOpen(entry)}
         >
           <Text size="sm" fw={500} truncate>
+            {entry.transferId && <TransferBadge leg={entry.transferLeg} />}
             {entry.description || row.sub}
           </Text>
           <Text size="xs" c="dimmed" truncate>
@@ -1326,6 +1342,34 @@ const MonthEndCard = memo(function MonthEndCard(props: MonthEndViewProps) {
  * "New entry", with an arrow that lists the descriptions most used lately:
  * picking one starts a new entry from the latest one, dated today.
  */
+function NewTransferButton({
+  disabled,
+  compact,
+  onOpen,
+}: {
+  disabled: boolean;
+  compact: boolean;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  return compact ? (
+    <ActionIcon
+      size="md"
+      variant="default"
+      aria-label={t("transfer.new")}
+      title={t("transfer.new")}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      ⇄
+    </ActionIcon>
+  ) : (
+    <Button size="xs" variant="default" disabled={disabled} onClick={onOpen}>
+      {t("transfer.new")}
+    </Button>
+  );
+}
+
 function NewEntryButton({
   bookId,
   disabled,
@@ -1437,6 +1481,12 @@ export function Journal({
     setDraft(next);
     setFormKey((key) => key + 1);
   }, []);
+  /** The transfer being created (no id) or edited, in its own form. */
+  const [transfer, setTransfer] = useState<{ id?: string } | null>(null);
+  const openTransfer = useCallback((id?: string) => {
+    setTransfer({ id });
+    setFormKey((key) => key + 1);
+  }, []);
 
   // Newest first, so that the latest entries are the ones loaded; shown oldest first.
   const list = useJournal(bookId, {
@@ -1484,7 +1534,12 @@ export function Journal({
     (id: string, reconciled: boolean) => mutate({ action: "reconcile", ids: [id], reconciled }),
     [mutate],
   );
-  const onOpen = useCallback((entry: Entry) => open(draftOf(entry, "edit")), [open]);
+  // A side of a transfer opens the whole transfer: both sides change together.
+  const onOpen = useCallback(
+    (entry: Entry) =>
+      entry.transferId ? openTransfer(entry.transferId) : open(draftOf(entry, "edit")),
+    [open, openTransfer],
+  );
 
   // The filters stay above the table; its header sticks just under them.
   const { ref: toolbarRef, height: toolbarHeight } = useElementSize();
@@ -1624,6 +1679,9 @@ export function Journal({
                 ? `${t("journal.filters")} (${activeFilters})`
                 : t("journal.filters")}
             </Button>
+            {canEdit && (
+              <NewTransferButton disabled={!canAdd} compact onOpen={() => openTransfer()} />
+            )}
             {canEdit && <NewEntryButton bookId={bookId} disabled={!canAdd} compact onOpen={open} />}
           </Group>
           <Collapse expanded={filtersOpen}>
@@ -1646,6 +1704,9 @@ export function Journal({
             <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
               {t("journal.count", { count: total })}
             </Text>
+          )}
+          {canEdit && (
+            <NewTransferButton disabled={!canAdd} compact={false} onOpen={() => openTransfer()} />
           )}
           {canEdit && (
             <NewEntryButton bookId={bookId} disabled={!canAdd} compact={false} onOpen={open} />
@@ -1848,6 +1909,24 @@ export function Journal({
             initial={draft}
             onClose={() => setDraft(null)}
             onDuplicate={open}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        size="lg"
+        opened={transfer !== null}
+        onClose={() => setTransfer(null)}
+        title={transfer?.id ? t("transfer.edit") : t("transfer.new")}
+      >
+        {transfer && (
+          <TransferForm
+            key={formKey}
+            bookId={bookId}
+            bookCurrency={bookCurrency}
+            reference={ref}
+            transferId={transfer.id}
+            onClose={() => setTransfer(null)}
           />
         )}
       </Modal>

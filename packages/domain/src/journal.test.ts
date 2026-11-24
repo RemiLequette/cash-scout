@@ -4,7 +4,10 @@ import {
   entryInputSchema,
   entryUpdateSchema,
   journalQuerySchema,
+  addDays,
+  daysBetween,
   rateBetween,
+  transferInputSchema,
   resolveRate,
   variance,
 } from "./journal.js";
@@ -107,6 +110,31 @@ describe("rates and book amounts", () => {
     expect(rateBetween(money(1000n, "EUR"), money(1612n, "JPY"))).toBe("161.2");
     expect(rateBetween(money(300n, "MYR"), money(100n, "EUR"))).toBe("0.3333333333");
     expect(() => rateBetween(money(100n, "MYR"), money(-20n, "EUR"))).toThrow(RangeError);
+  });
+
+  it("moves dates by days, across months and years", () => {
+    expect(addDays("2026-11-30", 2)).toBe("2026-12-02");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2028-02-28", 1)).toBe("2028-02-29");
+    expect(daysBetween("2026-11-02", "2026-11-04")).toBe(2);
+  });
+
+  it("checks a transfer", () => {
+    const base = {
+      date: "2026-11-02",
+      sourceAccountId: "7f0a3a1e-5b0e-4f55-8d0e-6b4a2c3d4e5f",
+      destinationAccountId: "8f0a3a1e-5b0e-4f55-8d0e-6b4a2c3d4e5f",
+      subCategoryId: "9f0a3a1e-5b0e-4f55-8d0e-6b4a2c3d4e5f",
+      amount: "300",
+    };
+    expect(transferInputSchema.parse(base).delayDays).toBe(0);
+    expect(transferInputSchema.safeParse({ ...base, amount: "-300" }).success).toBe(false);
+    expect(transferInputSchema.safeParse({ ...base, amount: "0" }).success).toBe(false);
+    expect(transferInputSchema.safeParse({ ...base, delayDays: 61 }).success).toBe(false);
+    expect(
+      transferInputSchema.safeParse({ ...base, destinationAccountId: base.sourceAccountId })
+        .success,
+    ).toBe(false);
   });
 
   it("computes the variance", () => {

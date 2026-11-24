@@ -1,4 +1,4 @@
-import type { EntryInput, EntryUpdate } from "@cash-scout/domain";
+import type { EntryInput, EntryUpdate, TransferInput, TransferUpdate } from "@cash-scout/domain";
 import {
   keepPreviousData,
   useMutation,
@@ -13,6 +13,10 @@ const journal = api.books[":bookId"].journal;
 export type JournalPage = InferResponseType<typeof journal.$get, 200>;
 export type Entry = JournalPage["entries"][number];
 export type Balance = InferResponseType<typeof journal.balances.$get, 200>[number];
+
+const transfers = api.books[":bookId"].transfers;
+/** A transfer between two accounts: its two journal entries and the delay between them. */
+export type Transfer = InferResponseType<(typeof transfers)[":id"]["$get"], 200>;
 
 const budgets = api.books[":bookId"].budgets;
 /** What a periodic category's budget left unused in a month: a line of the journal's month end. */
@@ -62,6 +66,16 @@ export function useFrequent(bookId: string, enabled: boolean) {
     queryKey: ["books", bookId, "journal", "frequent"],
     queryFn: () => unwrap(journal.frequent.$get({ param: { bookId } })),
     enabled,
+  });
+}
+
+/** One transfer with both of its sides, loaded when its form opens. */
+export function useTransfer(bookId: string, id: string | undefined) {
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "transfer", id],
+    queryFn: () => unwrap(transfers[":id"].$get({ param: { bookId, id: id! } })),
+    enabled: id !== undefined,
+    gcTime: 0,
   });
 }
 
@@ -126,7 +140,10 @@ export type JournalChange =
   | { action: "create"; body: EntryInput }
   | { action: "update"; id: string; body: EntryUpdate }
   | { action: "delete"; id: string }
-  | { action: "reconcile"; ids: string[]; reconciled: boolean };
+  | { action: "reconcile"; ids: string[]; reconciled: boolean }
+  | { action: "createTransfer"; body: TransferInput }
+  | { action: "updateTransfer"; id: string; body: TransferUpdate }
+  | { action: "deleteTransfer"; id: string };
 
 /** Changes to the journal; the list and balances are reloaded after each. */
 export function useJournalChange(bookId: string) {
@@ -153,6 +170,17 @@ export function useJournalChange(bookId: string) {
               json: { ids: change.ids, reconciled: change.reconciled },
             }),
           );
+          return;
+        case "createTransfer":
+          await unwrap(transfers.$post({ param, json: change.body }));
+          return;
+        case "updateTransfer":
+          await unwrap(
+            transfers[":id"].$patch({ param: { ...param, id: change.id }, json: change.body }),
+          );
+          return;
+        case "deleteTransfer":
+          await unwrap(transfers[":id"].$delete({ param: { ...param, id: change.id } }));
       }
     },
     onSettled: () =>
