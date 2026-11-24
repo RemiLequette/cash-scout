@@ -157,6 +157,7 @@
     "currency": "Amounts in {currency}",
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",
+    "rounded": "Round",
     "expand": "Expand",
     "collapse": "Collapse",
     "unused": "Unused budget",
