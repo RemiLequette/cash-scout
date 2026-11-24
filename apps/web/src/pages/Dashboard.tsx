@@ -6,7 +6,18 @@ import {
   type DashboardRow,
   type Names,
 } from "@cash-scout/domain";
-import { ActionIcon, Alert, Badge, Button, Group, Loader, Paper, Table, Text } from "@mantine/core";
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Loader,
+  Paper,
+  Switch,
+  Table,
+  Text,
+} from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,6 +56,15 @@ const PANEL_KEY = "dashboardPanel";
 const clampHeight = (height: number) =>
   Math.min(Math.max(height, 140), Math.max(220, window.innerHeight - 260));
 
+const ROUNDED_KEY = "dashboardRounded";
+
+/** Whether the grid shows whole amounts, kept between visits; on unless turned off. */
+function useRounded() {
+  const [rounded, setRounded] = useState(() => localStorage.getItem(ROUNDED_KEY) !== "false");
+  useEffect(() => localStorage.setItem(ROUNDED_KEY, String(rounded)), [rounded]);
+  return [rounded, setRounded] as const;
+}
+
 function usePanel() {
   const [panel, setPanel] = useState<PanelState>(() => {
     try {
@@ -67,6 +87,7 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
   const reference = useReference(bookId);
   const nameOf = useNameOf(reference.data?.defaultLanguage);
   const [year, setYear] = useState(() => new Date().getFullYear());
+  const [rounded, setRounded] = useRounded();
   const dashboard = useDashboard(bookId, year);
   // null: the default, natures and groups open and categories closed.
   const [expanded, setExpanded] = useState<Set<string> | null>(null);
@@ -172,6 +193,12 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
           <Text size="sm" c="dimmed">
             {t("dashboard.currency", { currency: bookCurrency })}
           </Text>
+          <Switch
+            size="xs"
+            label={t("dashboard.rounded")}
+            checked={rounded}
+            onChange={(event) => setRounded(event.currentTarget.checked)}
+          />
           <Button size="compact-sm" variant="default" onClick={expandAll}>
             {t("dashboard.expandAll")}
           </Button>
@@ -193,6 +220,7 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
           visible={visible}
           isExpanded={isExpanded}
           toggle={toggle}
+          rounded={rounded}
           selection={selection}
           select={(next) => {
             setSelection(next);
@@ -248,20 +276,28 @@ function useMonthNames(style: "short" | "long") {
   );
 }
 
-/** A grid amount without its currency (the page says it once): a dash for zero. */
-function useAmount(currency: string) {
+/**
+ * A grid amount without its currency (the page says it once): a dash for zero.
+ * Rounded, it shows whole units, half away from zero.
+ */
+function useAmount(currency: string, rounded: boolean) {
   const { i18n } = useTranslation();
-  const digits = currencyDigits(currency);
+  const digits = rounded ? 0 : currencyDigits(currency);
   const format = new Intl.NumberFormat(i18n.language, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
+  const unit = 10n ** BigInt(currencyDigits(currency));
   return (minor: bigint) => {
     if (minor === 0n) return "–";
     const sign = minor < 0n ? "-" : "";
     const abs = minor < 0n ? -minor : minor;
-    const whole = abs / 10n ** BigInt(digits);
-    const fraction = abs % 10n ** BigInt(digits);
+    if (rounded) {
+      const whole = (abs + unit / 2n) / unit;
+      return format.format(Number(`${whole === 0n ? "" : sign}${whole}`));
+    }
+    const whole = abs / unit;
+    const fraction = abs % unit;
     return format.format(Number(`${sign}${whole}.${String(fraction).padStart(digits, "0")}`));
   };
 }
@@ -274,16 +310,27 @@ function Grid(props: {
   visible: DashboardRow[];
   isExpanded: (key: string) => boolean;
   toggle: (key: string) => void;
+  rounded: boolean;
   selection: Selection | null;
   select: (selection: Selection) => void;
 }) {
   const { t } = useTranslation();
-  const { bookId, bookCurrency, data, rows, visible, isExpanded, toggle, selection, select } =
-    props;
+  const {
+    bookId,
+    bookCurrency,
+    data,
+    rows,
+    visible,
+    isExpanded,
+    toggle,
+    rounded,
+    selection,
+    select,
+  } = props;
   const reference = useReference(bookId).data!;
   const nameOf = useNameOf(reference.defaultLanguage);
   const monthNames = useMonthNames("short");
-  const amount = useAmount(bookCurrency);
+  const amount = useAmount(bookCurrency, rounded);
 
   const natures = new Map(reference.natures.map((n) => [n.id, n]));
   const balances = new Map(reference.balances.map((b) => [b.id, b]));
@@ -359,18 +406,20 @@ function Grid(props: {
         {visible.map((row) => {
           const key = rowKey(row);
           const top = row.kind === "nature" || row.kind === "balance";
-          const bold = top || row.kind === "group" || row.kind === "category";
-          const rowStyle: CSSProperties = {
-            fontWeight: top || row.kind === "group" ? 700 : row.kind === "category" ? 600 : 400,
-          };
+          // Natures, balances and groups are bold; categories and below are not.
+          const bold = top || row.kind === "group";
+          const rowStyle: CSSProperties = { fontWeight: bold ? 700 : 400 };
           const color = colorOf(row);
           // A group's line is tinted: over the page's own colour, so that the sticky
           // label stays opaque while the months scroll under it.
-          const tint = top
-            ? "linear-gradient(var(--mantine-color-gray-light), var(--mantine-color-gray-light)), var(--mantine-color-body)"
-            : color
-              ? `linear-gradient(var(--mantine-color-${color}-light), var(--mantine-color-${color}-light)), var(--mantine-color-body)`
-              : "var(--mantine-color-default-hover)";
+          const tint =
+            row.kind === "balance"
+              ? "light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3))"
+              : top
+                ? "linear-gradient(var(--mantine-color-gray-light), var(--mantine-color-gray-light)), var(--mantine-color-body)"
+                : color
+                  ? `linear-gradient(var(--mantine-color-${color}-light), var(--mantine-color-${color}-light)), var(--mantine-color-body)`
+                  : "var(--mantine-color-default-hover)";
           const tinted = top || row.kind === "group";
           return (
             <Table.Tr
@@ -439,7 +488,7 @@ function Grid(props: {
               <Table.Td
                 style={{
                   ...numberCell,
-                  fontWeight: bold ? 700 : 600,
+                  fontWeight: bold ? 700 : 400,
                   ...negative(row.total),
                   ...(isSelected(selection, key, null) ? selectedCell : {}),
                 }}

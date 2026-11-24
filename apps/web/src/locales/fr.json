@@ -157,6 +157,7 @@
     "currency": "Montants en {currency}",
     "expandAll": "Tout déplier",
     "collapseAll": "Tout replier",
+    "rounded": "Arrondir",
     "expand": "Déplier",
     "collapse": "Replier",
     "unused": "Budget non consommé",
