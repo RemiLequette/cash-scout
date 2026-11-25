@@ -556,6 +556,8 @@ export const importLine = pgTable(
     /** For a line matched to an entry: the entry's date and reconciled flag before the import, to undo it. */
     previousDate: date("previous_date", { mode: "string" }),
     previousReconciled: boolean("previous_reconciled"),
+    /** The amount of a matched forecast before it took the bank's. */
+    previousAmount: bigint("previous_amount", { mode: "bigint" }),
     ...timestamps,
     version: version(),
   },

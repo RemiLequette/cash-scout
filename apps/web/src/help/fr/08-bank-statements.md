@@ -13,7 +13,10 @@ Choisissez le **compte**, le **format de la banque** et le **fichier CSV** expor
 **Ouvrez** un relevé gardé. Chaque ligne à revoir est l'une de ces choses :
 
 - **Une nouvelle écriture** : choisissez sa sous-catégorie. La description est la contrepartie de la banque, et peut être réécrite.
-- **Une écriture déjà dans le journal** : quand une écriture du même compte a le **même montant** et une date à **5 jours près**, la ligne propose de la **pointer** au lieu de créer un doublon. Cliquez la proposition pour l'accepter, ou **Accepter les rapprochements proposés** pour toutes. Une prévision est proposée avant une écriture déjà pointée.
+- **Une écriture déjà dans le journal** : la ligne propose de la **pointer** au lieu de créer un doublon. Une écriture déjà pointée est proposée pour le **même montant** à **5 jours près**. Une **prévision** est proposée à **10 jours** près et à **10 %** près de son montant : une facture un peu plus forte que prévu est donc retrouvée, et elle prend alors le montant de la banque. Cliquez la proposition pour l'accepter. **Accepter les rapprochements proposés** ne prend que ceux du montant exact. Pour toute autre prévision, **Choisir une prévision** liste les prévisions libres du compte.
+
+L'écran avertit des **prévisions de la période qu'aucune ligne n'est** : si une ligne est l'une d'elles, choisissez-la, sinon l'écriture sera créée en double.
+
 - **Ignorée** : la ligne est laissée de côté, par exemple une ligne **déjà vue**, ou un virement que vous saisissez vous-même.
 
 - **Proposée par une règle** : voir plus bas. Les règles ne font que proposer ; **Accepter les propositions des règles** les valide.
@@ -33,10 +36,10 @@ Depuis une ligne qui a une sous-catégorie, **Créer une règle** remplit le for
 **Importer** écrit d'un coup les lignes validées dans le journal :
 
 - une nouvelle ligne devient une écriture **pointée**, à la date de la banque ;
-- une écriture rapprochée est **pointée** et prend la date de la banque (le côté d'un virement garde sa date).
+- une écriture rapprochée est **pointée** et prend la date de la banque, et pour une prévision le montant de la banque (le côté d'un virement garde sa date et son montant).
 
 Quand plus aucune ligne n'est à revoir et que le relevé donne un solde, l'écran propose de **régler le solde initial** du compte pour que le compte corresponde au dernier solde du relevé. Il montre l'ancien et le nouveau montant ; la case n'est cochée d'office que si le compte n'a encore aucune écriture. Pour un compte dans une autre devise, indiquez le taux de change de l'import.
 
-**Annuler l'import** supprime les écritures créées et rend aux écritures pointées leur date et leur état ; les lignes redeviennent validées. Une écriture que vous avez modifiée ou supprimée depuis est laissée telle quelle. Le solde initial n'est pas rétabli.
+**Annuler l'import** supprime les écritures créées et rend aux écritures pointées leur date, leur montant et leur état ; les lignes redeviennent validées. Une écriture que vous avez modifiée ou supprimée depuis est laissée telle quelle. Le solde initial n'est pas rétabli.
 
 Supprimer un relevé ne touche pas au journal. Ses lignes ne sont plus reconnues comme déjà vues.

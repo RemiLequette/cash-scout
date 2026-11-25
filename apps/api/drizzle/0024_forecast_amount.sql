@@ -1,0 +1,1 @@
+ALTER TABLE "import_line" ADD COLUMN "previous_amount" bigint;

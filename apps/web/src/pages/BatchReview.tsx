@@ -97,7 +97,7 @@ function Review({
   const chosen = batch.lines.filter((l) => selected.has(l.id) && l.status !== "imported");
 
   const matches = batch.lines.filter(
-    (l) => l.status === "review" && !l.duplicate && l.candidates.length > 0,
+    (l) => l.status === "review" && !l.duplicate && l.candidates[0]?.amount === l.amount,
   );
   const seen = batch.lines.filter((l) => l.status === "review" && l.duplicate);
   // A rule proposed something: a sub-category to take, or ignoring the line.
@@ -260,6 +260,7 @@ function Review({
                   line={line}
                   currency={batch.currency}
                   options={options}
+                  forecasts={batch.forecasts}
                   rule={ruleOf(line)}
                   onCreateRule={() => setRuleFor(line)}
                   selected={selected.has(line.id)}
@@ -299,6 +300,7 @@ function Line({
   line,
   currency,
   options,
+  forecasts,
   rule,
   onCreateRule,
   selected,
@@ -308,6 +310,7 @@ function Line({
   line: BatchLine;
   currency: string;
   options: ReturnType<typeof useSubCategoryOptions>;
+  forecasts: MatchedEntry[];
   rule: Rule | undefined;
   onCreateRule: () => void;
   selected: boolean;
@@ -358,7 +361,9 @@ function Line({
       <Table.Td>
         <Decision
           line={line}
+          currency={currency}
           options={options}
+          forecasts={forecasts}
           rule={rule}
           onCreateRule={onCreateRule}
           onChange={onChange}
@@ -383,18 +388,28 @@ function Line({
 /** What the line becomes in the journal, and the means to choose it. */
 function Decision({
   line,
+  currency,
   options,
+  forecasts,
   rule,
   onCreateRule,
   onChange,
 }: {
   line: BatchLine;
+  currency: string;
   options: ReturnType<typeof useSubCategoryOptions>;
+  forecasts: MatchedEntry[];
   rule: Rule | undefined;
   onCreateRule: () => void;
   onChange: (change: Omit<Change, "id">) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const money = (amount: string) => formatMoney(parseAmount(amount, currency), i18n.language);
+  /** Said after an entry whose amount the line would change. */
+  const planned = (entry: MatchedEntry) =>
+    entry.amount === line.amount
+      ? ""
+      : ` ${t("statements.review.planned", { amount: money(entry.amount) })}`;
   const named = (entry: MatchedEntry) => ({
     date: entry.date,
     description: entry.transfer
@@ -418,7 +433,10 @@ function Decision({
   if (line.entry) {
     return (
       <Group gap={6} wrap="nowrap">
-        <Text size="sm">{t("statements.review.willReconcile", named(line.entry))}</Text>
+        <Text size="sm">
+          {t("statements.review.willReconcile", named(line.entry))}
+          {planned(line.entry)}
+        </Text>
         <ActionIcon
           variant="subtle"
           color="gray"
@@ -445,8 +463,23 @@ function Decision({
           onClick={() => onChange({ entryId: entry.id })}
         >
           {t("statements.review.reconcile", named(entry))}
+          {planned(entry)}
         </Button>
       ))}
+      {forecasts.length > 0 && (
+        <Select
+          size="xs"
+          aria-label={t("statements.review.pickForecast")}
+          placeholder={t("statements.review.pickForecast")}
+          searchable
+          data={forecasts.map((entry) => ({
+            value: entry.id,
+            label: `${entry.date} · ${money(entry.amount)} · ${entry.description}`,
+          }))}
+          value={null}
+          onChange={(value) => value && onChange({ entryId: value })}
+        />
+      )}
       <Select
         size="xs"
         aria-label={t("statements.review.subCategory")}
@@ -516,6 +549,21 @@ function ImportPanel({
   return (
     <Stack gap="xs">
       {run.data && <Alert color="teal">{t("statements.review.done", run.data)}</Alert>}
+      {batch.unmatched.length > 0 && batch.lines.some((l) => l.status !== "imported") && (
+        <Alert
+          color="orange"
+          title={t("statements.review.unmatched", { count: batch.unmatched.length })}
+        >
+          <Text size="sm" mb={4}>
+            {t("statements.review.unmatchedHint")}
+          </Text>
+          {batch.unmatched.slice(0, 10).map((entry) => (
+            <Text size="sm" key={entry.id}>
+              {entry.date} · {money(entry.amount)} · {entry.description}
+            </Text>
+          ))}
+        </Alert>
+      )}
       {undo.data && <Alert color="teal">{t("statements.review.undone", undo.data)}</Alert>}
       <ErrorAlert error={run.error ?? undo.error} />
       {imported > 0 && (

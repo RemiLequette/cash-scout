@@ -25,6 +25,7 @@ import {
   openingOf,
   proposals,
   undoImport,
+  type CandidateEntry,
 } from "../statements/review.js";
 import { idOf, requireRole } from "./access.js";
 import { accountOf, bookCurrencyOf, usable } from "./journal.js";
@@ -204,20 +205,19 @@ export function statementRoutes(db: Db) {
             bookCurrency: await bookCurrencyOf(tx, bookId),
           };
         });
-        const { batch, entries, matches, opening } = result;
+        const { batch, entries, matches, forecasts, unmatched, opening } = result;
         const { currency } = batch.account;
         const text = (minor: bigint) => toDecimalString(money(minor, currency));
-        const entryOf = (entryId: string) => {
-          const entry = entries.get(entryId)!;
-          return {
-            id: entry.id,
-            date: entry.date,
-            description: entry.description,
-            subCategoryId: entry.subCategoryId,
-            reconciled: entry.reconciled,
-            transfer: entry.transferId !== null,
-          };
-        };
+        const outEntry = (entry: CandidateEntry) => ({
+          id: entry.id,
+          date: entry.date,
+          amount: text(entry.amount),
+          description: entry.description,
+          subCategoryId: entry.subCategoryId,
+          reconciled: entry.reconciled,
+          transfer: entry.transferId !== null,
+        });
+        const entryOf = (entryId: string) => outEntry(entries.get(entryId)!);
         return c.json({
           id: batch.id,
           accountId: batch.accountId,
@@ -244,6 +244,9 @@ export function statementRoutes(db: Db) {
             candidates: (matches.get(l.id) ?? []).map(entryOf),
             duplicate: result.duplicates.has(l.id),
           })),
+          // Forecasts no line is: to choose by hand, and the ones the statement should hold.
+          forecasts: forecasts.filter((e) => e.transferId === null).map(outEntry),
+          unmatched: unmatched.map(outEntry),
           opening: opening && {
             date: opening.date,
             balance: text(opening.balance),

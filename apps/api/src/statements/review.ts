@@ -3,11 +3,12 @@ import {
   bookAmount,
   decide,
   firstRule,
+  forecastWindowDays,
   matchLines,
-  matchWindowDays,
   money,
   openingFromBalance,
   resolveRate,
+  takesAmount,
   type ImportRequest,
   type LineChange,
 } from "@cash-scout/domain";
@@ -92,16 +93,23 @@ async function claimedEntries(tx: Tx, bookId: string) {
   return new Map(rows.map((r) => [r.entryId!, r.lineId]));
 }
 
+/** How far from a line a forecast can still be chosen by hand. */
+const pickWindowDays = 45;
+
 /**
- * The journal entries each undecided line may already be, and every entry the
- * lines refer to (proposed or chosen), by id.
+ * The journal entries each undecided line may already be, every entry the lines
+ * refer to (proposed or chosen) by id, the forecasts no line is (to choose by
+ * hand), and those among them dated within the statement: they are likely lines
+ * about to be written twice.
  */
 export async function proposals(tx: Tx, bookId: string, accountId: string, lines: readonly Line[]) {
-  const open = lines.filter((l) => l.status === "review");
   const entries = new Map<string, CandidateEntry>();
   let matches = new Map<string, string[]>();
-  if (open.length > 0) {
-    const dates = open.map((l) => l.date).sort();
+  let forecasts: CandidateEntry[] = [];
+  let unmatched: CandidateEntry[] = [];
+  const dates = lines.map((l) => l.date).sort();
+  if (dates.length > 0) {
+    const [first, last] = [dates[0]!, dates.at(-1)!];
     const claimed = await claimedEntries(tx, bookId);
     const around = await tx
       .select(entryColumns)
@@ -110,19 +118,41 @@ export async function proposals(tx: Tx, bookId: string, accountId: string, lines
         and(
           eq(journalEntry.bookId, bookId),
           eq(journalEntry.accountId, accountId),
-          gte(journalEntry.date, addDays(dates[0]!, -matchWindowDays)),
-          lte(journalEntry.date, addDays(dates.at(-1)!, matchWindowDays)),
+          gte(journalEntry.date, addDays(first, -pickWindowDays)),
+          lte(journalEntry.date, addDays(last, pickWindowDays)),
         ),
-      );
+      )
+      .orderBy(asc(journalEntry.date));
     const free = around.filter((e) => !claimed.has(e.id));
-    matches = matchLines(open, free);
+    matches = matchLines(
+      lines.filter((l) => l.status === "review"),
+      free.map((e) => ({ ...e, transfer: e.transferId !== null })),
+    );
     for (const entry of free) entries.set(entry.id, entry);
+    forecasts = free.filter((e) => !e.reconciled);
+    // A line's proposal is not yet claimed, but it is not forgotten either.
+    const proposed = new Set([...matches.values()].map((ids) => ids[0]));
+    const end = addDays(last, forecastWindowDays);
+    unmatched = forecasts.filter((e) => e.date >= first && e.date <= end && !proposed.has(e.id));
   }
   const chosen = lines.flatMap((l) => (l.entryId ? [l.entryId] : []));
   if (chosen.length > 0) {
     for (const entry of await entriesByIds(tx, bookId, chosen)) entries.set(entry.id, entry);
   }
-  return { matches, entries };
+  return { matches, entries, forecasts, unmatched };
+}
+
+/** May the line be this entry: same account, and the same amount unless a forecast takes it. */
+function lineMayBe(
+  line: { amount: bigint },
+  accountId: string,
+  entry: { accountId: string; amount: bigint; reconciled: boolean; transferId: string | null },
+) {
+  return (
+    entry.accountId === accountId &&
+    (entry.amount === line.amount ||
+      takesAmount({ reconciled: entry.reconciled, transfer: entry.transferId !== null }))
+  );
 }
 
 /** Applies the user's decisions to the lines of a batch. */
@@ -155,6 +185,8 @@ export async function applyChanges(
               id: journalEntry.id,
               accountId: journalEntry.accountId,
               amount: journalEntry.amount,
+              reconciled: journalEntry.reconciled,
+              transferId: journalEntry.transferId,
             })
             .from(journalEntry)
             .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.id, entryIds)))
@@ -167,8 +199,8 @@ export async function applyChanges(
     const next = checked(() => decide(line, change));
     if (change.entryId) {
       const entry = entries.get(change.entryId);
-      if (!entry || entry.accountId !== batch.accountId || entry.amount !== line.amount) {
-        throw bad("The entry is not of this account and amount");
+      if (!entry || !lineMayBe(line, batch.accountId, entry)) {
+        throw bad("The entry is not of this account, or its amount cannot change");
       }
       const owner = claimed.get(change.entryId);
       if (owner !== undefined && owner !== line.id) {
@@ -259,11 +291,19 @@ export async function openingOf(
   };
 }
 
+/** An amount of an entry and what it is in the book currency, at the entry's rate. */
+function amounts(minor: bigint, currency: string, rate: string, bookCurrency: string) {
+  return {
+    amount: minor,
+    bookAmount: checked(() => bookAmount(money(minor, currency), rate, bookCurrency)).minor,
+  };
+}
+
 /**
  * Writes the validated lines of a batch into the journal, all or nothing: a line
  * with a sub-category becomes a reconciled entry, a line matched to an entry
  * reconciles it and dates it as the bank does (a side of a transfer keeps its
- * date). Sets the opening balance too when asked.
+ * date); a forecast of another amount takes the bank's. Sets the opening balance too when asked.
  */
 export async function importBatchLines(
   tx: Tx,
@@ -291,7 +331,11 @@ export async function importBatchLines(
   let matched = 0;
   for (const line of pending) {
     let entryId = line.entryId;
-    let previous: { previousDate: string; previousReconciled: boolean } | null = null;
+    let previous: {
+      previousDate: string;
+      previousReconciled: boolean;
+      previousAmount: bigint;
+    } | null = null;
     if (entryId) {
       const [entry] = await tx
         .select({
@@ -300,19 +344,31 @@ export async function importBatchLines(
           transferId: journalEntry.transferId,
           date: journalEntry.date,
           reconciled: journalEntry.reconciled,
+          exchangeRate: journalEntry.exchangeRate,
         })
         .from(journalEntry)
         .where(and(eq(journalEntry.id, entryId), eq(journalEntry.bookId, bookId)));
-      if (!entry || entry.accountId !== batch.accountId || entry.amount !== line.amount) {
+      if (!entry || !lineMayBe(line, batch.accountId, entry)) {
         throw new HTTPException(409, {
           message: `The entry matched to the line of ${line.date} has changed: review it again`,
         });
       }
       await tx
         .update(journalEntry)
-        .set({ reconciled: true, ...(entry.transferId ? {} : { date: line.date }) })
+        .set({
+          reconciled: true,
+          ...(entry.transferId ? {} : { date: line.date }),
+          // A forecast takes the bank's amount, at its own rate; its planned amount stays.
+          ...(entry.amount === line.amount
+            ? {}
+            : amounts(line.amount, currency, entry.exchangeRate, bookCurrency)),
+        })
         .where(eq(journalEntry.id, entryId));
-      previous = { previousDate: entry.date, previousReconciled: entry.reconciled };
+      previous = {
+        previousDate: entry.date,
+        previousReconciled: entry.reconciled,
+        previousAmount: entry.amount,
+      };
       matched++;
     } else {
       if (!line.subCategoryId) {
@@ -357,7 +413,7 @@ export async function importBatchLines(
 
 /**
  * Undoes the import of a batch: the entries it created are deleted, the entries it
- * reconciled get their date and flag back, and its lines are validated again, ready
+ * reconciled get their date, amount and flag back, and its lines are validated again, ready
  * to be changed or imported anew. The opening balance is left as it is. An entry
  * the user changed or deleted since is not touched, and counted in `skipped`.
  */
@@ -365,6 +421,7 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
   const batch = await batchOf(tx, bookId, batchId, true);
   const lines = (await linesOf(tx, batchId)).filter((l) => l.status === "imported");
   if (lines.length === 0) throw bad("Nothing was imported from this batch");
+  const bookCurrency = await bookCurrencyOf(tx, bookId);
 
   let removed = 0;
   let restored = 0;
@@ -388,11 +445,18 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
       if (gone.length > 0) removed++;
       else skipped++;
     } else {
+      const [entry] = await tx
+        .select({ exchangeRate: journalEntry.exchangeRate })
+        .from(journalEntry)
+        .where(and(eq(journalEntry.id, line.entryId), eq(journalEntry.bookId, bookId)));
       const back = await tx
         .update(journalEntry)
         .set({
           reconciled: line.previousReconciled,
           ...(line.previousDate === null ? {} : { date: line.previousDate }),
+          ...(entry && line.previousAmount !== null && line.previousAmount !== line.amount
+            ? amounts(line.previousAmount, batch.account.currency, entry.exchangeRate, bookCurrency)
+            : {}),
         })
         .where(
           and(
@@ -412,6 +476,7 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
         status: "validated",
         previousDate: null,
         previousReconciled: null,
+        previousAmount: null,
         ...(line.previousReconciled === null ? { entryId: null } : {}),
       })
       .where(eq(importLine.id, line.id));

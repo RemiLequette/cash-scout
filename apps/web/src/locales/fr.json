@@ -233,7 +233,11 @@
       "ruleProposes": "Proposé par la règle « {name} »",
       "ruleIgnores": "La règle « {name} » propose d'ignorer cette ligne",
       "createRule": "Créer une règle…",
-      "applyRules": "Essayer les règles"
+      "applyRules": "Essayer les règles",
+      "planned": "({amount} prévu)",
+      "pickForecast": "Choisir une prévision",
+      "unmatched": "{count, plural, one {# prévision de la période sans ligne} other {# prévisions de la période sans ligne}}",
+      "unmatchedHint": "Si une ligne du relevé est l'une d'elles, choisissez-la sur la ligne : sinon l'écriture sera créée en double."
     },
     "rules": {
       "title": "Règles",

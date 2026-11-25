@@ -32,6 +32,7 @@ export interface Batch {
 export interface MatchedEntry {
   id: string;
   date: string;
+  amount: string;
   description: string;
   subCategoryId: string;
   reconciled: boolean;
@@ -72,6 +73,10 @@ export interface BatchDetail {
   currency: string;
   bookCurrency: string;
   lines: BatchLine[];
+  /** Forecasts of the account no line is, to choose by hand. */
+  forecasts: MatchedEntry[];
+  /** Forecasts dated within the statement that no line is: likely to be written twice. */
+  unmatched: MatchedEntry[];
   /** What the opening balance becomes, when the statement can tell. */
   opening: {
     date: string;
