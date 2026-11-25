@@ -297,13 +297,15 @@ export function journalRoutes(db: Db) {
             .select({
               accountId: bookAccount.id,
               currency: bookAccount.currency,
-              reconciled: sql<string>`coalesce(sum(${journalEntry.amount}) filter (where ${journalEntry.reconciled}), 0)`,
-              total: sql<string>`coalesce(sum(${journalEntry.amount}), 0)`,
+              // The opening balance is what the bank balance holds that no entry
+              // explains, so it counts in the reconciled balance as in the total.
+              reconciled: sql<string>`${bookAccount.openingBalance} + coalesce(sum(${journalEntry.amount}) filter (where ${journalEntry.reconciled}), 0)`,
+              total: sql<string>`${bookAccount.openingBalance} + coalesce(sum(${journalEntry.amount}), 0)`,
             })
             .from(bookAccount)
             .leftJoin(journalEntry, eq(journalEntry.accountId, bookAccount.id))
             .where(eq(bookAccount.bookId, bookId))
-            .groupBy(bookAccount.id, bookAccount.currency);
+            .groupBy(bookAccount.id, bookAccount.currency, bookAccount.openingBalance);
         });
         return c.json(
           rows.map((row) => ({
@@ -335,6 +337,7 @@ export function journalRoutes(db: Db) {
               .select({
                 id: bookAccount.id,
                 currency: bookAccount.currency,
+                openingBalance: bookAccount.openingBalance,
                 archived: sql<boolean>`${bookAccount.archivedAt} is not null`,
               })
               .from(bookAccount)
@@ -365,9 +368,13 @@ export function journalRoutes(db: Db) {
               .orderBy(asc(journalEntry.date)),
             Promise.all(years.map((year) => monthEnds(tx, bookId, bookCurrency, year))),
           ]);
-          const minor = (text: string | undefined, currency: string) =>
-            toDecimalString(money(BigInt(text ?? "0"), currency));
-          const openingOf = new Map(opening.map((row) => [row.accountId, row.total]));
+          // The account's own opening balance, then the entries before the window.
+          const openingOf = new Map(
+            accounts.map((a) => [a.id, a.openingBalance] as [string, bigint]),
+          );
+          for (const row of opening) {
+            openingOf.set(row.accountId, (openingOf.get(row.accountId) ?? 0n) + BigInt(row.total));
+          }
           const changes = new Map<string, Map<string, bigint>>();
           const addChange = (accountId: string, date: string, amount: bigint) => {
             const byDate = changes.get(accountId) ?? new Map<string, bigint>();
@@ -389,7 +396,7 @@ export function journalRoutes(db: Db) {
             accountId: id,
             currency,
             archived,
-            opening: minor(openingOf.get(id), currency),
+            opening: toDecimalString(money(openingOf.get(id) ?? 0n, currency)),
             changes: [...(changes.get(id) ?? [])]
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([date, amount]) => ({

@@ -15,7 +15,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=../../.env src/db/migrate-cli.ts",
     "import:reference": "tsx --env-file=../../.env src/import/cli.ts",
-    "import:journal": "tsx --env-file=../../.env src/import/journal-cli.ts"
+    "import:journal": "tsx --env-file=../../.env src/import/journal-cli.ts",
+    "migrate:adjustments": "tsx --env-file=../../.env src/import/adjustments-cli.ts"
   },
   "dependencies": {
     "@cash-scout/domain": "workspace:*",

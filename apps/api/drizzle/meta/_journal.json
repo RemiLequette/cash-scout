@@ -134,6 +134,13 @@
       "when": 1795551032084,
       "tag": "0018_natures_without_direction",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795612667280,
+      "tag": "0019_opening_balance",
+      "breakpoints": true
     }
   ]
 }

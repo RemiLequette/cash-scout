@@ -66,7 +66,7 @@ function BookView({ bookId, view }: { bookId: string; view: BookView }) {
     case "budget":
       return <BudgetPage bookId={bookId} bookCurrency={book.data.currency} canEdit={canEdit} />;
     case "reference":
-      return <ReferenceData bookId={bookId} canEdit={canEdit} />;
+      return <ReferenceData bookId={bookId} bookCurrency={book.data.currency} canEdit={canEdit} />;
     case "settings":
       return (
         <Stack>

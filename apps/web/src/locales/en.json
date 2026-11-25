@@ -147,6 +147,18 @@
     "editPaymentType": "Edit payment type",
     "emptyCategories": "No categories yet. Start with a group, such as Daily life, then add its categories.",
     "emptyAccounts": "No accounts yet.",
+    "openingBalance": "Opening balance",
+    "setOpening": "Opening balance…",
+    "setOpeningTitle": "Opening balance of {name}",
+    "openingIntro": "The opening balance is the part of the account's balance that no entry explains: what came before the first entry, and whatever is missing. It sits in no category and counts in no total or budget.",
+    "openingFromBalance": "From the bank balance",
+    "openingAmount": "Direct amount",
+    "bankBalance": "Balance read in your bank",
+    "bankBalanceHint": "The opening balance is worked out so that the reconciled entries give this balance, whatever their date.",
+    "openingAmountHint": "The opening balance itself, as it will be saved.",
+    "openingRateHint": "1 {from} = how many {to}. Required unless the account already has entries: its latest rate is used.",
+    "openingNow": "Current opening balance: {amount}",
+    "openingAfter": "New opening balance: {amount}",
     "emptyPaymentTypes": "No payment types yet."
   },
   "dashboard": {

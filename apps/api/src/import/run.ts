@@ -30,7 +30,7 @@ export async function runImport<T>(
       return run(tx);
     });
   } catch (error) {
-    console.error(`Import failed, nothing was imported: ${(error as Error).message}`);
+    console.error(`Failed, nothing was changed: ${(error as Error).message}`);
     process.exitCode = 1;
     return undefined;
   } finally {

@@ -20,7 +20,8 @@
     "db:generate": "pnpm --filter @cash-scout/api db:generate",
     "db:migrate": "pnpm --filter @cash-scout/api db:migrate",
     "import:reference": "pnpm --filter @cash-scout/api import:reference",
-    "import:journal": "pnpm --filter @cash-scout/api import:journal"
+    "import:journal": "pnpm --filter @cash-scout/api import:journal",
+    "migrate:adjustments": "pnpm --filter @cash-scout/api migrate:adjustments"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
