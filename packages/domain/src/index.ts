@@ -6,3 +6,4 @@ export * from "./budget.js";
 export * from "./projection.js";
 export * from "./dashboard.js";
 export * from "./opening.js";
+export * from "./statement.js";

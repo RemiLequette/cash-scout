@@ -8,18 +8,29 @@ Real statements are personal data: keep them under `local/statements/`, which Gi
 
 Three banks, three formats, no common ground:
 
-|                 | Boursorama                                           | Caisse d'Epargne                            | ABN AMRO                                        |
-| --------------- | ---------------------------------------------------- | ------------------------------------------- | ----------------------------------------------- |
-| File            | CSV `;`, UTF-8 with BOM                              | CSV `;`, ASCII (accents stripped), CRLF     | `.xls` (binary OLE), one sheet                  |
-| Date            | `2026-10-30`, operation and value dates              | `30/10/2026`, three dates                   | `20260820`, a number                            |
-| Amount          | one signed column, decimal comma                     | two columns, debit and credit, explicit `+` | one signed number                               |
-| Account         | number and name on every line                        | none (only in the file name)                | number and currency on every line               |
-| Label           | raw and cleaned                                      | short, long and extra information           | one structured string (`/TRTP/…/NAME/…/REMI/…`) |
-| Bank category   | two levels                                           | almost always "to categorise"               | none                                            |
-| Line identifier | none                                                 | `Reference`, often empty                    | none                                            |
-| Running balance | after every line (decimal point, unlike the amounts) | none                                        | start and end balance on every line             |
+|                 | Boursorama                                                                                    | Caisse d'Epargne                            | ABN AMRO                                        |
+| --------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------- |
+| File            | CSV `;`, UTF-8 with BOM                                                                       | CSV `;`, ASCII (accents stripped), CRLF     | `.xls` (binary OLE), one sheet                  |
+| Date            | `2026-10-30`, operation and value dates                                                       | `30/10/2026`, three dates                   | `20260820`, a number                            |
+| Amount          | one signed column, decimal comma                                                              | two columns, debit and credit, explicit `+` | one signed number                               |
+| Account         | number and name on every line                                                                 | none (only in the file name)                | number and currency on every line               |
+| Label           | raw and cleaned                                                                               | short, long and extra information           | one structured string (`/TRTP/…/NAME/…/REMI/…`) |
+| Bank category   | two levels                                                                                    | almost always "to categorise"               | none                                            |
+| Line identifier | none                                                                                          | `Reference`, often empty                    | none                                            |
+| Running balance | at the end of each day, the same on every line of the day (decimal point, unlike the amounts) | none                                        | start and end balance on every line             |
 
 Consequences: one parser per bank layout, a spreadsheet reader for `.xls`, no reliable line identifier, and a running balance for two banks out of three.
+
+## Statement reading (built)
+
+A file is read in two layers, so the same code serves any bank:
+
+- `packages/domain/src/statement.ts`: a **column mapping** (the columns by header text or position, the date format, the decimal separator, one signed amount or debit and credit columns) turns a table of cells into statement lines. A line that cannot be read is reported and left out; a file that lacks a mapped column is refused, which catches a file given to the wrong preset.
+- `apps/api/src/statements/`: reads a CSV file into that table (encoding, delimiter, byte order mark), and holds the **presets** of the banks (Boursorama, Caisse d'Epargne so far; ABN AMRO waits for the `.xls` reader).
+
+A first screen uses it: **Import a statement** in the book's menu. The user picks the account, the bank format and the CSV file; `POST /books/:bookId/statements/preview` reads it and returns the lines, the sum, the account numbers the file mentions, the lines it could not read, and the days whose balance does not follow. Nothing is saved: it is the base of the review screen.
+
+Checked on a year of real statements: every line of both files is read. Boursorama's balance is the balance at the **end of the day**, so it checks the sum of a day, not of one line; it held on 165 of 167 day changes.
 
 ## Pipeline
 

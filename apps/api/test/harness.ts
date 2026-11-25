@@ -34,11 +34,18 @@ export function createHarness() {
       .map((c) => c.split(";")[0])
       .join("; ");
 
+    /** A JSON body is sent as JSON; bytes (a file) are sent as they are. */
     function request(method: string, path: string, body?: unknown) {
+      const raw = body instanceof Uint8Array;
       return app.request(`/api${path}`, {
         method,
-        headers: { cookie, ...(body ? { "content-type": "application/json" } : {}) },
-        body: body ? JSON.stringify(body) : undefined,
+        headers: {
+          cookie,
+          ...(body
+            ? { "content-type": raw ? "application/octet-stream" : "application/json" }
+            : {}),
+        },
+        body: body ? (raw ? body : JSON.stringify(body)) : undefined,
       });
     }
 

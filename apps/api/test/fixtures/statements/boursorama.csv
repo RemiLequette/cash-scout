@@ -1,0 +1,5 @@
+﻿"Date Opération";"Date Valeur";Libellé;"Libellé Suggéré";Catégorie;"Catégorie Parente";Solde;Commentaire;"Numéro Compte";"Libellé Compte";Solde;Pointage
+2026-10-30;2026-10-30;"CARTE 28/10/26 BOULANGERIE DUPONT CB*0000";"Boulangerie Dupont";Alimentation;"Vie quotidienne";-7,20;;00000000001;"Compte Commun";541.8;Non
+2026-10-30;2026-10-30;"CARTE 29/10/26 SUPERMARCHE TEST CB*0000";"Supermarche Test";Alimentation;"Vie quotidienne";-19,15;;00000000001;"Compte Commun";549;Non
+2026-10-28;2026-10-28;"VIR Virement depuis Compte Perso";"Vir Virement Depuis Compte Perso";"Mouvements internes créditeurs";"Mouvements internes créditeurs";5,00;;00000000001;"Compte Commun";568.15;Oui
+2026-10-27;2026-10-27;"PRLV SEPA ENERGIE TEST";"Energie Test";"Gaz, électricité";Logement;-1 234,56;;00000000001;"Compte Commun";563.15;Non
