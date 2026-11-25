@@ -40,6 +40,7 @@ import {
   bookAccount,
   category,
   categoryGroup,
+  importLine,
   journalEntry,
   nature,
   paymentType,
@@ -687,6 +688,11 @@ export function referenceRoutes(db: Db) {
             .set({ subCategoryId: targetId })
             .where(and(eq(journalEntry.bookId, bookId), eq(journalEntry.subCategoryId, id)))
             .returning({ id: journalEntry.id });
+          // The choices made in statement reviews follow.
+          await tx
+            .update(importLine)
+            .set({ subCategoryId: targetId })
+            .where(and(eq(importLine.bookId, bookId), eq(importLine.subCategoryId, id)));
           await tx
             .delete(subCategory)
             .where(and(eq(subCategory.id, id), eq(subCategory.bookId, bookId)));

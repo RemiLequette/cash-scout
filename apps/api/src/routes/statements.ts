@@ -1,14 +1,33 @@
-import { lineFingerprints, money, previewOf, toDecimalString } from "@cash-scout/domain";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { zValidator } from "@hono/zod-validator";
+import {
+  importRequestSchema,
+  lineFingerprints,
+  money,
+  previewOf,
+  reviewChangesSchema,
+  toDecimalString,
+} from "@cash-scout/domain";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db } from "../db/client.js";
-import { bookAccount, importBatch, importLine } from "../db/schema.js";
+import { importBatch, importLine } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { readStatementFile } from "../statements/file.js";
 import { presets } from "../statements/presets.js";
+import { statementRuleRoutes } from "./statement-rules.js";
+import {
+  applyChanges,
+  applyRules,
+  batchOf,
+  importBatchLines,
+  linesOf,
+  openingOf,
+  proposals,
+  undoImport,
+} from "../statements/review.js";
 import { idOf, requireRole } from "./access.js";
-import { accountOf, usable } from "./journal.js";
+import { accountOf, bookCurrencyOf, usable } from "./journal.js";
 
 /** A statement is a few hundred lines: a megabyte is far more than a year of them. */
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -55,6 +74,8 @@ function parseUpload(file: Awaited<ReturnType<typeof readUpload>>, currency: str
 export function statementRoutes(db: Db) {
   return (
     new Hono<AppEnv>()
+      .route("/rules", statementRuleRoutes(db))
+
       .get("/presets", async (c) => {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
@@ -119,7 +140,8 @@ export function statementRoutes(db: Db) {
           for (let i = 0; i < rows.length; i += CHUNK) {
             await tx.insert(importLine).values(rows.slice(i, i + CHUNK));
           }
-          return { id: batch!.id, lines: rows.length, skipped: parsed.errors.length };
+          const proposed = await applyRules(tx, bookId, batch!.id);
+          return { id: batch!.id, lines: rows.length, skipped: parsed.errors.length, proposed };
         });
         return c.json(created, 201);
       })
@@ -151,74 +173,135 @@ export function statementRoutes(db: Db) {
         return c.json(rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })));
       })
 
-      // One batch with its lines. A line is flagged as a duplicate when an earlier
-      // batch of the same account already holds it (same date, amount, label and rank).
+      // One batch with its lines, what was decided for them, the entries of the
+      // journal they may be, and the opening balance the statement gives. A line
+      // is flagged as a duplicate when an earlier batch of the same account
+      // already holds it (same date, amount, label and rank).
       .get("/batches/:id", async (c) => {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const id = idOf(c.req.param("id"), "Batch");
         const result = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
-          const [batch] = await tx
-            .select({
-              id: importBatch.id,
-              accountId: importBatch.accountId,
-              preset: importBatch.preset,
-              fileName: importBatch.fileName,
-              createdAt: importBatch.createdAt,
-              currency: bookAccount.currency,
-            })
-            .from(importBatch)
-            .innerJoin(bookAccount, eq(bookAccount.id, importBatch.accountId))
-            .where(and(eq(importBatch.id, id), eq(importBatch.bookId, bookId)));
-          if (!batch) {
-            throw new HTTPException(404, { message: "Batch not found" });
-          }
-          // The outer column is written out: Drizzle leaves the table off in a single-table query,
-          // which would read as the subquery's own column.
-          const seenBefore = sql<boolean>`exists (
-            select 1 from import_line other
-            join import_batch earlier on earlier.id = other.batch_id
-            where other.book_id = ${bookId}
-              and other.fingerprint = import_line.fingerprint
-              and earlier.account_id = ${batch.accountId}
-              and (earlier.created_at, earlier.id) < (${batch.createdAt.toISOString()}::timestamptz, ${batch.id}::uuid)
-          )`;
-          const lines = await tx
-            .select({
-              id: importLine.id,
-              row: importLine.row,
-              date: importLine.date,
-              valueDate: importLine.valueDate,
-              amount: importLine.amount,
-              label: importLine.label,
-              counterparty: importLine.counterparty,
-              memo: importLine.memo,
-              reference: importLine.reference,
-              bankCategory: importLine.bankCategory,
-              balance: importLine.balance,
-              status: importLine.status,
-              duplicate: seenBefore,
-            })
-            .from(importLine)
-            .where(eq(importLine.batchId, id))
-            .orderBy(desc(importLine.date), asc(importLine.row));
-          return { batch, lines };
+          const batch = await batchOf(tx, bookId, id);
+          const seen = await tx.execute<{ id: string }>(sql`
+            select line.id from import_line line
+            where line.batch_id = ${id} and exists (
+              select 1 from import_line other
+              join import_batch earlier on earlier.id = other.batch_id
+              where other.book_id = ${bookId}
+                and other.fingerprint = line.fingerprint
+                and earlier.account_id = ${batch.accountId}
+                and (earlier.created_at, earlier.id) < (${batch.createdAt.toISOString()}::timestamptz, ${batch.id}::uuid)
+            )`);
+          const lines = await linesOf(tx, id);
+          return {
+            batch,
+            lines,
+            duplicates: new Set([...seen].map((r) => r.id)),
+            ...(await proposals(tx, bookId, batch.accountId, lines)),
+            opening: await openingOf(tx, batch.accountId, lines),
+            bookCurrency: await bookCurrencyOf(tx, bookId),
+          };
         });
-        const text = (minor: bigint) => toDecimalString(money(minor, result.batch.currency));
+        const { batch, entries, matches, opening } = result;
+        const { currency } = batch.account;
+        const text = (minor: bigint) => toDecimalString(money(minor, currency));
+        const entryOf = (entryId: string) => {
+          const entry = entries.get(entryId)!;
+          return {
+            id: entry.id,
+            date: entry.date,
+            description: entry.description,
+            subCategoryId: entry.subCategoryId,
+            reconciled: entry.reconciled,
+            transfer: entry.transferId !== null,
+          };
+        };
         return c.json({
-          id: result.batch.id,
-          accountId: result.batch.accountId,
-          preset: result.batch.preset,
-          fileName: result.batch.fileName,
-          createdAt: result.batch.createdAt.toISOString(),
-          currency: result.batch.currency,
+          id: batch.id,
+          accountId: batch.accountId,
+          preset: batch.preset,
+          fileName: batch.fileName,
+          createdAt: batch.createdAt.toISOString(),
+          currency,
+          bookCurrency: result.bookCurrency,
           lines: result.lines.map((l) => ({
-            ...l,
+            id: l.id,
+            row: l.row,
+            date: l.date,
             amount: text(l.amount),
+            label: l.label,
+            counterparty: l.counterparty,
+            memo: l.memo,
+            bankCategory: l.bankCategory,
             balance: l.balance === null ? null : text(l.balance),
+            status: l.status,
+            subCategoryId: l.subCategoryId,
+            description: l.description,
+            ruleId: l.ruleId,
+            entry: l.entryId && entries.has(l.entryId) ? entryOf(l.entryId) : null,
+            candidates: (matches.get(l.id) ?? []).map(entryOf),
+            duplicate: result.duplicates.has(l.id),
           })),
+          opening: opening && {
+            date: opening.date,
+            balance: text(opening.balance),
+            current: text(batch.account.openingBalance),
+            proposed: text(opening.proposed),
+            suggested: opening.suggested,
+          },
         });
+      })
+
+      // Tries the rules again on the lines that have nothing chosen yet.
+      .post("/batches/:id/rules", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Batch");
+        const applied = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          await batchOf(tx, bookId, id);
+          return applyRules(tx, bookId, id);
+        });
+        return c.json({ applied });
+      })
+
+      // The user's decisions on some lines: all are applied, or none.
+      .patch("/batches/:id/lines", zValidator("json", reviewChangesSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Batch");
+        const { changes } = c.req.valid("json");
+        await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          await applyChanges(tx, bookId, id, changes);
+        });
+        return c.body(null, 204);
+      })
+
+      .post("/batches/:id/import", zValidator("json", importRequestSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Batch");
+        const request = c.req.valid("json");
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          return importBatchLines(tx, bookId, id, request);
+        });
+        return c.json(result);
+      })
+
+      // Gives the journal back what the import changed.
+      .post("/batches/:id/undo", async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Batch");
+        const result = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          return undoImport(tx, bookId, id);
+        });
+        return c.json(result);
       })
 
       .delete("/batches/:id", async (c) => {

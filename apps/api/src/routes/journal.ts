@@ -111,7 +111,7 @@ export const entryColumns = {
   createdAt: journalEntry.createdAt,
   updatedAt: journalEntry.updatedAt,
 };
-export type EntryRow = Omit<typeof journalEntry.$inferSelect, "bookId">;
+export type EntryRow = Omit<typeof journalEntry.$inferSelect, "bookId" | "importBatchId">;
 
 /** Shapes an entry for JSON: amounts as decimal text in their currency. */
 export function outEntry(row: EntryRow, currency: string, bookCurrency: string) {
