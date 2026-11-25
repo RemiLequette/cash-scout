@@ -379,5 +379,16 @@
       "sourceRate": "Enter a rate above zero, e.g. 0.2.",
       "destinationRate": "Enter a rate above zero, e.g. 0.2."
     }
+  },
+  "help": {
+    "menu": "Help",
+    "online": "Online help",
+    "about": "About",
+    "topics": "Help topics"
+  },
+  "about": {
+    "version": "Version {version}",
+    "license": "Open source, MIT license.",
+    "source": "Source code on GitHub"
   }
 }

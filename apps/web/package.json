@@ -1,6 +1,6 @@
 {
   "name": "@cash-scout/web",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,7 +21,9 @@
     "i18next-icu": "^2.7.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-i18next": "^18.0.3"
+    "react-i18next": "^18.0.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@cash-scout/api": "workspace:*",
