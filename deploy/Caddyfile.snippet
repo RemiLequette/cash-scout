@@ -1,0 +1,7 @@
+# Add this block to the Caddyfile of the server, then reload Caddy
+# (docker exec <caddy-container> caddy reload --config /etc/caddy/Caddyfile).
+# "cash-scout" is the network alias of the app container on the Caddy network.
+cash.smith.lequette.eu {
+	encode zstd gzip
+	reverse_proxy cash-scout:3000
+}
