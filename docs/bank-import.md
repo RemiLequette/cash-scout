@@ -69,7 +69,7 @@ Today the missing past of an account is made up with entries of an "Adjustment" 
 - The balance of an account is its opening balance plus its entries. The opening balance is in no category, so no total, budget or dashboard sees it.
 - It is edited in the account's reference data, not in the journal: the journal shows no line for it. The account's reference data is also where the IBAN and account number will go (see [Account identity](#account-identity)).
 - **Holes in the middle are not handled.** Whatever is missing is in the opening balance. The balance curve of the past may be wrong; what matters is the right balance now.
-- The Adjustment sub-category is removed (see [Migration](#migration-of-the-adjustments)).
+- The Adjustment sub-category is removed (see [Removing the adjustments](#removing-the-adjustments)).
 
 ### Setting it from a bank balance
 
@@ -90,19 +90,12 @@ Banks without a running balance (Caisse d'Epargne here) ask the user for a balan
 
 For an account not in the book currency, the opening balance keeps the account amount, the book amount and the rate, as an entry does. Setting it asks for the rate, proposed from the account's last known rate.
 
-### Migration of the adjustments
+### Removing the adjustments
 
-The entries of the Adjustment sub-category are deleted, then the sub-category. The opening balance of each account is then set again from its bank balance, with the account's "Opening balance…" action: this is simpler than carrying the sums over, and gives the right balance whatever the adjustments held.
+Done by hand, no command: delete the entries of the Adjustment sub-category in the journal, delete the sub-category in the reference data, then set the opening balance of each account again from its bank balance ("Opening balance…" in the account's menu).
 
-- The sub-category is found by its **name** (data, not code). A **dry run** first lists, per account, the number of entries, the sum (what the balance will lose), the months touched, and any category left empty, so the user checks it found the right one.
+- Dump the database first, as in [Deploying to a server](deployment.md).
 - The statistics of the past change: the adjustments leave the flows and the budgets of their months. That is the purpose, but it shows. Balances are wrong until each opening balance is set again.
-- A backup comes before the real run: dump the database to `local/backups/` as in [Deploying to a server](deployment.md), then pass `--backed-up`.
-- A one-shot command, not part of the application. Without `--apply` it only reports:
-
-```bash
-pnpm migrate:adjustments --book <book id> --user <email> [--name Ajustement]
-pnpm migrate:adjustments --book <book id> --user <email> --apply --backed-up
-```
 
 ## Account identity
 
