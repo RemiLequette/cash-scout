@@ -443,6 +443,77 @@ export const journalEntry = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Bank statement import (see docs/bank-import.md). A statement file becomes an
+// import batch: its lines are kept, reviewed over several sittings, then imported.
+// ---------------------------------------------------------------------------
+
+/** A statement file read for one account. */
+export const importBatch = pgTable(
+  "import_batch",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    accountId: uuid("account_id").notNull(),
+    /** The bank format the file was read with. */
+    preset: text("preset").notNull(),
+    fileName: text("file_name").notNull(),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    ...timestamps,
+    version: version(),
+  },
+  (t) => [
+    unique().on(t.id, t.bookId),
+    foreignKey({
+      columns: [t.accountId, t.bookId],
+      foreignColumns: [bookAccount.id, bookAccount.bookId],
+    }),
+    index("import_batch_book_idx").on(t.bookId),
+    index("import_batch_account_idx").on(t.accountId),
+  ],
+);
+
+export const importLineStatus = pgEnum("import_line_status", ["review", "validated", "ignored"]);
+
+/** One line of a statement, as read; nothing in it is matched with the book yet. */
+export const importLine = pgTable(
+  "import_line",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    batchId: uuid("batch_id").notNull(),
+    /** The line's number in the file, from 1. */
+    row: integer("row").notNull(),
+    date: date("date", { mode: "string" }).notNull(),
+    valueDate: date("value_date", { mode: "string" }),
+    /** Signed, in minor units of the account currency. */
+    amount: bigint("amount", { mode: "bigint" }).notNull(),
+    label: text("label").notNull().default(""),
+    counterparty: text("counterparty").notNull().default(""),
+    memo: text("memo").notNull().default(""),
+    reference: text("reference").notNull().default(""),
+    bankCategory: text("bank_category").notNull().default(""),
+    /** The balance after the line (end of day for some banks), when the statement gives it. */
+    balance: bigint("balance", { mode: "bigint" }),
+    accountNumber: text("account_number").notNull().default(""),
+    /** The cells of the source line. */
+    raw: jsonb("raw").$type<string[]>().notNull(),
+    /** Date, amount, normalised label and rank among identical lines: the same line in another file has the same one. */
+    fingerprint: text("fingerprint").notNull(),
+    status: importLineStatus("status").notNull().default("review"),
+    ...timestamps,
+    version: version(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.batchId, t.bookId],
+      foreignColumns: [importBatch.id, importBatch.bookId],
+    }).onDelete("cascade"),
+    index("import_line_batch_idx").on(t.batchId),
+    index("import_line_fingerprint_idx").on(t.bookId, t.fingerprint),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Budgets (see README, Budgets and cash projection).
 // ---------------------------------------------------------------------------
 

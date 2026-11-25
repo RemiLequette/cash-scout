@@ -30,6 +30,8 @@ A file is read in two layers, so the same code serves any bank:
 
 A first screen uses it: **Import a statement** in the book's menu. The user picks the account, the bank format and the CSV file; `POST /books/:bookId/statements/preview` reads it and returns the lines, the sum, the account numbers the file mentions, the lines it could not read, and the days whose balance does not follow. Nothing is saved: it is the base of the review screen.
 
+**Batches** keep what was read. "Keep for review" stores the file as an `import_batch` (the account, the format, the file name, who added it) with one `import_line` per line: the fields read, the source cells, a status (to review, validated, ignored) and a **fingerprint**. A batch can be opened again, over several sittings, and deleted with its lines; the journal is not touched. A line is flagged **seen before** when an earlier batch of the same account holds the same fingerprint, so two overlapping exports do not double what they share. Batches are only visible to editors and owners of the book (row-level security), since a statement holds account numbers and labels.
+
 Checked on a year of real statements: every line of both files is read. Boursorama's balance is the balance at the **end of the day**, so it checks the sum of a day, not of one line; it held on 165 of 167 day changes.
 
 ## Pipeline
@@ -119,7 +121,7 @@ Boursorama and ABN AMRO give the account number on each line. An account that st
 3. **Rules.** The rule model, the engine (pure, in `packages/domain`), creation from the review.
 4. **Duplicates, reconciliations and transfers.** The matching, then the warnings in the review.
 
-Step 1 is built: the README, the architecture and the online help are updated with it.
+Step 1 is built: the README, the architecture and the online help are updated with it. Step 2 is half built: reading, preview and batches are done; the `.xls` reader (ABN AMRO) and importing a batch into the journal remain.
 
 ## Open points
 

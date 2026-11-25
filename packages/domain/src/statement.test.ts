@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   balanceBreaks,
   columnMappingSchema,
+  lineFingerprints,
   previewOf,
   readStatement,
   statementDate,
@@ -187,5 +188,43 @@ describe("balanceBreaks and previewOf", () => {
     const preview = previewOf({ lines, errors: [] }, "EUR");
     expect(preview).toMatchObject({ total: "-10.00", accountNumbers: ["123"] });
     expect(preview.lines[0]).toMatchObject({ amount: "-10.50", balance: null });
+  });
+});
+
+describe("lineFingerprints", () => {
+  const line = (date: string, amount: bigint, label: string) => ({
+    row: 0,
+    date,
+    valueDate: null,
+    amount,
+    label,
+    counterparty: "",
+    memo: "",
+    reference: "",
+    bankCategory: "",
+    balance: null,
+    accountNumber: "",
+    raw: [],
+  });
+
+  it("tells identical lines apart by their rank", () => {
+    const prints = lineFingerprints([
+      line("2026-10-30", -320n, "Cafe  Paul"),
+      line("2026-10-30", -320n, "cafe paul"),
+      line("2026-10-30", -450n, "cafe paul"),
+    ]);
+    expect(new Set(prints).size).toBe(3);
+    expect(prints[0]).toBe("2026-10-30|-320|cafe paul|1");
+    expect(prints[1]).toBe("2026-10-30|-320|cafe paul|2");
+  });
+
+  it("gives the lines two overlapping exports share the same fingerprints", () => {
+    const march = [line("2026-03-02", -100n, "a"), line("2026-03-01", -100n, "a")];
+    const week = [
+      line("2026-03-02", -100n, "a"),
+      line("2026-03-01", -100n, "a"),
+      line("2026-02-28", 5n, "b"),
+    ];
+    expect(lineFingerprints(week).slice(0, 2)).toEqual(lineFingerprints(march));
   });
 });

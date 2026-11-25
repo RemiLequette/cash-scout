@@ -325,3 +325,21 @@ export function previewOf(parsed: ParsedStatement, currency: string): StatementP
     accountNumbers: [...new Set(parsed.lines.map((l) => l.accountNumber).filter((n) => n !== ""))],
   };
 }
+
+/**
+ * A fingerprint for each line, to recognise the same line in another file of the
+ * same account. It joins the date, the amount, the label (lower case, spaces
+ * collapsed) and the **rank** among identical lines in the file, so two coffees
+ * at the same price on the same day stay two lines. Two exports that overlap
+ * give the same fingerprints to the lines they share.
+ */
+export function lineFingerprints(lines: readonly StatementLine[]): string[] {
+  const seen = new Map<string, number>();
+  return lines.map((line) => {
+    const label = line.label.toLocaleLowerCase().replace(/\s+/g, " ").trim();
+    const base = `${line.date}|${line.amount}|${label}`;
+    const rank = (seen.get(base) ?? 0) + 1;
+    seen.set(base, rank);
+    return `${base}|${rank}`;
+  });
+}

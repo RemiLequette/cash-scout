@@ -163,6 +163,17 @@
     "emptyPaymentTypes": "Aucun moyen de paiement."
   },
   "statements": {
+    "keep": "Garder pour la revue",
+    "kept": "{count, plural, one {# ligne gardée} other {# lignes gardées}} : le relevé est dans la liste ci-dessous.",
+    "saved": "Relevés gardés",
+    "period": "Période",
+    "lines": "Lignes",
+    "toReview": "À revoir",
+    "addedOn": "Ajouté le",
+    "open": "Ouvrir",
+    "close": "Fermer",
+    "duplicate": "Déjà vue",
+    "deleteConfirm": "Supprimer le relevé {name} et ses lignes ? Cela ne touche pas au journal.",
     "title": "Importer un relevé bancaire",
     "intro": "Choisissez le compte, le format de votre banque et le fichier CSV exporté. Le fichier est lu et affiché ici : rien n'est encore enregistré dans le journal.",
     "account": "Compte",
