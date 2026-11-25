@@ -240,6 +240,7 @@ export function statementRoutes(db: Db) {
             subCategoryId: l.subCategoryId,
             description: l.description,
             ruleId: l.ruleId,
+            paymentTypeId: l.paymentTypeId,
             entry: l.entryId && entries.has(l.entryId) ? entryOf(l.entryId) : null,
             candidates: (matches.get(l.id) ?? []).map(entryOf),
             duplicate: result.duplicates.has(l.id),

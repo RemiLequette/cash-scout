@@ -111,6 +111,8 @@ export const lineChangeSchema = z
     subCategoryId: z.uuid().nullable().optional(),
     /** The line is this entry of the journal: it gets reconciled. */
     entryId: z.uuid().nullable().optional(),
+    /** The payment type of the entry to create. */
+    paymentTypeId: z.uuid().nullable().optional(),
     description: z.string().trim().max(500).nullable().optional(),
   })
   .refine((c) => !(c.subCategoryId && c.entryId), {

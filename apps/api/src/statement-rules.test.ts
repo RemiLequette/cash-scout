@@ -23,6 +23,7 @@ interface Line {
   counterparty: string;
   status: string;
   subCategoryId: string | null;
+  paymentTypeId: string | null;
   description: string | null;
   ruleId: string | null;
 }
@@ -50,6 +51,7 @@ async function setup() {
   });
   const sub = (name: string) =>
     created(`${ref}/sub-categories`, { categoryId, names: { fr: name } });
+  const payment = (name: string) => created(`${ref}/payment-types`, { names: { fr: name } });
   const rules = `/books/${bookId}/statements/rules`;
   const batches = `/books/${bookId}/statements/batches`;
   const keep = async () =>
@@ -70,6 +72,7 @@ async function setup() {
     rules,
     batches,
     sub,
+    payment,
     keep,
     lines,
     listed,
@@ -168,10 +171,11 @@ describe("import rules", () => {
     });
     expect(await find("Boulangerie")).toMatchObject({ ruleId: null });
 
-    // Lines already given a rule keep it; a new order only reaches lines with nothing yet.
+    // A new order is tried again on the lines to review: only the line it changes moves.
     await b.owner.request("PUT", `${b.rules}/order`, { ids: [super_.id, broad.id, skip.id] });
     const again = await b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {});
-    expect(await again.json()).toEqual({ applied: 0 });
+    expect(await again.json()).toEqual({ applied: 1 });
+    expect(await find("Supermarche")).toMatchObject({ subCategoryId: food, ruleId: super_.id });
     const second = await b.keep();
     const line = (await b.lines(second.id)).find((l) => l.counterparty.startsWith("Supermarche"))!;
     expect(line).toMatchObject({ subCategoryId: food, description: "Courses", ruleId: super_.id });
@@ -203,6 +207,72 @@ describe("import rules", () => {
     });
     const retry = await b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {});
     expect(await retry.json()).toEqual({ applied: 0 });
+  });
+
+  it("gives the entry a payment type, and follows the rules when they change", async () => {
+    const b = await setup();
+    const food = await b.sub("Alimentation");
+    const card = await b.payment("Carte");
+    const transfer = await b.payment("Virement");
+    const rule = (await (
+      await b.add({ name: "Super", text: "supermarche", subCategoryId: food, paymentTypeId: card })
+    ).json()) as Rule;
+    // A payment type alone is an action.
+    await b.add({ name: "Cartes", text: "CARTE", paymentTypeId: card });
+    expect((await b.add({ name: "x", text: "a", paymentTypeId: crypto.randomUUID() })).status).toBe(
+      400,
+    );
+
+    const batch = await b.keep();
+    const line = async (name: string) =>
+      (await b.lines(batch.id)).find((l) => l.counterparty.startsWith(name))!;
+    expect(await line("Supermarche")).toMatchObject({ subCategoryId: food, paymentTypeId: card });
+
+    // Editing the rule reaches the proposal the user has not touched.
+    const edit = (body: object) =>
+      b.owner.request("PUT", `${b.rules}/${rule.id}`, {
+        name: "Super",
+        text: "supermarche",
+        subCategoryId: food,
+        ...body,
+      });
+    await edit({ paymentTypeId: transfer });
+    expect(
+      await (await b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {})).json(),
+    ).toEqual({
+      applied: 1,
+    });
+    expect(await line("Supermarche")).toMatchObject({ paymentTypeId: transfer, ruleId: rule.id });
+
+    // A change by hand is not a proposal any more, and the rules leave it alone.
+    const l = await line("Supermarche");
+    await b.owner.request("PATCH", `${b.batches}/${batch.id}/lines`, {
+      changes: [{ id: l.id, paymentTypeId: card }],
+    });
+    await edit({ text: "supermarche", paymentTypeId: transfer, description: "Changed" });
+    await b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {});
+    expect(await line("Supermarche")).toMatchObject({ paymentTypeId: card, ruleId: null });
+
+    // A rule that no longer fits takes its proposal back.
+    const other = await line("Boulangerie");
+    expect(other).toMatchObject({ paymentTypeId: card });
+    await b.owner.request(
+      "DELETE",
+      `${b.rules}/${(await b.listed()).find((r) => r.name === "Cartes")!.id}`,
+    );
+    await b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {});
+    expect(await line("Boulangerie")).toMatchObject({ paymentTypeId: null, ruleId: null });
+
+    // Importing writes the payment type on the new entry.
+    const validated = await b.owner.request("PATCH", `${b.batches}/${batch.id}/lines`, {
+      changes: [{ id: l.id, subCategoryId: food }],
+    });
+    expect(validated.status).toBe(204);
+    await b.owner.request("POST", `${b.batches}/${batch.id}/import`, {});
+    const journal = (await (await b.owner.request("GET", `/books/${b.bookId}/journal`)).json()) as {
+      entries: { paymentTypeId: string | null }[];
+    };
+    expect(journal.entries.map((e) => e.paymentTypeId)).toEqual([card]);
   });
 
   it("is closed to a stranger", async () => {

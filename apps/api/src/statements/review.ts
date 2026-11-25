@@ -21,6 +21,7 @@ import {
   importLine,
   importRule,
   journalEntry,
+  paymentType,
   subCategory,
 } from "../db/schema.js";
 import { checked } from "../routes/access.js";
@@ -175,6 +176,17 @@ export async function applyChanges(
     if (found.length !== subIds.length) throw bad("Unknown sub-category");
     if (found.some((s) => s.archivedAt)) throw bad("The sub-category is archived");
   }
+  const paymentIds = [
+    ...new Set(changes.flatMap((c) => (c.paymentTypeId ? [c.paymentTypeId] : []))),
+  ];
+  if (paymentIds.length > 0) {
+    const found = await tx
+      .select({ id: paymentType.id, archivedAt: paymentType.archivedAt })
+      .from(paymentType)
+      .where(and(eq(paymentType.bookId, bookId), inArray(paymentType.id, paymentIds)));
+    if (found.length !== paymentIds.length) throw bad("Unknown payment type");
+    if (found.some((p) => p.archivedAt)) throw bad("The payment type is archived");
+  }
   const entryIds = [...new Set(changes.flatMap((c) => (c.entryId ? [c.entryId] : [])))];
   const entries = new Map(
     entryIds.length === 0
@@ -211,10 +223,18 @@ export async function applyChanges(
     if (next.entryId) claimed.set(next.entryId, line.id);
     const description =
       change.description === undefined ? line.description : change.description || null;
-    Object.assign(line, next, { description });
+    const paymentTypeId =
+      change.paymentTypeId === undefined ? line.paymentTypeId : change.paymentTypeId;
+    // What the user changes by hand is no longer a rule's proposal; accepting one is not a change.
+    const touched =
+      (change.subCategoryId !== undefined && change.subCategoryId !== line.subCategoryId) ||
+      description !== line.description ||
+      paymentTypeId !== line.paymentTypeId;
+    const ruleId = touched ? null : line.ruleId;
+    Object.assign(line, next, { description, paymentTypeId, ruleId });
     await tx
       .update(importLine)
-      .set({ ...next, description })
+      .set({ ...next, description, paymentTypeId, ruleId })
       .where(eq(importLine.id, line.id));
   }
 }
@@ -385,6 +405,7 @@ export async function importBatchLines(
           accountId: batch.accountId,
           subCategoryId: line.subCategoryId,
           description: description.slice(0, 500),
+          paymentTypeId: line.paymentTypeId,
           amount: line.amount,
           plannedAmount: 0n,
           exchangeRate: rate,
@@ -485,11 +506,13 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
 }
 
 /**
- * Proposes what the book's rules say for the lines of a batch that have nothing
- * chosen yet (no sub-category, no entry): the first rule that fits sets its
- * sub-category and description, or marks the line to be ignored; a line a rule already
- * proposed something for is left as it is. The lines stay
- * to review: the user accepts the proposals. Returns how many lines a rule hit.
+ * Proposes what the book's rules say for the lines of a batch: the first rule that
+ * fits sets its sub-category, payment type and description, or marks the line to be
+ * ignored. It looks at the lines still to review that have no entry and nothing the
+ * user typed, so it can be run again after the rules changed: a line a rule had
+ * proposed something for is looked at again, and loses the proposal when no rule
+ * fits any more. The lines stay to review: the user accepts the proposals. Returns
+ * how many lines got a different proposal.
  */
 export async function applyRules(tx: Tx, bookId: string, batchId: string) {
   const batch = await batchOf(tx, bookId, batchId);
@@ -501,18 +524,32 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
         .where(and(eq(subCategory.bookId, bookId), isNotNull(subCategory.archivedAt)))
     ).map((s) => s.id),
   );
+  const archivedPayments = new Set(
+    (
+      await tx
+        .select({ id: paymentType.id })
+        .from(paymentType)
+        .where(and(eq(paymentType.bookId, bookId), isNotNull(paymentType.archivedAt)))
+    ).map((p) => p.id),
+  );
   const rules = (
     await tx
       .select()
       .from(importRule)
       .where(eq(importRule.bookId, bookId))
       .orderBy(asc(importRule.position), asc(importRule.createdAt))
-  ).filter((rule) => !rule.subCategoryId || !archived.has(rule.subCategoryId));
-  if (rules.length === 0) return 0;
+  ).filter(
+    (rule) =>
+      !(rule.subCategoryId && archived.has(rule.subCategoryId)) &&
+      !(rule.paymentTypeId && archivedPayments.has(rule.paymentTypeId)),
+  );
 
+  const same = (a: string | null, b: string | null) => a === b;
   const hits = new Map<string, string[]>();
+  const cleared: string[] = [];
   for (const line of await linesOf(tx, batchId)) {
-    if (line.status !== "review" || line.subCategoryId || line.entryId || line.ruleId) continue;
+    if (line.status !== "review" || line.entryId) continue;
+    if (!line.ruleId && (line.subCategoryId || line.description || line.paymentTypeId)) continue;
     const rule = firstRule(rules, {
       accountId: batch.accountId,
       currency: batch.account.currency,
@@ -522,16 +559,37 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
       memo: line.memo,
       bankCategory: line.bankCategory,
     });
-    if (rule) hits.set(rule.id, [...(hits.get(rule.id) ?? []), line.id]);
+    if (!rule) {
+      if (line.ruleId) cleared.push(line.id);
+    } else if (
+      rule.id !== line.ruleId ||
+      !same(rule.subCategoryId, line.subCategoryId) ||
+      !same(rule.paymentTypeId, line.paymentTypeId) ||
+      !same(rule.description, line.description)
+    ) {
+      hits.set(rule.id, [...(hits.get(rule.id) ?? []), line.id]);
+    }
   }
-  let applied = 0;
+  let changed = 0;
   for (const [ruleId, ids] of hits) {
     const rule = rules.find((r) => r.id === ruleId)!;
     await tx
       .update(importLine)
-      .set({ ruleId, subCategoryId: rule.subCategoryId, description: rule.description })
+      .set({
+        ruleId,
+        subCategoryId: rule.subCategoryId,
+        paymentTypeId: rule.paymentTypeId,
+        description: rule.description,
+      })
       .where(inArray(importLine.id, ids));
-    applied += ids.length;
+    changed += ids.length;
   }
-  return applied;
+  if (cleared.length > 0) {
+    await tx
+      .update(importLine)
+      .set({ ruleId: null, subCategoryId: null, paymentTypeId: null, description: null })
+      .where(inArray(importLine.id, cleared));
+    changed += cleared.length;
+  }
+  return changed;
 }

@@ -237,7 +237,8 @@
       "planned": "({amount} prévu)",
       "pickForecast": "Choisir une prévision",
       "unmatched": "{count, plural, one {# prévision de la période sans ligne} other {# prévisions de la période sans ligne}}",
-      "unmatchedHint": "Si une ligne du relevé est l'une d'elles, choisissez-la sur la ligne : sinon l'écriture sera créée en double."
+      "unmatchedHint": "Si une ligne du relevé est l'une d'elles, choisissez-la sur la ligne : sinon l'écriture sera créée en double.",
+      "paymentType": "Type de paiement"
     },
     "rules": {
       "title": "Règles",
@@ -267,7 +268,7 @@
       "up": "Monter",
       "down": "Descendre",
       "edit": "Modifier",
-      "deleteConfirm": "Supprimer la règle {name} ? Les propositions déjà faites aux lignes restent."
+      "deleteConfirm": "Supprimer la règle {name} ? Ses propositions aux lignes pas encore acceptées sont retirées."
     }
   },
   "dashboard": {

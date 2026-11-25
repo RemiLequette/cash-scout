@@ -1,13 +1,13 @@
 import { zValidator } from "@hono/zod-validator";
 import { ruleInputSchema, ruleOrderSchema, type RuleFields } from "@cash-scout/domain";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
-import { importRule } from "../db/schema.js";
+import { importLine, importRule } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, requireRole } from "./access.js";
-import { accountOf, subCategoryOf, usable } from "./journal.js";
+import { accountOf, paymentTypeOf, subCategoryOf, usable } from "./journal.js";
 
 const columns = {
   id: importRule.id,
@@ -20,6 +20,7 @@ const columns = {
   minAmount: importRule.minAmount,
   maxAmount: importRule.maxAmount,
   subCategoryId: importRule.subCategoryId,
+  paymentTypeId: importRule.paymentTypeId,
   description: importRule.description,
   ignore: importRule.ignore,
 };
@@ -29,6 +30,9 @@ async function values(tx: Tx, bookId: string, rule: RuleFields) {
   if (rule.accountId) await usable(accountOf(tx, bookId, rule.accountId), "account");
   if (rule.subCategoryId) {
     await usable(subCategoryOf(tx, bookId, rule.subCategoryId), "sub-category");
+  }
+  if (rule.paymentTypeId) {
+    await usable(paymentTypeOf(tx, bookId, rule.paymentTypeId), "payment type");
   }
   return rule;
 }
@@ -127,6 +131,18 @@ export function statementRuleRoutes(db: Db) {
         const id = idOf(c.req.param("id"), "Rule");
         await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
+          // The proposals it made to lines not yet accepted go with it.
+          await tx
+            .update(importLine)
+            .set({ ruleId: null, subCategoryId: null, paymentTypeId: null, description: null })
+            .where(
+              and(
+                eq(importLine.bookId, bookId),
+                eq(importLine.ruleId, id),
+                eq(importLine.status, "review"),
+                isNull(importLine.entryId),
+              ),
+            );
           const gone = await tx
             .delete(importRule)
             .where(and(eq(importRule.id, id), eq(importRule.bookId, bookId)))

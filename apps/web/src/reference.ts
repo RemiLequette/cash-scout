@@ -109,3 +109,12 @@ export function useSubCategoryOptions(reference: Reference, keep?: string, categ
     }))
     .filter((group) => group.items.length > 0);
 }
+
+/** The payment types to choose from; archived ones only if kept. */
+export function usePaymentTypeOptions(reference: Reference, keep?: string) {
+  const nameOf = useNameOf(reference.defaultLanguage);
+  return reference.paymentTypes
+    .filter((p) => !p.archived || p.id === keep)
+    .map((p) => ({ value: p.id, label: nameOf(p.names) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}

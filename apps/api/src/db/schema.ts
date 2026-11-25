@@ -477,6 +477,9 @@ export const importRule = pgTable(
     subCategoryId: uuid("sub_category_id").references(() => subCategory.id, {
       onDelete: "set null",
     }),
+    paymentTypeId: uuid("payment_type_id").references(() => paymentType.id, {
+      onDelete: "set null",
+    }),
     description: text("description"),
     ignore: boolean("ignore").notNull().default(false),
     ...timestamps,
@@ -545,6 +548,10 @@ export const importLine = pgTable(
     status: importLineStatus("status").notNull().default("review"),
     /** Chosen in the review: the sub-category of the entry to create. */
     subCategoryId: uuid("sub_category_id").references(() => subCategory.id, {
+      onDelete: "set null",
+    }),
+    /** The payment type of the entry to create. */
+    paymentTypeId: uuid("payment_type_id").references(() => paymentType.id, {
       onDelete: "set null",
     }),
     /** The rule that proposed the sub-category, description or ignoring. */

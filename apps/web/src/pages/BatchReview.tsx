@@ -17,7 +17,12 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useReference, useSubCategoryOptions, type Reference } from "../reference";
+import {
+  usePaymentTypeOptions,
+  useReference,
+  useSubCategoryOptions,
+  type Reference,
+} from "../reference";
 import { draftOf, RuleForm } from "./Rules";
 import {
   useApplyRules,
@@ -74,10 +79,8 @@ function Review({
   const rules = useRules(bookId);
   const apply = useApplyRules(bookId, batch.id);
   const [ruleFor, setRuleFor] = useState<BatchLine | null>(null);
-  // Lines with nothing chosen and no proposal yet: the rules may have something for them.
-  const open = batch.lines.filter(
-    (l) => l.status === "review" && !l.subCategoryId && !l.entry && !l.ruleId,
-  ).length;
+  // The rules can be tried again on the lines still to review.
+  const open = batch.lines.filter((l) => l.status === "review" && !l.entry).length;
   const ruleOf = (line: BatchLine) => rules.data?.find((r) => r.id === line.ruleId);
   const [filter, setFilter] = useState<Filter>(() =>
     batch.lines.some((l) => l.status === "review") ? "review" : "all",
@@ -85,6 +88,7 @@ function Review({
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const options = useSubCategoryOptions(reference);
+  const payments = usePaymentTypeOptions(reference);
 
   const count = (f: Filter) =>
     f === "all" ? batch.lines.length : batch.lines.filter((l) => l.status === f).length;
@@ -261,6 +265,7 @@ function Review({
                   currency={batch.currency}
                   options={options}
                   forecasts={batch.forecasts}
+                  payments={payments}
                   rule={ruleOf(line)}
                   onCreateRule={() => setRuleFor(line)}
                   selected={selected.has(line.id)}
@@ -281,6 +286,7 @@ function Review({
           initial={draftOf({
             text: ruleFor.counterparty || ruleFor.label,
             subCategoryId: ruleFor.subCategoryId,
+            paymentTypeId: ruleFor.paymentTypeId,
             description: ruleFor.description,
           })}
           sample={{
@@ -301,6 +307,7 @@ function Line({
   currency,
   options,
   forecasts,
+  payments,
   rule,
   onCreateRule,
   selected,
@@ -311,6 +318,7 @@ function Line({
   currency: string;
   options: ReturnType<typeof useSubCategoryOptions>;
   forecasts: MatchedEntry[];
+  payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
   onCreateRule: () => void;
   selected: boolean;
@@ -364,6 +372,7 @@ function Line({
           currency={currency}
           options={options}
           forecasts={forecasts}
+          payments={payments}
           rule={rule}
           onCreateRule={onCreateRule}
           onChange={onChange}
@@ -391,6 +400,7 @@ function Decision({
   currency,
   options,
   forecasts,
+  payments,
   rule,
   onCreateRule,
   onChange,
@@ -399,6 +409,7 @@ function Decision({
   currency: string;
   options: ReturnType<typeof useSubCategoryOptions>;
   forecasts: MatchedEntry[];
+  payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
   onCreateRule: () => void;
   onChange: (change: Omit<Change, "id">) => void;
@@ -496,6 +507,18 @@ function Decision({
             ? t("statements.review.ruleIgnores", { name: rule.name })
             : t("statements.review.ruleProposes", { name: rule.name })}
         </Text>
+      )}
+      {(line.subCategoryId || line.paymentTypeId) && (
+        <Select
+          size="xs"
+          aria-label={t("statements.review.paymentType")}
+          placeholder={t("statements.review.paymentType")}
+          searchable
+          clearable
+          data={payments}
+          value={line.paymentTypeId}
+          onChange={(value) => onChange({ paymentTypeId: value })}
+        />
       )}
       {line.subCategoryId && (
         <TextInput

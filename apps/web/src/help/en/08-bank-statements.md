@@ -25,9 +25,9 @@ Tick several lines to give them the same sub-category or to ignore them together
 
 ## Rules
 
-The **Rules** section of the import screen lists the rules of the book, in the order they are tried: the first that fits a line wins. A rule has **conditions** (the label contains a text, the bank's category, an account, money in or out, a minimum or maximum amount) and **actions** (a sub-category, a new description, or ignore the line).
+The **Rules** section of the import screen lists the rules of the book, in the order they are tried: the first that fits a line wins. A rule has **conditions** (the label contains a text, the bank's category, an account, money in or out, a minimum or maximum amount) and **actions** (a sub-category, a payment type, a new description, or ignore the line). Rules are kept with the book: edit, reorder or delete them there at any time. Deleting a rule takes back what it proposed to lines not yet accepted.
 
-Rules are tried on a statement when it is kept, and again with **Try the rules**. They only propose: the line keeps its sub-category in the list, tagged with the rule's name, and stays to review until you accept it. A line that could be reconciled with an entry of the journal is not accepted in bulk.
+Rules are tried on a statement when it is kept, and again with **Try the rules**, which follows the rules as they are now for the proposals you have not changed by hand. They only propose: the line keeps its sub-category in the list, tagged with the rule's name, and stays to review until you accept it. A line that could be reconciled with an entry of the journal is not accepted in bulk.
 
 From a line with a sub-category, **Create a rule** fills the form with the line's counterparty, so the next statements need less work. The form says how many lines to review of the statement the rule fits.
 

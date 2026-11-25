@@ -56,6 +56,8 @@ export interface BatchLine {
   description: string | null;
   /** The rule that proposed the sub-category, the description or ignoring. */
   ruleId: string | null;
+  /** The payment type of the entry to create. */
+  paymentTypeId: string | null;
   /** The entry of the journal the line is, chosen or created. */
   entry: MatchedEntry | null;
   /** The entries the line may be, the proposal first; only for a line to review. */
@@ -228,6 +230,7 @@ export interface Rule {
   minAmount: string | null;
   maxAmount: string | null;
   subCategoryId: string | null;
+  paymentTypeId: string | null;
   description: string | null;
   ignore: boolean;
 }

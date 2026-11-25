@@ -176,6 +176,13 @@
       "when": 1795636410104,
       "tag": "0024_forecast_amount",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795638103262,
+      "tag": "0025_payment_types",
+      "breakpoints": true
     }
   ]
 }

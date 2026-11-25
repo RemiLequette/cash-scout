@@ -237,7 +237,8 @@
       "planned": "({amount} planned)",
       "pickForecast": "Choose a forecast",
       "unmatched": "{count, plural, one {# forecast of the period with no line} other {# forecasts of the period with no line}}",
-      "unmatchedHint": "If a line of the statement is one of them, choose it on the line: otherwise the entry will be written twice."
+      "unmatchedHint": "If a line of the statement is one of them, choose it on the line: otherwise the entry will be written twice.",
+      "paymentType": "Payment type"
     },
     "rules": {
       "title": "Rules",
@@ -267,7 +268,7 @@
       "up": "Move up",
       "down": "Move down",
       "edit": "Edit",
-      "deleteConfirm": "Delete the rule {name}? The proposals already made to lines stay."
+      "deleteConfirm": "Delete the rule {name}? Its proposals to lines not yet accepted are taken back."
     }
   },
   "dashboard": {
