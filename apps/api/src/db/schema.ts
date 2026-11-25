@@ -333,9 +333,13 @@ export const bookAccount = pgTable(
      * What no entry explains of the balance, in minor units of the account currency.
      * Not dated and in no category: the balance is this plus the entries.
      */
-    openingBalance: bigint("opening_balance", { mode: "bigint" }).notNull().default(sql`0`),
+    openingBalance: bigint("opening_balance", { mode: "bigint" })
+      .notNull()
+      .default(sql`0`),
     /** The opening balance in minor units of the book currency, at the rate given when it was set. */
-    openingBookAmount: bigint("opening_book_amount", { mode: "bigint" }).notNull().default(sql`0`),
+    openingBookAmount: bigint("opening_book_amount", { mode: "bigint" })
+      .notNull()
+      .default(sql`0`),
     archivedAt: archivedAt(),
     version: version(),
   },

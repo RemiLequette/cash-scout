@@ -1,5 +1,5 @@
 import { money, toDecimalString } from "@cash-scout/domain";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Tx } from "../db/client.js";
 import { bookAccount, category, journalEntry, subCategory } from "../db/schema.js";
 import { languagesOf } from "../routes/access.js";
@@ -13,7 +13,7 @@ export interface AdjustmentReport {
     name: string;
     currency: string;
     entries: number;
-    /** Sum of the adjustments, in the account currency: it goes into the opening balance. */
+    /** Sum of the adjustments, in the account currency: what the account's balance loses. */
     total: string;
     months: string[];
   }[];
@@ -22,14 +22,14 @@ export interface AdjustmentReport {
 }
 
 /**
- * Moves the entries of the sub-category called `name` (in any language of the
- * book) into the opening balance of their account, then deletes the entries and
- * the sub-category. The balance of every account stays what it was.
+ * Deletes the entries of the sub-category called `name` (in any language of the
+ * book) and the sub-category. The balance of their accounts moves by the sum of
+ * what is deleted: set each opening balance again from the bank balance afterwards.
  *
  * Without `apply` nothing changes: the report says what would. Entries that are
  * part of a transfer stop it: they are not adjustments.
  */
-export async function convertAdjustments(
+export async function deleteAdjustments(
   tx: Tx,
   bookId: string,
   name: string,
@@ -63,7 +63,6 @@ export async function convertAdjustments(
       accountId: journalEntry.accountId,
       date: journalEntry.date,
       amount: journalEntry.amount,
-      bookAmount: journalEntry.bookAmount,
       transferId: journalEntry.transferId,
     })
     .from(journalEntry)
@@ -76,20 +75,15 @@ export async function convertAdjustments(
     .select({ id: bookAccount.id, names: bookAccount.names, currency: bookAccount.currency })
     .from(bookAccount)
     .where(eq(bookAccount.bookId, bookId));
-  const perAccount = new Map<
-    string,
-    { entries: number; total: bigint; bookTotal: bigint; months: Set<string> }
-  >();
+  const perAccount = new Map<string, { entries: number; total: bigint; months: Set<string> }>();
   for (const e of entries) {
     const row = perAccount.get(e.accountId) ?? {
       entries: 0,
       total: 0n,
-      bookTotal: 0n,
       months: new Set<string>(),
     };
     row.entries += 1;
     row.total += e.amount;
-    row.bookTotal += e.bookAmount;
     row.months.add(e.date.slice(0, 7));
     perAccount.set(e.accountId, row);
   }
@@ -126,15 +120,6 @@ export async function convertAdjustments(
   };
 
   if (apply) {
-    for (const [accountId, row] of perAccount) {
-      await tx
-        .update(bookAccount)
-        .set({
-          openingBalance: sql`${bookAccount.openingBalance} + ${row.total.toString()}::bigint`,
-          openingBookAmount: sql`${bookAccount.openingBookAmount} + ${row.bookTotal.toString()}::bigint`,
-        })
-        .where(and(eq(bookAccount.id, accountId), eq(bookAccount.bookId, bookId)));
-    }
     await tx
       .delete(journalEntry)
       .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.subCategoryId, ids)));

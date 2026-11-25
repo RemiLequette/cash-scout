@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { createHarness, household } from "../../test/harness.js";
 import { withUser } from "../db/client.js";
 import { bookAccount, journalEntry, subCategory } from "../db/schema.js";
-import { convertAdjustments } from "./adjustments.js";
+import { deleteAdjustments } from "./adjustments.js";
 import { importJournal } from "./journal.js";
 import { ImportError, importReference } from "./reference.js";
 
@@ -38,11 +38,11 @@ async function book() {
     return rows.map((r) => [r.reconciled, r.total]).sort();
   };
   const run = (name: string, apply: boolean) =>
-    withUser(h.db, owner.id, (tx) => convertAdjustments(tx, bookId, name, apply));
+    withUser(h.db, owner.id, (tx) => deleteAdjustments(tx, bookId, name, apply));
   return { owner, bookId, balances, run };
 }
 
-describe("convertAdjustments", () => {
+describe("deleteAdjustments", () => {
   it("reports without changing anything", async () => {
     const b = await book();
     const before = await b.balances();
@@ -65,12 +65,10 @@ describe("convertAdjustments", () => {
     expect(kept).toHaveLength(5);
   });
 
-  it("moves the adjustments into the opening balances and keeps every balance", async () => {
+  it("deletes the adjustments and the sub-category, leaving the opening balances alone", async () => {
     const b = await book();
-    const before = await b.balances();
     await b.run("Ajustement", true);
 
-    expect(await b.balances()).toEqual(before);
     const rows = await withUser(h.db, b.owner.id, async (tx) => ({
       entries: await tx.select().from(journalEntry),
       subs: await tx.select().from(subCategory),
@@ -78,12 +76,15 @@ describe("convertAdjustments", () => {
     }));
     expect(rows.entries).toHaveLength(2);
     expect(rows.subs.map((s) => s.names.fr)).toEqual(["Boulangerie"]);
-    const opening = Object.fromEntries(
-      rows.accounts.map((a) => [a.names.fr, [a.openingBalance, a.openingBookAmount]]),
-    );
-    // 1000 − 40 euros; 500 ringgit at 0.2, which is 100 euros.
-    expect(opening["Compte courant"]).toEqual([96000n, 96000n]);
-    expect(opening["Compte MYR"]).toEqual([50000n, 10000n]);
+    expect(rows.accounts.map((a) => [a.openingBalance, a.openingBookAmount])).toEqual([
+      [0n, 0n],
+      [0n, 0n],
+    ]);
+    // The balances lose the adjustments: 1000 - 40 euros, 500 ringgit.
+    expect(await b.balances()).toEqual([
+      ["-12.50", "-12.50"],
+      ["-50.00", "-50.00"],
+    ]);
   });
 
   it("refuses a name that no sub-category has", async () => {

@@ -1,15 +1,16 @@
 /**
- * Turns the entries of an "Adjustment" sub-category into opening balances.
+ * Deletes the entries of an "Adjustment" sub-category, and the sub-category.
  *
  *   pnpm migrate:adjustments --book <book id> --user <email> [--name Ajustement] [--apply --backed-up]
  *
- * Without --apply it only reports what it would do. With --apply it moves the
- * adjustments of each account into its opening balance, deletes the entries and
- * the sub-category, in one transaction. Dump the database first (--backed-up
- * says you did): see "Backup" in ARCHITECTURE.md and docs/bank-import.md.
+ * Without --apply it only reports what it would do. With --apply it deletes the
+ * entries and the sub-category, in one transaction. The balance of each account
+ * then moves by the sum reported: set its opening balance again from the bank
+ * balance (reference data, Accounts). Dump the database first (--backed-up says
+ * you did): see docs/bank-import.md.
  */
 import { parseArgs } from "node:util";
-import { convertAdjustments } from "./adjustments.js";
+import { deleteAdjustments } from "./adjustments.js";
 import { runImport } from "./run.js";
 
 const { values } = parseArgs({
@@ -35,13 +36,13 @@ if (values.apply && !values["backed-up"]) {
 }
 
 const report = await runImport(values.user, values.book, (tx) =>
-  convertAdjustments(tx, values.book!, values.name!, values.apply!),
+  deleteAdjustments(tx, values.book!, values.name!, values.apply!),
 );
 if (report) {
   console.log(values.apply ? "Done." : "Dry run: nothing was changed.");
   console.log("Sub-categories:");
   for (const s of report.subCategories) console.log(`  ${s.name} (category ${s.category})`);
-  console.log("Accounts (the sum goes into the opening balance):");
+  console.log("Accounts (the balance loses this sum; set the opening balance again afterwards):");
   for (const a of report.accounts) {
     const span = a.months.length > 0 ? `${a.months[0]} → ${a.months[a.months.length - 1]}` : "";
     console.log(`  ${a.name}: ${a.entries} entries, ${a.total} ${a.currency}, ${span}`);

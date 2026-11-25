@@ -92,11 +92,10 @@ For an account not in the book currency, the opening balance keeps the account a
 
 ### Migration of the adjustments
 
-For each account, the entries of the Adjustment sub-category are summed into its opening balance, the entries are deleted, then the sub-category.
+The entries of the Adjustment sub-category are deleted, then the sub-category. The opening balance of each account is then set again from its bank balance, with the account's "Opening balance…" action: this is simpler than carrying the sums over, and gives the right balance whatever the adjustments held.
 
-- Not only the first entry: all of them.
-- The account's final balance does not change. The past statistics do: the adjustments leave the flows and the budgets of their months. That is the purpose, but it shows.
-- The sub-category is found by its **name** (data, not code). A **dry run** first lists, per account, the number of entries, the sum, the months touched, and any category left empty, so the user checks it found the right one.
+- The sub-category is found by its **name** (data, not code). A **dry run** first lists, per account, the number of entries, the sum (what the balance will lose), the months touched, and any category left empty, so the user checks it found the right one.
+- The statistics of the past change: the adjustments leave the flows and the budgets of their months. That is the purpose, but it shows. Balances are wrong until each opening balance is set again.
 - A backup comes before the real run: dump the database to `local/backups/` as in [Deploying to a server](deployment.md), then pass `--backed-up`.
 - A one-shot command, not part of the application. Without `--apply` it only reports:
 
