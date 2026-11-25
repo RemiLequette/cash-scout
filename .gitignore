@@ -8,6 +8,7 @@ coverage/
 
 # Real data, dumps and local backups: never committed
 local/
+backups/
 
 .DS_Store
 .vscode/*

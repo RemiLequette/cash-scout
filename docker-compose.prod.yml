@@ -1,0 +1,24 @@
+# Production overlay: used with docker-compose.yml on the server, see docs/deployment.md.
+#   scripts/compose.sh up -d --build
+#
+# Nothing is published on the host: the app is reached by the reverse proxy
+# (Caddy, in Docker) over its network, and the database only by the app.
+# Needs Docker Compose 2.24 or later (for !reset).
+
+services:
+  db:
+    ports: !reset []
+
+  app:
+    ports: !reset []
+    environment:
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL to the public https address}
+    networks:
+      default: {}
+      proxy:
+        aliases: [cash-scout]
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:?set PROXY_NETWORK to the Docker network of Caddy}

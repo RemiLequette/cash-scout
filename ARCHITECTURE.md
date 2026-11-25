@@ -122,6 +122,7 @@ Everything runs on the developer's machine before any server exists. Two modes, 
   - `backup` (optional but recommended): see [Backup](#backup).
 - Configuration through environment variables; migrations run at start.
 - HTTPS is left to the host's reverse proxy (Caddy, Traefik, nginx).
+- Step-by-step installation, update, data moves and restore: [Deploying to a server](docs/deployment.md).
 
 ## Backup
 
