@@ -1,6 +1,11 @@
 import { zValidator } from "@hono/zod-validator";
 import {
   accountInputSchema,
+  bookAmount,
+  openingFromBalance,
+  openingInputSchema,
+  parseAmount,
+  resolveRate,
   accountUpdateSchema,
   balanceInputSchema,
   balanceUpdateSchema,
@@ -24,7 +29,7 @@ import {
   type Names,
   makesCycle,
 } from "@cash-scout/domain";
-import { and, asc, eq, inArray, max, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, max, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -41,7 +46,8 @@ import {
   subCategory,
 } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
-import { idOf, languagesOf, missing, requireRole, rowOf } from "./access.js";
+import { checked, idOf, languagesOf, missing, requireRole, rowOf } from "./access.js";
+import { bookCurrencyOf } from "./journal.js";
 
 /** A table of reference data: every one has id, book_id, names and archived_at. */
 type ReferenceTable = PgTable & {
@@ -241,6 +247,8 @@ const accountColumns = {
   kind: bookAccount.kind,
   currency: bookAccount.currency,
   lowBalanceThreshold: bookAccount.lowBalanceThreshold,
+  openingBalance: bookAccount.openingBalance,
+  openingBookAmount: bookAccount.openingBookAmount,
   archivedAt: bookAccount.archivedAt,
 };
 
@@ -249,6 +257,13 @@ const out = <T extends { archivedAt: Date | null }>({ archivedAt, ...rest }: T) 
   ...rest,
   archived: archivedAt !== null,
 });
+const omitBookAmount = <T extends { openingBookAmount: bigint }>(
+  row: T,
+): Omit<T, "openingBookAmount"> => {
+  const { openingBookAmount, ...rest } = row;
+  void openingBookAmount;
+  return rest;
+};
 const outAccount = (row: {
   id: string;
   version: number;
@@ -256,8 +271,16 @@ const outAccount = (row: {
   kind: "bank" | "virtual";
   currency: string;
   lowBalanceThreshold: bigint | null;
+  openingBalance: bigint;
+  openingBookAmount: bigint;
   archivedAt: Date | null;
-}) => out({ ...row, lowBalanceThreshold: thresholdText(row.lowBalanceThreshold, row.currency) });
+}) =>
+  out({
+    // The opening balance in the book currency is for the reports, not for the screens.
+    ...omitBookAmount(row),
+    lowBalanceThreshold: thresholdText(row.lowBalanceThreshold, row.currency),
+    openingBalance: toDecimalString(money(row.openingBalance, row.currency)),
+  });
 
 /**
  * Reference data of a book, mounted under /books/:bookId/reference.
@@ -762,6 +785,66 @@ export function referenceRoutes(db: Db) {
               .where(rowOf(bookAccount, bookId, id, version))
               .returning(accountColumns),
             version,
+          );
+        });
+        return c.json(outAccount(row));
+      })
+      // The opening balance: set to an amount, or from a balance read at the bank
+      // (the reconciled entries then add up to it).
+      .post("/accounts/:id/opening", zValidator("json", openingInputSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const id = idOf(c.req.param("id"), "Item");
+        const input = c.req.valid("json");
+        const row = await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          const [current] = await tx
+            .select({ currency: bookAccount.currency })
+            .from(bookAccount)
+            .where(and(eq(bookAccount.id, id), eq(bookAccount.bookId, bookId)));
+          if (!current) {
+            throw new HTTPException(404, { message: "Item not found" });
+          }
+          const { currency } = current;
+          let opening: bigint;
+          if (input.opening !== undefined) {
+            opening = checked(() => parseAmount(input.opening!, currency)).minor;
+          } else {
+            const balance = checked(() => parseAmount(input.balance!, currency)).minor;
+            const [sum] = await tx
+              .select({ total: sql<string>`coalesce(sum(${journalEntry.amount}), 0)` })
+              .from(journalEntry)
+              .where(
+                and(
+                  eq(journalEntry.accountId, id),
+                  eq(journalEntry.reconciled, true),
+                  input.upTo ? lte(journalEntry.date, input.upTo) : undefined,
+                ),
+              );
+            opening = openingFromBalance(balance, BigInt(sum!.total));
+          }
+          const bookCurrency = await bookCurrencyOf(tx, bookId);
+          // The rate: the one given, else the account's latest, which an account
+          // in the book currency does not need.
+          let rate = input.exchangeRate;
+          if (rate === undefined && currency !== bookCurrency) {
+            const [last] = await tx
+              .select({ rate: journalEntry.exchangeRate })
+              .from(journalEntry)
+              .where(eq(journalEntry.accountId, id))
+              .orderBy(desc(journalEntry.date))
+              .limit(1);
+            rate = last?.rate;
+          }
+          const used = checked(() => resolveRate(currency, bookCurrency, rate));
+          const inBook = bookAmount(money(opening, currency), used, bookCurrency).minor;
+          return updatedOne(
+            await tx
+              .update(bookAccount)
+              .set({ openingBalance: opening, openingBookAmount: inBook })
+              .where(rowOf(bookAccount, bookId, id, input.version))
+              .returning(accountColumns),
+            input.version,
           );
         });
         return c.json(outAccount(row));

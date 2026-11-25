@@ -31,10 +31,12 @@ import {
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { currencyOptions } from "../options";
+import { useBalances } from "../journal";
 import {
   useNameOf,
   useReference,
   useReferenceChange,
+  useSetOpening,
   type Reference,
   type ReferenceKind,
 } from "../reference";
@@ -627,9 +629,131 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
 // Accounts and payment types
 // ---------------------------------------------------------------------------
 
-function AccountsTab({ bookId, reference, canEdit, showArchived, openEditor }: TabProps) {
+/**
+ * Sets an account's opening balance: from the balance read in the online bank
+ * (the usual way), or straight to an amount. The result is shown before saving.
+ */
+function OpeningForm({
+  bookId,
+  bookCurrency,
+  account,
+  onClose,
+}: {
+  bookId: string;
+  bookCurrency: string;
+  account: Reference["accounts"][number];
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const set = useSetOpening(bookId);
+  const balances = useBalances(bookId);
+  const [mode, setMode] = useState<"balance" | "opening">("balance");
+  const [amount, setAmount] = useState("");
+  const [rate, setRate] = useState("");
+  const needsRate = account.currency !== bookCurrency;
+  const text = amount.trim().replace(",", ".");
+  const parsed = (() => {
+    try {
+      return text === "" ? null : parseAmount(text, account.currency).minor;
+    } catch {
+      return null;
+    }
+  })();
+  const current = parseAmount(account.openingBalance, account.currency).minor;
+  const reconciled = balances.data?.find((b) => b.accountId === account.id)?.reconciled;
+  // The reconciled balance holds the opening balance: take it out to get what the entries add up to.
+  const entries =
+    reconciled === undefined ? null : parseAmount(reconciled, account.currency).minor - current;
+  const result =
+    parsed === null
+      ? null
+      : mode === "opening"
+        ? parsed
+        : entries === null
+          ? null
+          : parsed - entries;
+  const show = (minor: bigint) => formatMoney({ minor, currency: account.currency }, i18n.language);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    set.mutate(
+      {
+        accountId: account.id,
+        body: mode === "balance" ? { balance: text } : { opening: text },
+        exchangeRate: needsRate ? rate.trim().replace(",", ".") : undefined,
+        version: account.version,
+      },
+      { onSuccess: onClose },
+    );
+  }
+
+  return (
+    <Stack component="form" onSubmit={submit}>
+      {set.error && <Alert color="red">{t("common.error", { message: set.error.message })}</Alert>}
+      <Text size="sm" c="dimmed">
+        {t("reference.openingIntro")}
+      </Text>
+      <SegmentedControl
+        value={mode}
+        onChange={(value) => setMode(value as "balance" | "opening")}
+        data={[
+          { value: "balance", label: t("reference.openingFromBalance") },
+          { value: "opening", label: t("reference.openingAmount") },
+        ]}
+      />
+      <TextInput
+        label={mode === "balance" ? t("reference.bankBalance") : t("reference.openingBalance")}
+        description={
+          mode === "balance" ? t("reference.bankBalanceHint") : t("reference.openingAmountHint")
+        }
+        required
+        data-autofocus
+        value={amount}
+        onChange={(e) => setAmount(e.currentTarget.value)}
+        rightSection={<Text size="xs">{account.currency}</Text>}
+        rightSectionWidth={44}
+      />
+      {needsRate && (
+        <TextInput
+          label={t("journal.exchangeRate")}
+          description={t("reference.openingRateHint", { from: account.currency, to: bookCurrency })}
+          value={rate}
+          onChange={(e) => setRate(e.currentTarget.value)}
+        />
+      )}
+      <Text size="sm">
+        {t("reference.openingNow", { amount: show(current) })}
+        {result !== null && (
+          <>
+            <br />
+            <b>{t("reference.openingAfter", { amount: show(result) })}</b>{" "}
+            {result !== current && `(${show(result - current)})`}
+          </>
+        )}
+      </Text>
+      <Group justify="flex-end">
+        <Button variant="default" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button type="submit" loading={set.isPending} disabled={parsed === null}>
+          {t("common.save")}
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
+function AccountsTab({
+  bookId,
+  bookCurrency,
+  reference,
+  canEdit,
+  showArchived,
+  openEditor,
+}: TabProps) {
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
+  const [openingOf, setOpeningOf] = useState<Reference["accounts"][number] | null>(null);
   const accounts = reference.accounts
     .filter((a) => showArchived || !a.archived)
     .sort((a, b) => nameOf(a.names).localeCompare(nameOf(b.names)));
@@ -704,6 +828,7 @@ function AccountsTab({ bookId, reference, canEdit, showArchived, openEditor }: T
               <Table.Th>{t("reference.kind")}</Table.Th>
               <Table.Th>{t("books.currency")}</Table.Th>
               <Table.Th>{t("reference.threshold")}</Table.Th>
+              <Table.Th>{t("reference.openingBalance")}</Table.Th>
               <Table.Th />
             </Table.Tr>
           </Table.Thead>
@@ -726,6 +851,10 @@ function AccountsTab({ bookId, reference, canEdit, showArchived, openEditor }: T
                         i18n.language,
                       )}
                 </Table.Td>
+                <Table.Td>
+                  {item.kind === "bank" &&
+                    formatMoney(parseAmount(item.openingBalance, item.currency), i18n.language)}
+                </Table.Td>
                 <Table.Td w={50}>
                   <ItemMenu
                     bookId={bookId}
@@ -735,13 +864,33 @@ function AccountsTab({ bookId, reference, canEdit, showArchived, openEditor }: T
                     archived={item.archived}
                     canEdit={canEdit}
                     onEdit={() => openEditor(editor(item))}
-                  />
+                  >
+                    {item.kind === "bank" && (
+                      <Menu.Item onClick={() => setOpeningOf(item)}>
+                        {t("reference.setOpening")}
+                      </Menu.Item>
+                    )}
+                  </ItemMenu>
                 </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
         </Table>
       )}
+      <Modal
+        opened={openingOf !== null}
+        onClose={() => setOpeningOf(null)}
+        title={t("reference.setOpeningTitle", { name: openingOf ? nameOf(openingOf.names) : "" })}
+      >
+        {openingOf && (
+          <OpeningForm
+            bookId={bookId}
+            bookCurrency={bookCurrency}
+            account={openingOf}
+            onClose={() => setOpeningOf(null)}
+          />
+        )}
+      </Modal>
     </Stack>
   );
 }
@@ -1009,13 +1158,22 @@ function NaturesTab({ bookId, reference, canEdit, showArchived, openEditor }: Ta
 
 interface TabProps {
   bookId: string;
+  bookCurrency: string;
   reference: Reference;
   canEdit: boolean;
   showArchived: boolean;
   openEditor: (state: EditorState) => void;
 }
 
-export function ReferenceData({ bookId, canEdit }: { bookId: string; canEdit: boolean }) {
+export function ReferenceData({
+  bookId,
+  bookCurrency,
+  canEdit,
+}: {
+  bookId: string;
+  bookCurrency: string;
+  canEdit: boolean;
+}) {
   const { t } = useTranslation();
   const reference = useReference(bookId);
   const [showArchived, setShowArchived] = useState(false);
@@ -1028,6 +1186,7 @@ export function ReferenceData({ bookId, canEdit }: { bookId: string; canEdit: bo
 
   const props: TabProps = {
     bookId,
+    bookCurrency,
     reference: reference.data,
     canEdit,
     showArchived,

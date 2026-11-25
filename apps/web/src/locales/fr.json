@@ -147,6 +147,18 @@
     "editPaymentType": "Modifier le moyen de paiement",
     "emptyCategories": "Aucune catégorie. Commencez par un groupe, par exemple Vie courante, puis ajoutez ses catégories.",
     "emptyAccounts": "Aucun compte.",
+    "openingBalance": "Solde initial",
+    "setOpening": "Solde initial…",
+    "setOpeningTitle": "Solde initial de {name}",
+    "openingIntro": "Le solde initial est ce que le solde du compte contient sans que le journal l'explique : ce qui précède la première écriture, et ce qui manque. Il n'est dans aucune catégorie et ne compte dans aucun total ni budget.",
+    "openingFromBalance": "D'après le solde de la banque",
+    "openingAmount": "Montant direct",
+    "bankBalance": "Solde lu dans votre banque",
+    "bankBalanceHint": "Le solde initial est calculé pour que les écritures pointées donnent ce solde, quelle que soit leur date.",
+    "openingAmountHint": "Le solde initial lui-même, tel qu'il sera enregistré.",
+    "openingRateHint": "1 {from} = combien de {to}. Obligatoire sauf si le compte a déjà des écritures : le dernier taux est repris.",
+    "openingNow": "Solde initial actuel : {amount}",
+    "openingAfter": "Nouveau solde initial : {amount}",
     "emptyPaymentTypes": "Aucun moyen de paiement."
   },
   "dashboard": {

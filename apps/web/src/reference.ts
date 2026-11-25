@@ -67,6 +67,28 @@ export function useReferenceChange(bookId: string) {
   });
 }
 
+/**
+ * Sets an account's opening balance, to an amount or from a balance read at the
+ * bank. Balances, the projection and the dashboard are reloaded after it.
+ */
+export function useSetOpening(bookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (change: {
+      accountId: string;
+      body: { opening: string } | { balance: string };
+      exchangeRate?: string;
+      version?: number;
+    }) =>
+      send(bookId, "POST", `/accounts/${change.accountId}/opening`, {
+        ...change.body,
+        ...(change.exchangeRate && { exchangeRate: change.exchangeRate }),
+        version: change.version,
+      }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId] }),
+  });
+}
+
 /** Display name of an item in the interface language. */
 export function useNameOf(defaultLanguage: string | undefined) {
   const { i18n } = useTranslation();

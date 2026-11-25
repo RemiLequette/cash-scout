@@ -66,6 +66,7 @@ export function dashboardRoutes(db: Db) {
         tx
           .select({
             id: bookAccount.id,
+            openingBookAmount: bookAccount.openingBookAmount,
             archived: sql<boolean>`${bookAccount.archivedAt} is not null`,
           })
           .from(bookAccount)
@@ -109,7 +110,13 @@ export function dashboardRoutes(db: Db) {
 
       // Balances: the entries' book amounts, then the unused-budget lines of the
       // months not yet past, as the cash projection counts them.
-      const openingOf = new Map(opening.map((row) => [row.accountId, BigInt(row.total)]));
+      // The account's own opening balance, then the entries before the year.
+      const openingOf = new Map(
+        accounts.map((a) => [a.id, a.openingBookAmount] as [string, bigint]),
+      );
+      for (const row of opening) {
+        openingOf.set(row.accountId, (openingOf.get(row.accountId) ?? 0n) + BigInt(row.total));
+      }
       const changesOf = new Map<string, bigint[]>();
       const changeOf = (accountId: string) => {
         const months = changesOf.get(accountId) ?? Array<bigint>(MONTHS).fill(0n);

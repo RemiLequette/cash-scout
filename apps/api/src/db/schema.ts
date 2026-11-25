@@ -329,6 +329,17 @@ export const bookAccount = pgTable(
     currency: char("currency", { length: 3 }).notNull(),
     /** Warn when the projected balance goes below this amount, in minor units. */
     lowBalanceThreshold: bigint("low_balance_threshold", { mode: "bigint" }),
+    /**
+     * What no entry explains of the balance, in minor units of the account currency.
+     * Not dated and in no category: the balance is this plus the entries.
+     */
+    openingBalance: bigint("opening_balance", { mode: "bigint" })
+      .notNull()
+      .default(sql`0`),
+    /** The opening balance in minor units of the book currency, at the rate given when it was set. */
+    openingBookAmount: bigint("opening_book_amount", { mode: "bigint" })
+      .notNull()
+      .default(sql`0`),
     archivedAt: archivedAt(),
     version: version(),
   },

@@ -28,6 +28,7 @@ Un nouveau livre démarre avec quatre natures : Revenus, Dépenses, Épargne et 
 - Les comptes **bancaires** sont rapprochés avec la banque et figurent dans la projection de trésorerie.
 - Les comptes **virtuels** n'ont pas de banque derrière eux. Ils portent des compensations dont la somme est nulle, et sont hors de la projection.
 - La **devise** d'un compte ne peut plus être changée une fois créé.
+- Le **solde initial** est ce que le solde du compte contient sans que le journal l'explique : ce qui précède la première écriture, et ce qui manque. Il n'est dans aucune catégorie, donc dans aucun total ni budget. Menu du compte, **Solde initial…** : saisissez le solde lu dans votre banque, il est calculé pour que les écritures pointées donnent ce solde, quelle que soit leur date.
 - L'**alerte de solde bas** est un montant : le graphique des comptes prévient quand le solde projeté passe en dessous.
 
 ## Types de paiement
