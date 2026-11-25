@@ -472,6 +472,11 @@ function lastMonths(count: number): Set<string> {
   return new Set(Array.from({ length: count }, (_, i) => addMonths(currentMonth(), -i)));
 }
 
+/** The current month and the next one, shown when the journal opens. */
+function currentAndNextMonth(): Set<string> {
+  return new Set([currentMonth(), addMonths(currentMonth(), 1)]);
+}
+
 function containsToday(months: Months): boolean {
   return months === null || months.has(currentMonth());
 }
@@ -1472,7 +1477,7 @@ export function Journal({
   const change = useJournalChange(bookId);
   const isMobile = useMediaQuery("(max-width: 48em)", false, { getInitialValueInEffect: false });
 
-  const [months, setMonths] = useState<Months>(() => lastMonths(1));
+  const [months, setMonths] = useState<Months>(currentAndNextMonth);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [subCategories, setSubCategories] = useState<Set<string> | null>(null);
   const [status, setStatus] = useState<"all" | "true" | "false">("all");
