@@ -13,3 +13,6 @@ backups/
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# Obsidian settings of the person who opens the folder as a vault
+.obsidian/
