@@ -19,6 +19,7 @@ import { idOf, languagesOf, missing, requireRole, roleOf } from "./access.js";
 import { budgetsRoutes } from "./budgets.js";
 import { dashboardRoutes } from "./dashboard.js";
 import { journalRoutes } from "./journal.js";
+import { statementRoutes } from "./statements.js";
 import { transferRoutes } from "./transfers.js";
 import { referenceRoutes } from "./reference.js";
 
@@ -132,6 +133,7 @@ export function booksRoutes(db: Db, events: BookEvents) {
       .route("/:bookId/journal", journalRoutes(db))
       .route("/:bookId/transfers", transferRoutes(db))
       .route("/:bookId/reference", referenceRoutes(db))
+      .route("/:bookId/statements", statementRoutes(db))
 
       .delete("/:bookId", async (c) => {
         const me = c.var.user.id;

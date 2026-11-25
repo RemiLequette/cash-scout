@@ -1,0 +1,86 @@
+import { readFileSync } from "node:fs";
+import { afterAll, describe, expect, it } from "vitest";
+import type { StatementPreview } from "@cash-scout/domain";
+import { createHarness, household } from "../test/harness.js";
+
+const h = createHarness();
+afterAll(() => h.sql.end());
+
+const fixture = (name: string) =>
+  new Uint8Array(readFileSync(new URL(`../test/fixtures/statements/${name}`, import.meta.url)));
+
+async function bookWithAccount() {
+  const owner = await h.signedInUser();
+  const book = await owner.request("POST", "/books", household);
+  const { id: bookId } = (await book.json()) as { id: string };
+  const account = await owner.request("POST", `/books/${bookId}/reference/accounts`, {
+    names: { fr: "Compte" },
+    kind: "bank",
+    currency: "EUR",
+  });
+  const { id: accountId } = (await account.json()) as { id: string };
+  const preview = (preset: string, file: Uint8Array, account = accountId, by = owner) =>
+    by.request(
+      "POST",
+      `/books/${bookId}/statements/preview?preset=${preset}&account=${account}`,
+      file,
+    );
+  return { owner, bookId, accountId, preview };
+}
+
+describe("statement preview", () => {
+  it("lists the presets", async () => {
+    const b = await bookWithAccount();
+    const res = await b.owner.request("GET", `/books/${b.bookId}/statements/presets`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([
+      { id: "boursorama", name: "Boursorama" },
+      { id: "caisse-epargne", name: "Caisse d'Epargne" },
+    ]);
+  });
+
+  it("reads a file with the chosen preset and writes nothing", async () => {
+    const b = await bookWithAccount();
+    const res = await b.preview("boursorama", fixture("boursorama.csv"));
+    expect(res.status).toBe(200);
+    const preview = (await res.json()) as StatementPreview;
+    expect(preview).toMatchObject({
+      currency: "EUR",
+      total: "-1255.91",
+      accountNumbers: ["00000000001"],
+      errors: [],
+      balanceBreaks: [],
+    });
+    expect(preview.lines).toHaveLength(4);
+    expect(preview.lines[0]).toMatchObject({
+      date: "2026-10-30",
+      amount: "-7.20",
+      balance: "541.80",
+    });
+    const journal = await b.owner.request("GET", `/books/${b.bookId}/journal`);
+    expect(((await journal.json()) as { total: number }).total).toBe(0);
+  });
+
+  it("refuses a file that is not the preset's", async () => {
+    const b = await bookWithAccount();
+    const res = await b.preview("boursorama", fixture("caisse-epargne.csv"));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("Boursorama");
+  });
+
+  it("refuses an unknown preset, an unknown account and an empty file", async () => {
+    const b = await bookWithAccount();
+    expect((await b.preview("nope", fixture("boursorama.csv"))).status).toBe(400);
+    expect(
+      (await b.preview("boursorama", fixture("boursorama.csv"), crypto.randomUUID())).status,
+    ).toBe(400);
+    expect((await b.preview("boursorama", new Uint8Array())).status).toBe(400);
+  });
+
+  it("is refused to someone who is not an editor of the book", async () => {
+    const b = await bookWithAccount();
+    const stranger = await h.signedInUser();
+    const res = await b.preview("boursorama", fixture("boursorama.csv"), b.accountId, stranger);
+    expect([403, 404]).toContain(res.status);
+  });
+});

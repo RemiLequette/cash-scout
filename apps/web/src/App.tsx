@@ -74,7 +74,9 @@ function BookTitle({ bookId, view }: { bookId: string; view: BookView }) {
                 ? "book.budget"
                 : view === "dashboard"
                   ? "book.dashboard"
-                  : "book.settingsAndMembers",
+                  : view === "import"
+                    ? "book.import"
+                    : "book.settingsAndMembers",
           )}
         </Text>
       )}
@@ -129,6 +131,9 @@ function NavMenu({
             </Menu.Item>
             <Menu.Item leftSection={mark(view === "reference")} onClick={() => open("reference")}>
               {t("book.referenceData")}
+            </Menu.Item>
+            <Menu.Item leftSection={mark(view === "import")} onClick={() => open("import")}>
+              {t("book.import")}
             </Menu.Item>
             <Menu.Item leftSection={mark(view === "settings")} onClick={() => open("settings")}>
               {t("book.settingsAndMembers")}
@@ -276,6 +281,7 @@ const bookRoute = createRoute({
     search.view === "dashboard" ||
     search.view === "budget" ||
     search.view === "reference" ||
+    search.view === "import" ||
     search.view === "settings"
       ? { view: search.view }
       : {},

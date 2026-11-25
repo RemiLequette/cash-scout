@@ -1,0 +1,4 @@
+Date de comptabilisation;Libelle simplifie;Libelle operation;Reference;Informations complementaires;Type operation;Categorie;Sous categorie;Debit;Credit;Date operation;Date de valeur;Pointage operation
+19/11/2026;M DUPONT JEAN;VIR SEPA M DUPONT JEAN;0000000A00000001;Virement  Caisse d'Epargne-;Virement recu;A categoriser - rentree d'argent;Virement recu - a categoriser;;+150,00;19/11/2026;19/11/2026;0
+13/11/2026;AGENCE TEST;AGENCE TEST;0000000B00000002;VIREMENT DE MR DUPONT 00000-VIREMENT;Virement;A categoriser - sortie d'argent;Virement emis - a categoriser;-933,60;;13/11/2026;13/11/2026;0
+05/11/2026;ECHEANCE DE CREDIT;ECH PRET 0000000 DU 05/11/26;;;Pret;Banque et assurances;Credit;-1076,71;;05/11/2026;05/11/2026;0

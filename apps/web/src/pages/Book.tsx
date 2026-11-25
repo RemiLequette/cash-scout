@@ -24,6 +24,7 @@ import { BudgetPage } from "./Budget";
 import { Dashboard } from "./Dashboard";
 import { Journal } from "./Journal";
 import { ReferenceData } from "./Reference";
+import { Statements } from "./Statements";
 
 function ErrorAlert({ error }: { error: Error | null }) {
   const { t } = useTranslation();
@@ -41,7 +42,7 @@ interface BookData {
 }
 
 /** The parts of a book, chosen in the navigation menu. */
-export type BookView = "journal" | "dashboard" | "budget" | "reference" | "settings";
+export type BookView = "journal" | "dashboard" | "budget" | "reference" | "import" | "settings";
 
 export function useBook(bookId: string | undefined) {
   return useQuery({
@@ -67,6 +68,8 @@ function BookView({ bookId, view }: { bookId: string; view: BookView }) {
       return <BudgetPage bookId={bookId} bookCurrency={book.data.currency} canEdit={canEdit} />;
     case "reference":
       return <ReferenceData bookId={bookId} bookCurrency={book.data.currency} canEdit={canEdit} />;
+    case "import":
+      return <Statements bookId={bookId} />;
     case "settings":
       return (
         <Stack>
