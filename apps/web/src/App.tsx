@@ -235,6 +235,8 @@ function Layout() {
                   onSignOut={() => void signOut()}
                 />
               )}
+              {/* Decorative: the title beside it names the app. */}
+              <img src="/logo-mark.png" alt="" width={32} height={32} />
               <Title order={4} style={{ flexShrink: 0 }}>
                 {t("app.title")}
               </Title>

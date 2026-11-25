@@ -7,6 +7,7 @@ export function About() {
   const { t } = useTranslation();
   return (
     <Stack gap="xs">
+      <img src="/icon-192.png" alt="" width={96} height={96} style={{ borderRadius: 20 }} />
       <Title order={3}>{t("app.title")}</Title>
       <Text>{t("app.tagline")}</Text>
       <Text>{t("about.version", { version: __APP_VERSION__ })}</Text>
