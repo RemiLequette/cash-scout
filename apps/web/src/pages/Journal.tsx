@@ -59,7 +59,7 @@ import {
   type MonthEnd,
 } from "../journal";
 import { currencyOptions } from "../options";
-import { useNameOf, useReference, type Reference } from "../reference";
+import { useNameOf, useReference, useSubCategoryOptions, type Reference } from "../reference";
 import { AccountChart } from "./AccountChart";
 import { TransferForm } from "./TransferForm";
 
@@ -73,21 +73,6 @@ function useMoney() {
   const { i18n } = useTranslation();
   return (amount: string, currency: string) =>
     formatMoney(parseAmount(amount, currency), i18n.language);
-}
-
-/** Sub-categories grouped under their category, for a select; archived ones only if kept. */
-function useSubCategoryOptions(reference: Reference, keep?: string, categoryIds?: string[]) {
-  const nameOf = useNameOf(reference.defaultLanguage);
-  return reference.categories
-    .filter((category) => !categoryIds || categoryIds.includes(category.id))
-    .map((category) => ({
-      group: `${category.code} ${nameOf(category.names)}`,
-      items: reference.subCategories
-        .filter((s) => s.categoryId === category.id && (!s.archived || s.id === keep))
-        .map((s) => ({ value: s.id, label: nameOf(s.names) }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    }))
-    .filter((group) => group.items.length > 0);
 }
 
 // ---------------------------------------------------------------------------

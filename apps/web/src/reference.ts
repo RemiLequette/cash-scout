@@ -94,3 +94,18 @@ export function useNameOf(defaultLanguage: string | undefined) {
   const { i18n } = useTranslation();
   return (names: Names) => displayName(names, i18n.language, defaultLanguage ?? i18n.language);
 }
+
+/** Sub-categories grouped under their category, for a select; archived ones only if kept. */
+export function useSubCategoryOptions(reference: Reference, keep?: string, categoryIds?: string[]) {
+  const nameOf = useNameOf(reference.defaultLanguage);
+  return reference.categories
+    .filter((category) => !categoryIds || categoryIds.includes(category.id))
+    .map((category) => ({
+      group: `${category.code} ${nameOf(category.names)}`,
+      items: reference.subCategories
+        .filter((s) => s.categoryId === category.id && (!s.archived || s.id === keep))
+        .map((s) => ({ value: s.id, label: nameOf(s.names) }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    }))
+    .filter((group) => group.items.length > 0);
+}

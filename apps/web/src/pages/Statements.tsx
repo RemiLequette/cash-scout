@@ -2,7 +2,6 @@ import { formatMoney, parseAmount, type StatementPreview as Preview } from "@cas
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
   FileInput,
   Group,
@@ -17,15 +16,9 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNameOf, useReference } from "../reference";
-import {
-  useBatch,
-  useBatches,
-  useDeleteBatch,
-  useKeepBatch,
-  usePresets,
-  usePreview,
-  type BatchLine,
-} from "../statements";
+import { useBatches, useDeleteBatch, useKeepBatch, usePresets, usePreview } from "../statements";
+import { BatchReview } from "./BatchReview";
+import { RulesPanel } from "./Rules";
 
 type Money = (amount: string, currency: string) => string;
 
@@ -41,7 +34,7 @@ function ErrorAlert({ error }: { error: Error | null }) {
 
 /**
  * Reads a bank statement and shows what it holds, line by line, then keeps it
- * as a batch to review. Importing the lines into the journal comes next.
+ * as a batch, reviewed line by line and imported into the journal.
  */
 export function Statements({ bookId }: { bookId: string }) {
   const { t } = useTranslation();
@@ -131,7 +124,8 @@ export function Statements({ bookId }: { bookId: string }) {
           />
         )}
       </Stack>
-      <SavedBatches bookId={bookId} money={money} />
+      <SavedBatches bookId={bookId} />
+      <RulesPanel bookId={bookId} />
     </Stack>
   );
 }
@@ -207,14 +201,13 @@ function PreviewResult({
 }
 
 /** The statements kept for review, and the lines of the one that is open. */
-function SavedBatches({ bookId, money }: { bookId: string; money: Money }) {
+function SavedBatches({ bookId }: { bookId: string }) {
   const { t, i18n } = useTranslation();
   const reference = useReference(bookId);
   const nameOf = useNameOf(reference.data?.defaultLanguage);
   const batches = useBatches(bookId);
   const remove = useDeleteBatch(bookId);
   const [openId, setOpenId] = useState<string | null>(null);
-  const open = useBatch(bookId, openId);
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" });
 
   if (!batches.data || batches.data.length === 0) return null;
@@ -286,20 +279,20 @@ function SavedBatches({ bookId, money }: { bookId: string; money: Money }) {
           ))}
         </Table.Tbody>
       </Table>
-      <ErrorAlert error={open.error} />
-      {open.data && (
-        <LinesTable lines={open.data.lines} currency={open.data.currency} money={money} />
-      )}
+      {openId && <BatchReview key={openId} bookId={bookId} batchId={openId} />}
     </Stack>
   );
 }
 
-type Line = Pick<
-  BatchLine,
-  "date" | "amount" | "label" | "counterparty" | "memo" | "bankCategory" | "balance"
-> & { row: number; duplicate?: boolean };
-
-function LinesTable({ lines, currency, money }: { lines: Line[]; currency: string; money: Money }) {
+function LinesTable({
+  lines,
+  currency,
+  money,
+}: {
+  lines: Preview["lines"];
+  currency: string;
+  money: Money;
+}) {
   const { t } = useTranslation();
   return (
     <Table.ScrollContainer minWidth={700} h={520}>
@@ -316,18 +309,9 @@ function LinesTable({ lines, currency, money }: { lines: Line[]; currency: strin
         </Table.Thead>
         <Table.Tbody>
           {lines.map((line) => (
-            <Table.Tr key={line.row} opacity={line.duplicate ? 0.55 : undefined}>
+            <Table.Tr key={line.row}>
               <Table.Td style={{ whiteSpace: "nowrap" }}>{line.date}</Table.Td>
-              <Table.Td>
-                <Group gap={6} wrap="wrap">
-                  {line.counterparty}
-                  {line.duplicate && (
-                    <Badge size="xs" color="orange" variant="light">
-                      {t("statements.duplicate")}
-                    </Badge>
-                  )}
-                </Group>
-              </Table.Td>
+              <Table.Td>{line.counterparty}</Table.Td>
               <Table.Td>
                 <Text size="sm" title={line.memo || undefined}>
                   {line.label}

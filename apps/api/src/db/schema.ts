@@ -19,6 +19,7 @@ import {
   timestamp,
   unique,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -405,6 +406,10 @@ export const journalEntry = pgTable(
     /** The transfer this entry is one side of, and which side. */
     transferId: uuid("transfer_id"),
     transferLeg: transferLeg("transfer_leg"),
+    /** The statement import that created the entry. */
+    importBatchId: uuid("import_batch_id").references((): AnyPgColumn => importBatch.id, {
+      onDelete: "set null",
+    }),
     ...timestamps,
     version: version(),
   },
@@ -447,6 +452,39 @@ export const journalEntry = pgTable(
 // import batch: its lines are kept, reviewed over several sittings, then imported.
 // ---------------------------------------------------------------------------
 
+export const ruleDirection = pgEnum("rule_direction", ["any", "in", "out"]);
+
+/**
+ * What to do with the statement lines that fit its conditions; rules are tried
+ * in `position` order and the first that fits wins. They belong to the book.
+ */
+export const importRule = pgTable(
+  "import_rule",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    position: integer("position").notNull(),
+    name: text("name").notNull(),
+    /** Conditions: all that are set must hold. */
+    text: text("text"),
+    bankCategory: text("bank_category"),
+    accountId: uuid("account_id").references(() => bookAccount.id, { onDelete: "set null" }),
+    direction: ruleDirection("direction").notNull().default("any"),
+    /** Bounds on the size of the amount, as decimal text in the account's currency. */
+    minAmount: numeric("min_amount"),
+    maxAmount: numeric("max_amount"),
+    /** Actions. */
+    subCategoryId: uuid("sub_category_id").references(() => subCategory.id, {
+      onDelete: "set null",
+    }),
+    description: text("description"),
+    ignore: boolean("ignore").notNull().default(false),
+    ...timestamps,
+    version: version(),
+  },
+  (t) => [unique().on(t.id, t.bookId), index("import_rule_book_idx").on(t.bookId, t.position)],
+);
+
 /** A statement file read for one account. */
 export const importBatch = pgTable(
   "import_batch",
@@ -472,7 +510,12 @@ export const importBatch = pgTable(
   ],
 );
 
-export const importLineStatus = pgEnum("import_line_status", ["review", "validated", "ignored"]);
+export const importLineStatus = pgEnum("import_line_status", [
+  "review",
+  "validated",
+  "ignored",
+  "imported",
+]);
 
 /** One line of a statement, as read; nothing in it is matched with the book yet. */
 export const importLine = pgTable(
@@ -500,6 +543,19 @@ export const importLine = pgTable(
     /** Date, amount, normalised label and rank among identical lines: the same line in another file has the same one. */
     fingerprint: text("fingerprint").notNull(),
     status: importLineStatus("status").notNull().default("review"),
+    /** Chosen in the review: the sub-category of the entry to create. */
+    subCategoryId: uuid("sub_category_id").references(() => subCategory.id, {
+      onDelete: "set null",
+    }),
+    /** The rule that proposed the sub-category, description or ignoring. */
+    ruleId: uuid("rule_id").references(() => importRule.id, { onDelete: "set null" }),
+    /** The description of the entry to create, when it was rewritten. */
+    description: text("description"),
+    /** The journal entry the line is: chosen in the review, or created by the import. */
+    entryId: uuid("entry_id").references(() => journalEntry.id, { onDelete: "set null" }),
+    /** For a line matched to an entry: the entry's date and reconciled flag before the import, to undo it. */
+    previousDate: date("previous_date", { mode: "string" }),
+    previousReconciled: boolean("previous_reconciled"),
     ...timestamps,
     version: version(),
   },
@@ -509,6 +565,7 @@ export const importLine = pgTable(
       foreignColumns: [importBatch.id, importBatch.bookId],
     }).onDelete("cascade"),
     index("import_line_batch_idx").on(t.batchId),
+    index("import_line_entry_idx").on(t.entryId),
     index("import_line_fingerprint_idx").on(t.bookId, t.fingerprint),
   ],
 );

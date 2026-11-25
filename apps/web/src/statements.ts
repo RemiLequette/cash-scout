@@ -1,4 +1,4 @@
-import type { StatementPreview } from "@cash-scout/domain";
+import type { ImportRequest, ReviewChanges, RuleInput, StatementPreview } from "@cash-scout/domain";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "./api";
 
@@ -29,19 +29,36 @@ export interface Batch {
   to: string | null;
 }
 
+export interface MatchedEntry {
+  id: string;
+  date: string;
+  description: string;
+  subCategoryId: string;
+  reconciled: boolean;
+  /** One side of a transfer. */
+  transfer: boolean;
+}
+
 export interface BatchLine {
   id: string;
   row: number;
   date: string;
-  valueDate: string | null;
   amount: string;
   label: string;
   counterparty: string;
   memo: string;
-  reference: string;
   bankCategory: string;
   balance: string | null;
-  status: "review" | "validated" | "ignored";
+  status: "review" | "validated" | "ignored" | "imported";
+  /** Chosen in the review: the sub-category of the entry to create. */
+  subCategoryId: string | null;
+  description: string | null;
+  /** The rule that proposed the sub-category, the description or ignoring. */
+  ruleId: string | null;
+  /** The entry of the journal the line is, chosen or created. */
+  entry: MatchedEntry | null;
+  /** The entries the line may be, the proposal first; only for a line to review. */
+  candidates: MatchedEntry[];
   /** An earlier batch of the account already holds this line. */
   duplicate: boolean;
 }
@@ -53,7 +70,17 @@ export interface BatchDetail {
   fileName: string;
   createdAt: string;
   currency: string;
+  bookCurrency: string;
   lines: BatchLine[];
+  /** What the opening balance becomes, when the statement can tell. */
+  opening: {
+    date: string;
+    balance: string;
+    current: string;
+    proposed: string;
+    /** The account has no entry yet: setting it is the expected thing. */
+    suggested: boolean;
+  } | null;
 }
 
 /** The formats of statements the API can read. */
@@ -132,6 +159,130 @@ export function useDeleteBatch(bookId: string) {
       await checked(await fetch(`${base(bookId)}/batches/${id}`, { method: "DELETE" }));
     },
     onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["books", bookId, "statements", "batches"] }),
+  });
+}
+
+async function sendJson(url: string, method: string, body: unknown) {
+  return checked(
+    await fetch(url, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+/** Saves decisions on some lines of a batch; the batch is read again after it. */
+export function useReviewLines(bookId: string, batchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (changes: ReviewChanges["changes"]) => {
+      await sendJson(`${base(bookId)}/batches/${batchId}/lines`, "PATCH", { changes });
+    },
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ["books", bookId, "statements", "batches"] }),
+  });
+}
+
+/** Writes the validated lines into the journal: everything of the book may change. */
+export function useImportBatch(bookId: string, batchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (request: ImportRequest) =>
+      (await (
+        await sendJson(`${base(bookId)}/batches/${batchId}/import`, "POST", request)
+      ).json()) as { created: number; matched: number; openingSet: boolean },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId] }),
+  });
+}
+
+/** Undoes the import of a batch: created entries are removed, reconciled ones restored. */
+export function useUndoImport(bookId: string, batchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      (await (await sendJson(`${base(bookId)}/batches/${batchId}/undo`, "POST", {})).json()) as {
+        removed: number;
+        restored: number;
+        skipped: number;
+      },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId] }),
+  });
+}
+
+/** An import rule, as the API gives it. */
+export interface Rule {
+  id: string;
+  position: number;
+  name: string;
+  text: string | null;
+  bankCategory: string | null;
+  accountId: string | null;
+  direction: "any" | "in" | "out";
+  minAmount: string | null;
+  maxAmount: string | null;
+  subCategoryId: string | null;
+  description: string | null;
+  ignore: boolean;
+}
+
+const rulesKey = (bookId: string) => ["books", bookId, "statements", "rules"];
+
+export function useRules(bookId: string) {
+  return useQuery({
+    queryKey: rulesKey(bookId),
+    queryFn: async () =>
+      (await (await checked(await fetch(`${base(bookId)}/rules`))).json()) as Rule[],
+  });
+}
+
+/** Creates a rule, or replaces the one with `id`. */
+export function useSaveRule(bookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id?: string; rule: RuleInput }) =>
+      (await (
+        await sendJson(
+          `${base(bookId)}/rules${input.id ? `/${input.id}` : ""}`,
+          input.id ? "PUT" : "POST",
+          input.rule,
+        )
+      ).json()) as Rule,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: rulesKey(bookId) }),
+  });
+}
+
+export function useDeleteRule(bookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await checked(await fetch(`${base(bookId)}/rules/${id}`, { method: "DELETE" }));
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: rulesKey(bookId) }),
+  });
+}
+
+/** Sets the order of the rules, first to last. */
+export function useOrderRules(bookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      await sendJson(`${base(bookId)}/rules/order`, "PUT", { ids });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: rulesKey(bookId) }),
+  });
+}
+
+/** Tries the rules on the lines of a batch that have nothing chosen yet. */
+export function useApplyRules(bookId: string, batchId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      (await (await sendJson(`${base(bookId)}/batches/${batchId}/rules`, "POST", {})).json()) as {
+        applied: number;
+      },
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: ["books", bookId, "statements", "batches"] }),
   });
 }

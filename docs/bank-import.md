@@ -32,6 +32,12 @@ A first screen uses it: **Import a statement** in the book's menu. The user pick
 
 **Batches** keep what was read. "Keep for review" stores the file as an `import_batch` (the account, the format, the file name, who added it) with one `import_line` per line: the fields read, the source cells, a status (to review, validated, ignored) and a **fingerprint**. A batch can be opened again, over several sittings, and deleted with its lines; the journal is not touched. A line is flagged **seen before** when an earlier batch of the same account holds the same fingerprint, so two overlapping exports do not double what they share. Batches are only visible to editors and owners of the book (row-level security), since a statement holds account numbers and labels.
 
+**Review and import** (built). Opening a batch shows each line with what is decided for it: a **new entry** (a sub-category, a description that can be rewritten), an **existing entry** of the journal to reconcile, or **ignored**. Choosing a sub-category or an entry validates the line; several lines can be changed at once. The matching is the simple one of step 4: for a line to review, the entries of the same account with the **same amount** and a date within **5 days** (`matchWindowDays`) are proposed, the closest first and a forecast before a reconciled entry; an entry is proposed to one line only, and never when another statement line already is it. A proposal is accepted one by one or all at once; nothing is chosen silently. Transfers are not detected yet: a transfer already in the journal is found by this matching, otherwise the line is ignored and the transfer entered by hand.
+
+**Import** writes the validated lines in one transaction (the batch is locked, so a double click cannot import it twice): a line with a sub-category becomes a reconciled entry (planned amount 0, `import_batch_id` set); a matched entry is reconciled and takes the bank's date, except the side of a transfer, which keeps its date. A line left in review stays in the batch. The **opening balance** is offered only when no line is left to review (a line imported later would be counted twice) and the statement has balances: the proposal is the statement's last balance minus the reconciled entries up to its date, the entries the batch matched, and the lines about to be imported; it is ticked only when the account has no entry. For an account in another currency the import takes one exchange rate.
+
+**Undo.** "Undo the import" deletes the entries the batch created, gives the entries it reconciled their date and flag back (each matched line keeps them in `previous_date` and `previous_reconciled`), and returns the lines to validated, so the batch can be changed or imported again. An entry the user deleted or changed since is left alone and counted. The opening balance is not restored.
+
 Checked on a year of real statements: every line of both files is read. Boursorama's balance is the balance at the **end of the day**, so it checks the sum of a day, not of one line; it held on 165 of 167 day changes.
 
 ## Pipeline
@@ -65,6 +71,10 @@ An imported line that matches an unreconciled entry of the journal reconciles it
 A statement line that is one side of a movement between two accounts of the book can be paired with its other side, in the same batch, in another batch, or already in the journal, and imported as a [transfer](../README.md#transfers). The date gap between the two sides is the transfer's delay (0 to 60 days). The pairing is proposed, never done silently.
 
 ### Rules
+
+**Built.** A rule is an `import_rule` row of the book, edited in the **Rules** section of the import screen and tried in the order shown (up and down arrows); the first that fits wins. Conditions, all of which must hold: the text of the counterparty, label or memo (**contains**, ignoring case and accents), the bank category (contains), the account, the direction (money in or out), a minimum and a maximum size of the amount. Actions: a sub-category, a rewritten description, or **ignore**. A rule needs one condition and one action. Rules only **propose**: when a batch is kept, and on "Try the rules", the first rule that fits a line with nothing chosen sets its sub-category and description (or marks the line to ignore) and remembers the rule (`import_line.rule_id`); the line stays to review, and **Accept the proposals of the rules** validates them, which is choosing the sub-category. A line already proposed something is left alone, as is one with a sub-category or an entry. A line with a forecast to reconcile is not accepted in bulk: the match comes first. A rule whose sub-category is archived is skipped. From a line with a sub-category, **Create a rule** opens the form filled with its counterparty, and shows how many lines to review of the batch it fits; the rules are then tried on the batch. Not built: regular expressions (a pattern from the user would run on the server), payment types, the transfer action, and the count of journal entries a rule would touch.
+
+The design intent:
 
 A rule belongs to the book, so editors share it. A condition: text of the counterparty or label (contains, regex), account, direction, amount range, bank category. An action: sub-category, payment type, a rewritten description, "transfer to account X", "ignore". The mapping from a bank category to a sub-category is a rule like any other.
 
@@ -121,7 +131,7 @@ Boursorama and ABN AMRO give the account number on each line. An account that st
 3. **Rules.** The rule model, the engine (pure, in `packages/domain`), creation from the review.
 4. **Duplicates, reconciliations and transfers.** The matching, then the warnings in the review.
 
-Step 1 is built: the README, the architecture and the online help are updated with it. Step 2 is half built: reading, preview and batches are done; the `.xls` reader (ABN AMRO) and importing a batch into the journal remain.
+Step 1 is built: the README, the architecture and the online help are updated with it. Step 2 is built except the `.xls` reader (ABN AMRO): reading, preview, batches, the review and the import into the journal are done. Step 3 is built in its first form (see [Rules](#rules)): rules with a text, bank category, account, direction and amount conditions, and a sub-category, description or ignore action; regular expressions and the transfer action wait.
 
 ## Open points
 
