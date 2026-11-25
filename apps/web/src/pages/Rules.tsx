@@ -22,7 +22,13 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNameOf, useReference, useSubCategoryOptions, type Reference } from "../reference";
+import {
+  useNameOf,
+  useReference,
+  usePaymentTypeOptions,
+  useSubCategoryOptions,
+  type Reference,
+} from "../reference";
 import { useDeleteRule, useOrderRules, useRules, useSaveRule, type Rule } from "../statements";
 
 function ErrorAlert({ error }: { error: Error | null }) {
@@ -52,6 +58,7 @@ interface Draft {
   minAmount: string;
   maxAmount: string;
   subCategoryId: string | null;
+  paymentTypeId: string | null;
   description: string;
   ignore: boolean;
 }
@@ -65,6 +72,7 @@ const blank: Draft = {
   minAmount: "",
   maxAmount: "",
   subCategoryId: null,
+  paymentTypeId: null,
   description: "",
   ignore: false,
 };
@@ -79,6 +87,7 @@ export function draftOf(rule: Partial<Rule>): Draft {
     minAmount: rule.minAmount ?? "",
     maxAmount: rule.maxAmount ?? "",
     subCategoryId: rule.subCategoryId ?? null,
+    paymentTypeId: rule.paymentTypeId ?? null,
     description: rule.description ?? "",
     ignore: rule.ignore ?? false,
   };
@@ -93,6 +102,7 @@ const input = (draft: Draft): RuleInput => ({
   minAmount: draft.minAmount.trim().replace(",", ".") || null,
   maxAmount: draft.maxAmount.trim().replace(",", ".") || null,
   subCategoryId: draft.ignore ? null : draft.subCategoryId,
+  paymentTypeId: draft.ignore ? null : draft.paymentTypeId,
   description: draft.description,
   ignore: draft.ignore,
 });
@@ -134,6 +144,7 @@ function RuleFormBody({
   const set = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
 
   const options = useSubCategoryOptions(reference, initial.subCategoryId ?? undefined);
+  const payments = usePaymentTypeOptions(reference, initial.paymentTypeId ?? undefined);
   const accounts = reference.accounts.filter((a) => a.kind === "bank" && !a.archived);
   const parsed = ruleInputSchema.safeParse(input(draft));
   const touched =
@@ -229,6 +240,16 @@ function RuleFormBody({
             onChange={(value) => set({ subCategoryId: value })}
           />
         )}
+        {!draft.ignore && (
+          <Select
+            label={t("statements.review.paymentType")}
+            searchable
+            clearable
+            data={payments}
+            value={draft.paymentTypeId}
+            onChange={(value) => set({ paymentTypeId: value })}
+          />
+        )}
         <TextInput
           label={t("statements.review.description")}
           description={t("statements.rules.descriptionHint")}
@@ -301,10 +322,13 @@ export function RulesPanel({ bookId }: { bookId: string }) {
     ]
       .filter(Boolean)
       .join(" · ");
+  const paymentName = (id: string) =>
+    nameOf(reference.data?.paymentTypes.find((p) => p.id === id)?.names ?? {});
   const actions = (rule: Rule) =>
     [
       rule.ignore && t("statements.rules.ignoreLine"),
       rule.subCategoryId && subName(rule.subCategoryId),
+      rule.paymentTypeId && paymentName(rule.paymentTypeId),
       rule.description && `« ${rule.description} »`,
     ]
       .filter(Boolean)

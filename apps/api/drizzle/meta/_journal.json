@@ -169,6 +169,20 @@
       "when": 1795627859670,
       "tag": "0023_import_review_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795636410104,
+      "tag": "0024_forecast_amount",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795638103262,
+      "tag": "0025_payment_types",
+      "breakpoints": true
     }
   ]
 }

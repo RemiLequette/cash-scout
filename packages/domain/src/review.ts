@@ -6,8 +6,11 @@ import { daysBetween, rateSchema } from "./journal.js";
  * line, and which journal entry a line may already be.
  */
 
-/** A bank date and the date written in the journal may differ by a few days. */
+/** A bank date and the date of an entry already reconciled may differ by a few days. */
 export const matchWindowDays = 5;
+/** A forecast is further from the truth: its date may be further off, and its amount too. */
+export const forecastWindowDays = 10;
+export const forecastTolerancePercent = 10;
 
 export interface MatchLine {
   id: string;
@@ -17,29 +20,55 @@ export interface MatchLine {
 }
 
 export interface MatchEntry extends MatchLine {
+  /** An entry that is not reconciled is a forecast. */
   reconciled: boolean;
+  /** One side of a transfer: its amount is tied to the other side. */
+  transfer?: boolean;
 }
 
 /**
- * The journal entries each line may already be: same amount, dated within the
- * window, the closest first (a forecast before a reconciled entry at the same
- * distance). An entry is proposed to one line only, to its closest one, so two
+ * May a line be this entry although the amounts differ? Only a forecast that is
+ * not a side of a transfer takes the bank's amount.
+ */
+export function takesAmount(entry: { reconciled: boolean; transfer?: boolean }): boolean {
+  return !entry.reconciled && !entry.transfer;
+}
+
+/** Same amount, or for a forecast one within the tolerance (and of the same sign). */
+function amountFits(line: bigint, entry: MatchEntry): boolean {
+  if (line === entry.amount) return true;
+  if (!takesAmount(entry) || line < 0n !== entry.amount < 0n) return false;
+  const abs = (value: bigint) => (value < 0n ? -value : value);
+  return abs(line - entry.amount) * 100n <= abs(entry.amount) * BigInt(forecastTolerancePercent);
+}
+
+/**
+ * The journal entries each line may already be. A forecast fits within
+ * `forecastWindowDays` and, unless a side of a transfer, within
+ * `forecastTolerancePercent` of its amount; a reconciled entry needs the same
+ * amount within `matchWindowDays`. The best first: the exact amount, then the
+ * closest date, then a forecast. An entry is proposed to one line only, so two
  * identical purchases do not both claim the single entry of the journal.
  * `lines` and `entries` belong to the same account.
  */
 export function matchLines(
   lines: readonly MatchLine[],
   entries: readonly MatchEntry[],
-  window = matchWindowDays,
 ): Map<string, string[]> {
   const pairs = lines.flatMap((line) =>
     entries
-      .filter((entry) => entry.amount === line.amount)
-      .map((entry) => ({ line, entry, gap: Math.abs(daysBetween(line.date, entry.date)) }))
-      .filter((pair) => pair.gap <= window),
+      .filter((entry) => amountFits(line.amount, entry))
+      .map((entry) => ({
+        line,
+        entry,
+        exact: entry.amount === line.amount,
+        gap: Math.abs(daysBetween(line.date, entry.date)),
+      }))
+      .filter((pair) => pair.gap <= (pair.entry.reconciled ? matchWindowDays : forecastWindowDays)),
   );
   pairs.sort(
     (a, b) =>
+      Number(b.exact) - Number(a.exact) ||
       a.gap - b.gap ||
       Number(a.entry.reconciled) - Number(b.entry.reconciled) ||
       a.line.date.localeCompare(b.line.date) ||
@@ -82,6 +111,8 @@ export const lineChangeSchema = z
     subCategoryId: z.uuid().nullable().optional(),
     /** The line is this entry of the journal: it gets reconciled. */
     entryId: z.uuid().nullable().optional(),
+    /** The payment type of the entry to create. */
+    paymentTypeId: z.uuid().nullable().optional(),
     description: z.string().trim().max(500).nullable().optional(),
   })
   .refine((c) => !(c.subCategoryId && c.entryId), {

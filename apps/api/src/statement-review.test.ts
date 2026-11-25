@@ -29,6 +29,8 @@ interface Line {
 }
 interface Batch {
   lines: Line[];
+  forecasts: { id: string }[];
+  unmatched: { id: string }[];
   opening: { current: string; proposed: string; suggested: boolean } | null;
 }
 
@@ -180,9 +182,9 @@ describe("statement review and import", () => {
     expect((await b.change(second, [{ id: again.id, entryId: entry }])).status).toBe(400);
   });
 
-  it("refuses an entry of another amount, and writes nothing when one change is wrong", async () => {
+  it("refuses a reconciled entry of another amount, and writes nothing when one change is wrong", async () => {
     const b = await setup();
-    const entry = await b.addEntry("2026-10-30", "-8.00");
+    const entry = await b.addEntry("2026-10-30", "-8.00", true);
     const id = await b.keep();
     const [first, second] = (await b.read(id)).lines;
     const res = await b.change(id, [
@@ -240,6 +242,49 @@ describe("statement review and import", () => {
     const [entry] = await b.entries();
     await b.owner.request("DELETE", `/books/${b.bookId}/journal/${entry!.id}`);
     expect(await (await b.undo(id)).json()).toEqual({ removed: 0, restored: 0, skipped: 1 });
+  });
+
+  it("gives a forecast of another amount the bank's, and gives it back on undo", async () => {
+    const b = await setup();
+    const forecast = await b.addEntry("2026-11-05", "-18.00");
+    const id = await b.keep();
+    const line = (await b.read(id)).lines.find((l) => l.amount === "-19.15")!;
+    expect(line.candidates.map((c) => c.id)).toEqual([forecast]);
+
+    await b.change(id, [{ id: line.id, entryId: forecast }]);
+    expect(await (await b.run(id)).json()).toMatchObject({ created: 0, matched: 1 });
+    expect(await b.entries()).toEqual([
+      expect.objectContaining({ id: forecast, amount: "-19.15", reconciled: true }),
+    ]);
+
+    expect(await (await b.undo(id)).json()).toMatchObject({ restored: 1, skipped: 0 });
+    expect(await b.entries()).toEqual([
+      expect.objectContaining({
+        id: forecast,
+        amount: "-18.00",
+        date: "2026-11-05",
+        reconciled: false,
+      }),
+    ]);
+  });
+
+  it("lists the forecasts to choose by hand, and warns about those of the period", async () => {
+    const b = await setup();
+    const doubled = await b.addEntry("2026-10-28", "-2000.00");
+    const later = await b.addEntry("2026-12-05", "-30.00");
+    const done = await b.addEntry("2026-10-28", "-40.00", true);
+    const id = await b.keep();
+    const batch = await b.read(id);
+    expect(batch.forecasts.map((e) => e.id)).toEqual([doubled, later]);
+    expect(batch.unmatched.map((e) => e.id)).toEqual([doubled]);
+
+    // A forecast takes any amount; a reconciled entry needs the line's.
+    const line = batch.lines.find((l) => l.amount === "-1234.56")!;
+    expect((await b.change(id, [{ id: line.id, entryId: done }])).status).toBe(400);
+    expect((await b.change(id, [{ id: line.id, entryId: doubled }])).status).toBe(204);
+    const after = await b.read(id);
+    expect(after.unmatched).toEqual([]);
+    expect(after.forecasts.map((e) => e.id)).toEqual([later]);
   });
 
   it("keeps the entries when the batch is deleted", async () => {

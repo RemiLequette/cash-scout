@@ -477,6 +477,9 @@ export const importRule = pgTable(
     subCategoryId: uuid("sub_category_id").references(() => subCategory.id, {
       onDelete: "set null",
     }),
+    paymentTypeId: uuid("payment_type_id").references(() => paymentType.id, {
+      onDelete: "set null",
+    }),
     description: text("description"),
     ignore: boolean("ignore").notNull().default(false),
     ...timestamps,
@@ -547,6 +550,10 @@ export const importLine = pgTable(
     subCategoryId: uuid("sub_category_id").references(() => subCategory.id, {
       onDelete: "set null",
     }),
+    /** The payment type of the entry to create. */
+    paymentTypeId: uuid("payment_type_id").references(() => paymentType.id, {
+      onDelete: "set null",
+    }),
     /** The rule that proposed the sub-category, description or ignoring. */
     ruleId: uuid("rule_id").references(() => importRule.id, { onDelete: "set null" }),
     /** The description of the entry to create, when it was rewritten. */
@@ -556,6 +563,8 @@ export const importLine = pgTable(
     /** For a line matched to an entry: the entry's date and reconciled flag before the import, to undo it. */
     previousDate: date("previous_date", { mode: "string" }),
     previousReconciled: boolean("previous_reconciled"),
+    /** The amount of a matched forecast before it took the bank's. */
+    previousAmount: bigint("previous_amount", { mode: "bigint" }),
     ...timestamps,
     version: version(),
   },

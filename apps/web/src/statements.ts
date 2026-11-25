@@ -32,6 +32,7 @@ export interface Batch {
 export interface MatchedEntry {
   id: string;
   date: string;
+  amount: string;
   description: string;
   subCategoryId: string;
   reconciled: boolean;
@@ -55,6 +56,8 @@ export interface BatchLine {
   description: string | null;
   /** The rule that proposed the sub-category, the description or ignoring. */
   ruleId: string | null;
+  /** The payment type of the entry to create. */
+  paymentTypeId: string | null;
   /** The entry of the journal the line is, chosen or created. */
   entry: MatchedEntry | null;
   /** The entries the line may be, the proposal first; only for a line to review. */
@@ -72,6 +75,10 @@ export interface BatchDetail {
   currency: string;
   bookCurrency: string;
   lines: BatchLine[];
+  /** Forecasts of the account no line is, to choose by hand. */
+  forecasts: MatchedEntry[];
+  /** Forecasts dated within the statement that no line is: likely to be written twice. */
+  unmatched: MatchedEntry[];
   /** What the opening balance becomes, when the statement can tell. */
   opening: {
     date: string;
@@ -223,6 +230,7 @@ export interface Rule {
   minAmount: string | null;
   maxAmount: string | null;
   subCategoryId: string | null;
+  paymentTypeId: string | null;
   description: string | null;
   ignore: boolean;
 }

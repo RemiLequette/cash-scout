@@ -17,7 +17,12 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useReference, useSubCategoryOptions, type Reference } from "../reference";
+import {
+  usePaymentTypeOptions,
+  useReference,
+  useSubCategoryOptions,
+  type Reference,
+} from "../reference";
 import { draftOf, RuleForm } from "./Rules";
 import {
   useApplyRules,
@@ -74,10 +79,8 @@ function Review({
   const rules = useRules(bookId);
   const apply = useApplyRules(bookId, batch.id);
   const [ruleFor, setRuleFor] = useState<BatchLine | null>(null);
-  // Lines with nothing chosen and no proposal yet: the rules may have something for them.
-  const open = batch.lines.filter(
-    (l) => l.status === "review" && !l.subCategoryId && !l.entry && !l.ruleId,
-  ).length;
+  // The rules can be tried again on the lines still to review.
+  const open = batch.lines.filter((l) => l.status === "review" && !l.entry).length;
   const ruleOf = (line: BatchLine) => rules.data?.find((r) => r.id === line.ruleId);
   const [filter, setFilter] = useState<Filter>(() =>
     batch.lines.some((l) => l.status === "review") ? "review" : "all",
@@ -85,6 +88,7 @@ function Review({
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const options = useSubCategoryOptions(reference);
+  const payments = usePaymentTypeOptions(reference);
 
   const count = (f: Filter) =>
     f === "all" ? batch.lines.length : batch.lines.filter((l) => l.status === f).length;
@@ -97,7 +101,7 @@ function Review({
   const chosen = batch.lines.filter((l) => selected.has(l.id) && l.status !== "imported");
 
   const matches = batch.lines.filter(
-    (l) => l.status === "review" && !l.duplicate && l.candidates.length > 0,
+    (l) => l.status === "review" && !l.duplicate && l.candidates[0]?.amount === l.amount,
   );
   const seen = batch.lines.filter((l) => l.status === "review" && l.duplicate);
   // A rule proposed something: a sub-category to take, or ignoring the line.
@@ -260,6 +264,8 @@ function Review({
                   line={line}
                   currency={batch.currency}
                   options={options}
+                  forecasts={batch.forecasts}
+                  payments={payments}
                   rule={ruleOf(line)}
                   onCreateRule={() => setRuleFor(line)}
                   selected={selected.has(line.id)}
@@ -280,6 +286,7 @@ function Review({
           initial={draftOf({
             text: ruleFor.counterparty || ruleFor.label,
             subCategoryId: ruleFor.subCategoryId,
+            paymentTypeId: ruleFor.paymentTypeId,
             description: ruleFor.description,
           })}
           sample={{
@@ -299,6 +306,8 @@ function Line({
   line,
   currency,
   options,
+  forecasts,
+  payments,
   rule,
   onCreateRule,
   selected,
@@ -308,6 +317,8 @@ function Line({
   line: BatchLine;
   currency: string;
   options: ReturnType<typeof useSubCategoryOptions>;
+  forecasts: MatchedEntry[];
+  payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
   onCreateRule: () => void;
   selected: boolean;
@@ -358,7 +369,10 @@ function Line({
       <Table.Td>
         <Decision
           line={line}
+          currency={currency}
           options={options}
+          forecasts={forecasts}
+          payments={payments}
           rule={rule}
           onCreateRule={onCreateRule}
           onChange={onChange}
@@ -383,18 +397,30 @@ function Line({
 /** What the line becomes in the journal, and the means to choose it. */
 function Decision({
   line,
+  currency,
   options,
+  forecasts,
+  payments,
   rule,
   onCreateRule,
   onChange,
 }: {
   line: BatchLine;
+  currency: string;
   options: ReturnType<typeof useSubCategoryOptions>;
+  forecasts: MatchedEntry[];
+  payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
   onCreateRule: () => void;
   onChange: (change: Omit<Change, "id">) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const money = (amount: string) => formatMoney(parseAmount(amount, currency), i18n.language);
+  /** Said after an entry whose amount the line would change. */
+  const planned = (entry: MatchedEntry) =>
+    entry.amount === line.amount
+      ? ""
+      : ` ${t("statements.review.planned", { amount: money(entry.amount) })}`;
   const named = (entry: MatchedEntry) => ({
     date: entry.date,
     description: entry.transfer
@@ -418,7 +444,10 @@ function Decision({
   if (line.entry) {
     return (
       <Group gap={6} wrap="nowrap">
-        <Text size="sm">{t("statements.review.willReconcile", named(line.entry))}</Text>
+        <Text size="sm">
+          {t("statements.review.willReconcile", named(line.entry))}
+          {planned(line.entry)}
+        </Text>
         <ActionIcon
           variant="subtle"
           color="gray"
@@ -445,8 +474,23 @@ function Decision({
           onClick={() => onChange({ entryId: entry.id })}
         >
           {t("statements.review.reconcile", named(entry))}
+          {planned(entry)}
         </Button>
       ))}
+      {forecasts.length > 0 && (
+        <Select
+          size="xs"
+          aria-label={t("statements.review.pickForecast")}
+          placeholder={t("statements.review.pickForecast")}
+          searchable
+          data={forecasts.map((entry) => ({
+            value: entry.id,
+            label: `${entry.date} · ${money(entry.amount)} · ${entry.description}`,
+          }))}
+          value={null}
+          onChange={(value) => value && onChange({ entryId: value })}
+        />
+      )}
       <Select
         size="xs"
         aria-label={t("statements.review.subCategory")}
@@ -463,6 +507,18 @@ function Decision({
             ? t("statements.review.ruleIgnores", { name: rule.name })
             : t("statements.review.ruleProposes", { name: rule.name })}
         </Text>
+      )}
+      {(line.subCategoryId || line.paymentTypeId) && (
+        <Select
+          size="xs"
+          aria-label={t("statements.review.paymentType")}
+          placeholder={t("statements.review.paymentType")}
+          searchable
+          clearable
+          data={payments}
+          value={line.paymentTypeId}
+          onChange={(value) => onChange({ paymentTypeId: value })}
+        />
       )}
       {line.subCategoryId && (
         <TextInput
@@ -516,6 +572,21 @@ function ImportPanel({
   return (
     <Stack gap="xs">
       {run.data && <Alert color="teal">{t("statements.review.done", run.data)}</Alert>}
+      {batch.unmatched.length > 0 && batch.lines.some((l) => l.status !== "imported") && (
+        <Alert
+          color="orange"
+          title={t("statements.review.unmatched", { count: batch.unmatched.length })}
+        >
+          <Text size="sm" mb={4}>
+            {t("statements.review.unmatchedHint")}
+          </Text>
+          {batch.unmatched.slice(0, 10).map((entry) => (
+            <Text size="sm" key={entry.id}>
+              {entry.date} · {money(entry.amount)} · {entry.description}
+            </Text>
+          ))}
+        </Alert>
+      )}
       {undo.data && <Alert color="teal">{t("statements.review.undone", undo.data)}</Alert>}
       <ErrorAlert error={run.error ?? undo.error} />
       {imported > 0 && (

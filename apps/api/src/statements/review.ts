@@ -3,11 +3,12 @@ import {
   bookAmount,
   decide,
   firstRule,
+  forecastWindowDays,
   matchLines,
-  matchWindowDays,
   money,
   openingFromBalance,
   resolveRate,
+  takesAmount,
   type ImportRequest,
   type LineChange,
 } from "@cash-scout/domain";
@@ -20,6 +21,7 @@ import {
   importLine,
   importRule,
   journalEntry,
+  paymentType,
   subCategory,
 } from "../db/schema.js";
 import { checked } from "../routes/access.js";
@@ -92,16 +94,23 @@ async function claimedEntries(tx: Tx, bookId: string) {
   return new Map(rows.map((r) => [r.entryId!, r.lineId]));
 }
 
+/** How far from a line a forecast can still be chosen by hand. */
+const pickWindowDays = 45;
+
 /**
- * The journal entries each undecided line may already be, and every entry the
- * lines refer to (proposed or chosen), by id.
+ * The journal entries each undecided line may already be, every entry the lines
+ * refer to (proposed or chosen) by id, the forecasts no line is (to choose by
+ * hand), and those among them dated within the statement: they are likely lines
+ * about to be written twice.
  */
 export async function proposals(tx: Tx, bookId: string, accountId: string, lines: readonly Line[]) {
-  const open = lines.filter((l) => l.status === "review");
   const entries = new Map<string, CandidateEntry>();
   let matches = new Map<string, string[]>();
-  if (open.length > 0) {
-    const dates = open.map((l) => l.date).sort();
+  let forecasts: CandidateEntry[] = [];
+  let unmatched: CandidateEntry[] = [];
+  const dates = lines.map((l) => l.date).sort();
+  if (dates.length > 0) {
+    const [first, last] = [dates[0]!, dates.at(-1)!];
     const claimed = await claimedEntries(tx, bookId);
     const around = await tx
       .select(entryColumns)
@@ -110,19 +119,41 @@ export async function proposals(tx: Tx, bookId: string, accountId: string, lines
         and(
           eq(journalEntry.bookId, bookId),
           eq(journalEntry.accountId, accountId),
-          gte(journalEntry.date, addDays(dates[0]!, -matchWindowDays)),
-          lte(journalEntry.date, addDays(dates.at(-1)!, matchWindowDays)),
+          gte(journalEntry.date, addDays(first, -pickWindowDays)),
+          lte(journalEntry.date, addDays(last, pickWindowDays)),
         ),
-      );
+      )
+      .orderBy(asc(journalEntry.date));
     const free = around.filter((e) => !claimed.has(e.id));
-    matches = matchLines(open, free);
+    matches = matchLines(
+      lines.filter((l) => l.status === "review"),
+      free.map((e) => ({ ...e, transfer: e.transferId !== null })),
+    );
     for (const entry of free) entries.set(entry.id, entry);
+    forecasts = free.filter((e) => !e.reconciled);
+    // A line's proposal is not yet claimed, but it is not forgotten either.
+    const proposed = new Set([...matches.values()].map((ids) => ids[0]));
+    const end = addDays(last, forecastWindowDays);
+    unmatched = forecasts.filter((e) => e.date >= first && e.date <= end && !proposed.has(e.id));
   }
   const chosen = lines.flatMap((l) => (l.entryId ? [l.entryId] : []));
   if (chosen.length > 0) {
     for (const entry of await entriesByIds(tx, bookId, chosen)) entries.set(entry.id, entry);
   }
-  return { matches, entries };
+  return { matches, entries, forecasts, unmatched };
+}
+
+/** May the line be this entry: same account, and the same amount unless a forecast takes it. */
+function lineMayBe(
+  line: { amount: bigint },
+  accountId: string,
+  entry: { accountId: string; amount: bigint; reconciled: boolean; transferId: string | null },
+) {
+  return (
+    entry.accountId === accountId &&
+    (entry.amount === line.amount ||
+      takesAmount({ reconciled: entry.reconciled, transfer: entry.transferId !== null }))
+  );
 }
 
 /** Applies the user's decisions to the lines of a batch. */
@@ -145,6 +176,17 @@ export async function applyChanges(
     if (found.length !== subIds.length) throw bad("Unknown sub-category");
     if (found.some((s) => s.archivedAt)) throw bad("The sub-category is archived");
   }
+  const paymentIds = [
+    ...new Set(changes.flatMap((c) => (c.paymentTypeId ? [c.paymentTypeId] : []))),
+  ];
+  if (paymentIds.length > 0) {
+    const found = await tx
+      .select({ id: paymentType.id, archivedAt: paymentType.archivedAt })
+      .from(paymentType)
+      .where(and(eq(paymentType.bookId, bookId), inArray(paymentType.id, paymentIds)));
+    if (found.length !== paymentIds.length) throw bad("Unknown payment type");
+    if (found.some((p) => p.archivedAt)) throw bad("The payment type is archived");
+  }
   const entryIds = [...new Set(changes.flatMap((c) => (c.entryId ? [c.entryId] : [])))];
   const entries = new Map(
     entryIds.length === 0
@@ -155,6 +197,8 @@ export async function applyChanges(
               id: journalEntry.id,
               accountId: journalEntry.accountId,
               amount: journalEntry.amount,
+              reconciled: journalEntry.reconciled,
+              transferId: journalEntry.transferId,
             })
             .from(journalEntry)
             .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.id, entryIds)))
@@ -167,8 +211,8 @@ export async function applyChanges(
     const next = checked(() => decide(line, change));
     if (change.entryId) {
       const entry = entries.get(change.entryId);
-      if (!entry || entry.accountId !== batch.accountId || entry.amount !== line.amount) {
-        throw bad("The entry is not of this account and amount");
+      if (!entry || !lineMayBe(line, batch.accountId, entry)) {
+        throw bad("The entry is not of this account, or its amount cannot change");
       }
       const owner = claimed.get(change.entryId);
       if (owner !== undefined && owner !== line.id) {
@@ -179,10 +223,18 @@ export async function applyChanges(
     if (next.entryId) claimed.set(next.entryId, line.id);
     const description =
       change.description === undefined ? line.description : change.description || null;
-    Object.assign(line, next, { description });
+    const paymentTypeId =
+      change.paymentTypeId === undefined ? line.paymentTypeId : change.paymentTypeId;
+    // What the user changes by hand is no longer a rule's proposal; accepting one is not a change.
+    const touched =
+      (change.subCategoryId !== undefined && change.subCategoryId !== line.subCategoryId) ||
+      description !== line.description ||
+      paymentTypeId !== line.paymentTypeId;
+    const ruleId = touched ? null : line.ruleId;
+    Object.assign(line, next, { description, paymentTypeId, ruleId });
     await tx
       .update(importLine)
-      .set({ ...next, description })
+      .set({ ...next, description, paymentTypeId, ruleId })
       .where(eq(importLine.id, line.id));
   }
 }
@@ -259,11 +311,19 @@ export async function openingOf(
   };
 }
 
+/** An amount of an entry and what it is in the book currency, at the entry's rate. */
+function amounts(minor: bigint, currency: string, rate: string, bookCurrency: string) {
+  return {
+    amount: minor,
+    bookAmount: checked(() => bookAmount(money(minor, currency), rate, bookCurrency)).minor,
+  };
+}
+
 /**
  * Writes the validated lines of a batch into the journal, all or nothing: a line
  * with a sub-category becomes a reconciled entry, a line matched to an entry
  * reconciles it and dates it as the bank does (a side of a transfer keeps its
- * date). Sets the opening balance too when asked.
+ * date); a forecast of another amount takes the bank's. Sets the opening balance too when asked.
  */
 export async function importBatchLines(
   tx: Tx,
@@ -291,7 +351,11 @@ export async function importBatchLines(
   let matched = 0;
   for (const line of pending) {
     let entryId = line.entryId;
-    let previous: { previousDate: string; previousReconciled: boolean } | null = null;
+    let previous: {
+      previousDate: string;
+      previousReconciled: boolean;
+      previousAmount: bigint;
+    } | null = null;
     if (entryId) {
       const [entry] = await tx
         .select({
@@ -300,19 +364,31 @@ export async function importBatchLines(
           transferId: journalEntry.transferId,
           date: journalEntry.date,
           reconciled: journalEntry.reconciled,
+          exchangeRate: journalEntry.exchangeRate,
         })
         .from(journalEntry)
         .where(and(eq(journalEntry.id, entryId), eq(journalEntry.bookId, bookId)));
-      if (!entry || entry.accountId !== batch.accountId || entry.amount !== line.amount) {
+      if (!entry || !lineMayBe(line, batch.accountId, entry)) {
         throw new HTTPException(409, {
           message: `The entry matched to the line of ${line.date} has changed: review it again`,
         });
       }
       await tx
         .update(journalEntry)
-        .set({ reconciled: true, ...(entry.transferId ? {} : { date: line.date }) })
+        .set({
+          reconciled: true,
+          ...(entry.transferId ? {} : { date: line.date }),
+          // A forecast takes the bank's amount, at its own rate; its planned amount stays.
+          ...(entry.amount === line.amount
+            ? {}
+            : amounts(line.amount, currency, entry.exchangeRate, bookCurrency)),
+        })
         .where(eq(journalEntry.id, entryId));
-      previous = { previousDate: entry.date, previousReconciled: entry.reconciled };
+      previous = {
+        previousDate: entry.date,
+        previousReconciled: entry.reconciled,
+        previousAmount: entry.amount,
+      };
       matched++;
     } else {
       if (!line.subCategoryId) {
@@ -329,6 +405,7 @@ export async function importBatchLines(
           accountId: batch.accountId,
           subCategoryId: line.subCategoryId,
           description: description.slice(0, 500),
+          paymentTypeId: line.paymentTypeId,
           amount: line.amount,
           plannedAmount: 0n,
           exchangeRate: rate,
@@ -357,7 +434,7 @@ export async function importBatchLines(
 
 /**
  * Undoes the import of a batch: the entries it created are deleted, the entries it
- * reconciled get their date and flag back, and its lines are validated again, ready
+ * reconciled get their date, amount and flag back, and its lines are validated again, ready
  * to be changed or imported anew. The opening balance is left as it is. An entry
  * the user changed or deleted since is not touched, and counted in `skipped`.
  */
@@ -365,6 +442,7 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
   const batch = await batchOf(tx, bookId, batchId, true);
   const lines = (await linesOf(tx, batchId)).filter((l) => l.status === "imported");
   if (lines.length === 0) throw bad("Nothing was imported from this batch");
+  const bookCurrency = await bookCurrencyOf(tx, bookId);
 
   let removed = 0;
   let restored = 0;
@@ -388,11 +466,18 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
       if (gone.length > 0) removed++;
       else skipped++;
     } else {
+      const [entry] = await tx
+        .select({ exchangeRate: journalEntry.exchangeRate })
+        .from(journalEntry)
+        .where(and(eq(journalEntry.id, line.entryId), eq(journalEntry.bookId, bookId)));
       const back = await tx
         .update(journalEntry)
         .set({
           reconciled: line.previousReconciled,
           ...(line.previousDate === null ? {} : { date: line.previousDate }),
+          ...(entry && line.previousAmount !== null && line.previousAmount !== line.amount
+            ? amounts(line.previousAmount, batch.account.currency, entry.exchangeRate, bookCurrency)
+            : {}),
         })
         .where(
           and(
@@ -412,6 +497,7 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
         status: "validated",
         previousDate: null,
         previousReconciled: null,
+        previousAmount: null,
         ...(line.previousReconciled === null ? { entryId: null } : {}),
       })
       .where(eq(importLine.id, line.id));
@@ -420,11 +506,13 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
 }
 
 /**
- * Proposes what the book's rules say for the lines of a batch that have nothing
- * chosen yet (no sub-category, no entry): the first rule that fits sets its
- * sub-category and description, or marks the line to be ignored; a line a rule already
- * proposed something for is left as it is. The lines stay
- * to review: the user accepts the proposals. Returns how many lines a rule hit.
+ * Proposes what the book's rules say for the lines of a batch: the first rule that
+ * fits sets its sub-category, payment type and description, or marks the line to be
+ * ignored. It looks at the lines still to review that have no entry and nothing the
+ * user typed, so it can be run again after the rules changed: a line a rule had
+ * proposed something for is looked at again, and loses the proposal when no rule
+ * fits any more. The lines stay to review: the user accepts the proposals. Returns
+ * how many lines got a different proposal.
  */
 export async function applyRules(tx: Tx, bookId: string, batchId: string) {
   const batch = await batchOf(tx, bookId, batchId);
@@ -436,18 +524,32 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
         .where(and(eq(subCategory.bookId, bookId), isNotNull(subCategory.archivedAt)))
     ).map((s) => s.id),
   );
+  const archivedPayments = new Set(
+    (
+      await tx
+        .select({ id: paymentType.id })
+        .from(paymentType)
+        .where(and(eq(paymentType.bookId, bookId), isNotNull(paymentType.archivedAt)))
+    ).map((p) => p.id),
+  );
   const rules = (
     await tx
       .select()
       .from(importRule)
       .where(eq(importRule.bookId, bookId))
       .orderBy(asc(importRule.position), asc(importRule.createdAt))
-  ).filter((rule) => !rule.subCategoryId || !archived.has(rule.subCategoryId));
-  if (rules.length === 0) return 0;
+  ).filter(
+    (rule) =>
+      !(rule.subCategoryId && archived.has(rule.subCategoryId)) &&
+      !(rule.paymentTypeId && archivedPayments.has(rule.paymentTypeId)),
+  );
 
+  const same = (a: string | null, b: string | null) => a === b;
   const hits = new Map<string, string[]>();
+  const cleared: string[] = [];
   for (const line of await linesOf(tx, batchId)) {
-    if (line.status !== "review" || line.subCategoryId || line.entryId || line.ruleId) continue;
+    if (line.status !== "review" || line.entryId) continue;
+    if (!line.ruleId && (line.subCategoryId || line.description || line.paymentTypeId)) continue;
     const rule = firstRule(rules, {
       accountId: batch.accountId,
       currency: batch.account.currency,
@@ -457,16 +559,37 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
       memo: line.memo,
       bankCategory: line.bankCategory,
     });
-    if (rule) hits.set(rule.id, [...(hits.get(rule.id) ?? []), line.id]);
+    if (!rule) {
+      if (line.ruleId) cleared.push(line.id);
+    } else if (
+      rule.id !== line.ruleId ||
+      !same(rule.subCategoryId, line.subCategoryId) ||
+      !same(rule.paymentTypeId, line.paymentTypeId) ||
+      !same(rule.description, line.description)
+    ) {
+      hits.set(rule.id, [...(hits.get(rule.id) ?? []), line.id]);
+    }
   }
-  let applied = 0;
+  let changed = 0;
   for (const [ruleId, ids] of hits) {
     const rule = rules.find((r) => r.id === ruleId)!;
     await tx
       .update(importLine)
-      .set({ ruleId, subCategoryId: rule.subCategoryId, description: rule.description })
+      .set({
+        ruleId,
+        subCategoryId: rule.subCategoryId,
+        paymentTypeId: rule.paymentTypeId,
+        description: rule.description,
+      })
       .where(inArray(importLine.id, ids));
-    applied += ids.length;
+    changed += ids.length;
   }
-  return applied;
+  if (cleared.length > 0) {
+    await tx
+      .update(importLine)
+      .set({ ruleId: null, subCategoryId: null, paymentTypeId: null, description: null })
+      .where(inArray(importLine.id, cleared));
+    changed += cleared.length;
+  }
+  return changed;
 }
