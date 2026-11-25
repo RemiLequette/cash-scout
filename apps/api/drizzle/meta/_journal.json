@@ -141,6 +141,20 @@
       "when": 1795612667280,
       "tag": "0019_opening_balance",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795618439969,
+      "tag": "0020_import_batches",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795618440969,
+      "tag": "0021_import_batches_isolation",
+      "breakpoints": true
     }
   ]
 }

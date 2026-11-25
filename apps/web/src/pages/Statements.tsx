@@ -1,61 +1,60 @@
 import { formatMoney, parseAmount, type StatementPreview as Preview } from "@cash-scout/domain";
-import { Alert, FileInput, Group, Paper, Select, Stack, Table, Text, Title } from "@mantine/core";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Button,
+  FileInput,
+  Group,
+  Paper,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from "@mantine/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ApiError } from "../api";
 import { useNameOf, useReference } from "../reference";
+import {
+  useBatch,
+  useBatches,
+  useDeleteBatch,
+  useKeepBatch,
+  usePresets,
+  usePreview,
+  type BatchLine,
+} from "../statements";
 
-/** The formats of statements the API can read. */
-function usePresets(bookId: string) {
-  return useQuery({
-    queryKey: ["books", bookId, "statements", "presets"],
-    queryFn: async () => {
-      const response = await fetch(`/api/books/${bookId}/statements/presets`);
-      if (!response.ok) throw new ApiError(`HTTP ${response.status}`, response.status);
-      return (await response.json()) as { id: string; name: string }[];
-    },
-  });
+type Money = (amount: string, currency: string) => string;
+
+function useMoney(): Money {
+  const { i18n } = useTranslation();
+  return (amount, currency) => formatMoney(parseAmount(amount, currency), i18n.language);
 }
 
-/** Sends the file to be read; nothing is saved, the answer is what the file holds. */
-function usePreview(bookId: string) {
-  return useMutation({
-    mutationFn: async (input: { file: File; preset: string; accountId: string }) => {
-      const query = new URLSearchParams({ preset: input.preset, account: input.accountId });
-      const response = await fetch(`/api/books/${bookId}/statements/preview?${query}`, {
-        method: "POST",
-        headers: { "content-type": "application/octet-stream" },
-        body: await input.file.arrayBuffer(),
-      });
-      if (!response.ok) {
-        let message = `HTTP ${response.status}`;
-        try {
-          const body = (await response.json()) as { error?: string };
-          if (typeof body.error === "string") message = body.error;
-        } catch {
-          // No JSON body.
-        }
-        throw new ApiError(message, response.status);
-      }
-      return (await response.json()) as Preview;
-    },
-  });
+function ErrorAlert({ error }: { error: Error | null }) {
+  const { t } = useTranslation();
+  return error ? <Alert color="red">{t("common.error", { message: error.message })}</Alert> : null;
 }
 
 /**
- * Reads a bank statement and shows what it holds, line by line, before anything
- * is imported. For now it only shows: the import itself comes next.
+ * Reads a bank statement and shows what it holds, line by line, then keeps it
+ * as a batch to review. Importing the lines into the journal comes next.
  */
 export function Statements({ bookId }: { bookId: string }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const reference = useReference(bookId);
   const presets = usePresets(bookId);
   const preview = usePreview(bookId);
+  const keep = useKeepBatch(bookId);
   const nameOf = useNameOf(reference.data?.defaultLanguage);
+  const money = useMoney();
   const [accountId, setAccountId] = useState<string | null>(null);
   const [presetId, setPresetId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [kept, setKept] = useState<{ lines: number } | null>(null);
 
   const accounts = (reference.data?.accounts ?? [])
     .filter((a) => a.kind === "bank" && !a.archived)
@@ -65,6 +64,8 @@ export function Statements({ bookId }: { bookId: string }) {
     setAccountId(next.accountId);
     setPresetId(next.presetId);
     setFile(next.file);
+    setKept(null);
+    keep.reset();
     if (next.accountId && next.presetId && next.file) {
       preview.mutate({ file: next.file, preset: next.presetId, accountId: next.accountId });
     } else {
@@ -72,43 +73,65 @@ export function Statements({ bookId }: { bookId: string }) {
     }
   }
 
-  const money = (amount: string, currency: string) =>
-    formatMoney(parseAmount(amount, currency), i18n.language);
+  function keepBatch() {
+    if (!accountId || !presetId || !file) return;
+    keep.mutate(
+      { file, preset: presetId, accountId },
+      {
+        onSuccess: (batch) => {
+          setKept({ lines: batch.lines });
+          setAccountId(null);
+          setPresetId(null);
+          setFile(null);
+          preview.reset();
+        },
+      },
+    );
+  }
 
   return (
-    <Stack>
-      <Title order={4}>{t("statements.title")}</Title>
-      <Text size="sm" c="dimmed">
-        {t("statements.intro")}
-      </Text>
-      <Paper withBorder p="md">
-        <Group align="flex-end" grow>
-          <Select
-            label={t("statements.account")}
-            data={accounts.map((a) => ({ value: a.id, label: nameOf(a.names) }))}
-            value={accountId}
-            onChange={(value) => read({ accountId: value, presetId, file })}
+    <Stack gap="xl">
+      <Stack>
+        <Title order={4}>{t("statements.title")}</Title>
+        <Text size="sm" c="dimmed">
+          {t("statements.intro")}
+        </Text>
+        <Paper withBorder p="md">
+          <SimpleGrid cols={{ base: 1, sm: 3 }}>
+            <Select
+              label={t("statements.account")}
+              data={accounts.map((a) => ({ value: a.id, label: nameOf(a.names) }))}
+              value={accountId}
+              onChange={(value) => read({ accountId: value, presetId, file })}
+            />
+            <Select
+              label={t("statements.format")}
+              data={(presets.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
+              value={presetId}
+              onChange={(value) => read({ accountId, presetId: value, file })}
+            />
+            <FileInput
+              label={t("statements.file")}
+              placeholder={t("statements.choose")}
+              accept=".csv,text/csv"
+              clearable
+              value={file}
+              onChange={(value) => read({ accountId, presetId, file: value })}
+            />
+          </SimpleGrid>
+        </Paper>
+        <ErrorAlert error={preview.error ?? keep.error} />
+        {kept && <Alert color="teal">{t("statements.kept", { count: kept.lines })}</Alert>}
+        {preview.data && (
+          <PreviewResult
+            preview={preview.data}
+            money={money}
+            keeping={keep.isPending}
+            onKeep={keepBatch}
           />
-          <Select
-            label={t("statements.format")}
-            data={(presets.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
-            value={presetId}
-            onChange={(value) => read({ accountId, presetId: value, file })}
-          />
-          <FileInput
-            label={t("statements.file")}
-            placeholder={t("statements.choose")}
-            accept=".csv,text/csv"
-            clearable
-            value={file}
-            onChange={(value) => read({ accountId, presetId, file: value })}
-          />
-        </Group>
-      </Paper>
-      {preview.error && (
-        <Alert color="red">{t("common.error", { message: preview.error.message })}</Alert>
-      )}
-      {preview.data && <PreviewResult preview={preview.data} money={money} />}
+        )}
+      </Stack>
+      <SavedBatches bookId={bookId} money={money} />
     </Stack>
   );
 }
@@ -116,36 +139,42 @@ export function Statements({ bookId }: { bookId: string }) {
 function PreviewResult({
   preview,
   money,
+  keeping,
+  onKeep,
 }: {
   preview: Preview;
-  money: (amount: string, currency: string) => string;
+  money: Money;
+  keeping: boolean;
+  onKeep: () => void;
 }) {
   const { t } = useTranslation();
   const { lines, errors, balanceBreaks, accountNumbers, currency } = preview;
-  const first = lines.at(-1)?.date;
-  const last = lines[0]?.date;
   const dates = lines.map((l) => l.date).sort();
   return (
     <Stack>
       <Paper withBorder p="md">
-        <Stack gap={4}>
-          <Text fw={600}>
-            {t("statements.summary", {
-              count: lines.length,
-              from: dates[0] ?? first ?? "",
-              to: dates.at(-1) ?? last ?? "",
-            })}
-          </Text>
-          <Text size="sm">{t("statements.total", { amount: money(preview.total, currency) })}</Text>
-          {accountNumbers.length > 0 && (
-            <Text size="sm" c="dimmed">
-              {t("statements.accountNumbers", { numbers: accountNumbers.join(", ") })}
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={4}>
+            <Text fw={600}>
+              {t("statements.summary", {
+                count: lines.length,
+                from: dates[0] ?? "",
+                to: dates.at(-1) ?? "",
+              })}
             </Text>
-          )}
-          <Text size="sm" c="dimmed">
-            {t("statements.nothingSaved")}
-          </Text>
-        </Stack>
+            <Text size="sm">
+              {t("statements.total", { amount: money(preview.total, currency) })}
+            </Text>
+            {accountNumbers.length > 0 && (
+              <Text size="sm" c="dimmed">
+                {t("statements.accountNumbers", { numbers: accountNumbers.join(", ") })}
+              </Text>
+            )}
+          </Stack>
+          <Button onClick={onKeep} loading={keeping} disabled={lines.length === 0}>
+            {t("statements.keep")}
+          </Button>
+        </Group>
       </Paper>
       {errors.length > 0 && (
         <Alert color="red" title={t("statements.unreadable", { count: errors.length })}>
@@ -172,48 +201,157 @@ function PreviewResult({
           ))}
         </Alert>
       )}
-      <Table.ScrollContainer minWidth={700} h={520}>
-        <Table stickyHeader highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>{t("statements.date")}</Table.Th>
-              <Table.Th>{t("statements.counterparty")}</Table.Th>
-              <Table.Th>{t("statements.label")}</Table.Th>
-              <Table.Th>{t("statements.bankCategory")}</Table.Th>
-              <Table.Th ta="right">{t("statements.amount")}</Table.Th>
-              <Table.Th ta="right">{t("statements.balance")}</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {lines.map((line) => (
-              <Table.Tr key={line.row}>
-                <Table.Td style={{ whiteSpace: "nowrap" }}>{line.date}</Table.Td>
-                <Table.Td>{line.counterparty}</Table.Td>
-                <Table.Td>
-                  <Text size="sm" title={line.memo || undefined}>
-                    {line.label}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="xs" c="dimmed">
-                    {line.bankCategory}
-                  </Text>
-                </Table.Td>
-                <Table.Td
-                  ta="right"
-                  c={line.amount.startsWith("-") ? "red" : undefined}
-                  style={{ whiteSpace: "nowrap" }}
-                >
-                  {money(line.amount, currency)}
-                </Table.Td>
-                <Table.Td ta="right" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                  {line.balance === null ? "" : money(line.balance, currency)}
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Table.ScrollContainer>
+      <LinesTable lines={lines} currency={currency} money={money} />
     </Stack>
+  );
+}
+
+/** The statements kept for review, and the lines of the one that is open. */
+function SavedBatches({ bookId, money }: { bookId: string; money: Money }) {
+  const { t, i18n } = useTranslation();
+  const reference = useReference(bookId);
+  const nameOf = useNameOf(reference.data?.defaultLanguage);
+  const batches = useBatches(bookId);
+  const remove = useDeleteBatch(bookId);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = useBatch(bookId, openId);
+  const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" });
+
+  if (!batches.data || batches.data.length === 0) return null;
+  return (
+    <Stack>
+      <Title order={4}>{t("statements.saved")}</Title>
+      <ErrorAlert error={batches.error ?? remove.error} />
+      <Table highlightOnHover>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>{t("statements.file")}</Table.Th>
+            <Table.Th>{t("statements.account")}</Table.Th>
+            <Table.Th>{t("statements.period")}</Table.Th>
+            <Table.Th ta="right">{t("statements.lines")}</Table.Th>
+            <Table.Th ta="right">{t("statements.toReview")}</Table.Th>
+            <Table.Th>{t("statements.addedOn")}</Table.Th>
+            <Table.Th />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {batches.data.map((batch) => (
+            <Table.Tr
+              key={batch.id}
+              bg={batch.id === openId ? "var(--mantine-color-blue-light)" : undefined}
+            >
+              <Table.Td>{batch.fileName}</Table.Td>
+              <Table.Td>
+                {nameOf(
+                  reference.data?.accounts.find((a) => a.id === batch.accountId)?.names ?? {},
+                )}
+              </Table.Td>
+              <Table.Td style={{ whiteSpace: "nowrap" }}>
+                {batch.from} → {batch.to}
+              </Table.Td>
+              <Table.Td ta="right">{batch.lines}</Table.Td>
+              <Table.Td ta="right">{batch.toReview}</Table.Td>
+              <Table.Td>{date.format(new Date(batch.createdAt))}</Table.Td>
+              <Table.Td>
+                <Group gap="xs" justify="flex-end" wrap="nowrap">
+                  <Button
+                    size="compact-sm"
+                    variant="light"
+                    onClick={() => setOpenId(batch.id === openId ? null : batch.id)}
+                  >
+                    {batch.id === openId ? t("statements.close") : t("statements.open")}
+                  </Button>
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    aria-label={t("common.delete")}
+                    loading={remove.isPending && remove.variables === batch.id}
+                    onClick={() => {
+                      if (
+                        !window.confirm(t("statements.deleteConfirm", { name: batch.fileName }))
+                      ) {
+                        return;
+                      }
+                      remove.mutate(batch.id, {
+                        onSuccess: () =>
+                          setOpenId((current) => (current === batch.id ? null : current)),
+                      });
+                    }}
+                  >
+                    ✕
+                  </ActionIcon>
+                </Group>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <ErrorAlert error={open.error} />
+      {open.data && (
+        <LinesTable lines={open.data.lines} currency={open.data.currency} money={money} />
+      )}
+    </Stack>
+  );
+}
+
+type Line = Pick<
+  BatchLine,
+  "date" | "amount" | "label" | "counterparty" | "memo" | "bankCategory" | "balance"
+> & { row: number; duplicate?: boolean };
+
+function LinesTable({ lines, currency, money }: { lines: Line[]; currency: string; money: Money }) {
+  const { t } = useTranslation();
+  return (
+    <Table.ScrollContainer minWidth={700} h={520}>
+      <Table stickyHeader highlightOnHover>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>{t("statements.date")}</Table.Th>
+            <Table.Th>{t("statements.counterparty")}</Table.Th>
+            <Table.Th>{t("statements.label")}</Table.Th>
+            <Table.Th>{t("statements.bankCategory")}</Table.Th>
+            <Table.Th ta="right">{t("statements.amount")}</Table.Th>
+            <Table.Th ta="right">{t("statements.balance")}</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {lines.map((line) => (
+            <Table.Tr key={line.row} opacity={line.duplicate ? 0.55 : undefined}>
+              <Table.Td style={{ whiteSpace: "nowrap" }}>{line.date}</Table.Td>
+              <Table.Td>
+                <Group gap={6} wrap="wrap">
+                  {line.counterparty}
+                  {line.duplicate && (
+                    <Badge size="xs" color="orange" variant="light">
+                      {t("statements.duplicate")}
+                    </Badge>
+                  )}
+                </Group>
+              </Table.Td>
+              <Table.Td>
+                <Text size="sm" title={line.memo || undefined}>
+                  {line.label}
+                </Text>
+              </Table.Td>
+              <Table.Td>
+                <Text size="xs" c="dimmed">
+                  {line.bankCategory}
+                </Text>
+              </Table.Td>
+              <Table.Td
+                ta="right"
+                c={line.amount.startsWith("-") ? "red" : undefined}
+                style={{ whiteSpace: "nowrap" }}
+              >
+                {money(line.amount, currency)}
+              </Table.Td>
+              <Table.Td ta="right" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                {line.balance === null ? "" : money(line.balance, currency)}
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
   );
 }

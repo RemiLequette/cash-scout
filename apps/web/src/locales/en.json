@@ -163,6 +163,17 @@
     "emptyPaymentTypes": "No payment types yet."
   },
   "statements": {
+    "keep": "Keep for review",
+    "kept": "{count, plural, one {# line kept} other {# lines kept}}: the statement is in the list below.",
+    "saved": "Kept statements",
+    "period": "Period",
+    "lines": "Lines",
+    "toReview": "To review",
+    "addedOn": "Added on",
+    "open": "Open",
+    "close": "Close",
+    "duplicate": "Seen before",
+    "deleteConfirm": "Delete the statement {name} and its lines? The journal is not touched.",
     "title": "Import a bank statement",
     "intro": "Choose the account, your bank's format and the exported CSV file. The file is read and shown here: nothing is saved to the journal yet.",
     "account": "Account",

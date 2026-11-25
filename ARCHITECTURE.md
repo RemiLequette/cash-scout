@@ -84,7 +84,7 @@ A book can be open in several windows at once, by one member or several.
 
 Reference data and journals are imported from CSV files by `pnpm import:reference` and `pnpm import:journal`, in one transaction and with the rights of an editor of the book ([format](docs/import.md)).
 
-For bank statements: CSV, OFX and QIF parsing, column mappings per account, classification rules, and matching against unreconciled scheduled entries live in the API. Import runs as a preview first: the user reviews, classifies unknown labels, creates rules, then confirms.
+For bank statements: CSV, OFX and QIF parsing, column mappings per account, classification rules, and matching against unreconciled scheduled entries live in the API. Import runs as a preview first: the user reviews, classifies unknown labels, creates rules, then confirms. A statement file read for an account is kept as an `import_batch` with its `import_line`s, visible to editors only, so that a review can span several sittings; a line already held by an earlier batch of the account is flagged by its fingerprint.
 
 ## Front end
 
