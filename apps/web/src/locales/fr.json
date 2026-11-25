@@ -379,5 +379,16 @@
       "sourceRate": "Saisissez un taux supérieur à zéro, ex. 0,2.",
       "destinationRate": "Saisissez un taux supérieur à zéro, ex. 0,2."
     }
+  },
+  "help": {
+    "menu": "Aide",
+    "online": "Aide en ligne",
+    "about": "À propos",
+    "topics": "Sujets d'aide"
+  },
+  "about": {
+    "version": "Version {version}",
+    "license": "Logiciel libre, licence MIT.",
+    "source": "Code source sur GitHub"
   }
 }

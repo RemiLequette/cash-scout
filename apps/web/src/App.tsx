@@ -29,7 +29,9 @@ import { authClient, useSession } from "./auth";
 import { languages, type Language } from "./i18n";
 import { Admin } from "./pages/Admin";
 import { Book, useBook, type BookView } from "./pages/Book";
+import { About } from "./pages/About";
 import { Books } from "./pages/Books";
+import { Help } from "./pages/Help";
 import { ChangePassword } from "./pages/Password";
 import { SignIn } from "./pages/SignIn";
 
@@ -83,9 +85,11 @@ function BookTitle({ bookId, view }: { bookId: string; view: BookView }) {
 /** All navigation in one menu: the open book, the books, the language and the account. */
 function NavMenu({
   onChangePassword,
+  onAbout,
   onSignOut,
 }: {
   onChangePassword: () => void;
+  onAbout: () => void;
   onSignOut: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -152,6 +156,19 @@ function NavMenu({
           </Menu.Item>
         ))}
         <Menu.Divider />
+        <Menu.Label>{t("help.menu")}</Menu.Label>
+        <Menu.Item
+          leftSection={mark(false)}
+          onClick={() =>
+            void navigate({ to: "/help/$topic", params: { topic: "getting-started" } })
+          }
+        >
+          {t("help.online")}
+        </Menu.Item>
+        <Menu.Item leftSection={mark(false)} onClick={onAbout}>
+          {t("help.about")}
+        </Menu.Item>
+        <Menu.Divider />
         {session && <Menu.Label>{session.user.name}</Menu.Label>}
         <Menu.Item leftSection={mark(false)} onClick={onChangePassword}>
           {t("password.change")}
@@ -184,6 +201,7 @@ function Layout() {
   const queryClient = useQueryClient();
   const { data: session, isPending } = useSession();
   const [changingPassword, setChangingPassword] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const { bookId, view } = useOpenBook();
 
   if (isPending) {
@@ -208,6 +226,7 @@ function Layout() {
               {session && (
                 <NavMenu
                   onChangePassword={() => setChangingPassword(true)}
+                  onAbout={() => setAboutOpen(true)}
                   onSignOut={() => void signOut()}
                 />
               )}
@@ -233,6 +252,9 @@ function Layout() {
         title={t("password.change")}
       >
         <ChangePassword onClose={() => setChangingPassword(false)} />
+      </Modal>
+      <Modal opened={aboutOpen} onClose={() => setAboutOpen(false)} title={t("help.about")}>
+        <About />
       </Modal>
     </AppShell>
   );
@@ -270,8 +292,17 @@ const adminRoute = createRoute({
   component: Admin,
 });
 
+const helpRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/help/$topic",
+  component: function HelpPage() {
+    const { topic } = helpRoute.useParams();
+    return <Help topic={topic} />;
+  },
+});
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([booksRoute, bookRoute, adminRoute]),
+  routeTree: rootRoute.addChildren([booksRoute, bookRoute, adminRoute, helpRoute]),
 });
 
 declare module "@tanstack/react-router" {
