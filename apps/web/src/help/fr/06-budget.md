@@ -17,6 +17,17 @@ Les montants se lisent dans le sens de la nature : une dépense est positive. Le
 - **Taux de change** quand ce compte n'est pas dans la devise du livre.
 - **Hypothèses** : texte libre sur ce sur quoi repose le plan.
 
+## Suivre en cours d'année
+
+Sous la ligne **Budget** de l'année, deux lignes, par mois et en total :
+
+- **Réalisé** : les écritures **rapprochées** de la catégorie. Les prévisions n'y comptent pas, même passées. La ligne **Réel** de l'année précédente, elle, compte toutes les écritures.
+- **Restant** : le budget moins le réalisé, que le mois soit passé ou non, que sa ligne Budget soit rapprochée ou non. Il suit la grille et les écritures pendant que vous les saisissez.
+
+Les deux se lisent dans le sens de la nature. Un restant négatif signale un dépassement pour une dépense, et une rentrée supérieure au budget pour un revenu.
+
+Rien n'étant reporté automatiquement, pour reporter du non consommé, ajoutez-le vous-même aux mois à venir de la grille.
+
 ## Remplir la grille
 
 La grille se remplit comme un tableur.
