@@ -215,6 +215,15 @@ export function formatDate(date: string, locale: string): string {
   );
 }
 
+/** "22 Nov" from "2026-11-22", for lists where the year is already given. */
+export function formatDay(date: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`));
+}
+
 /** Accepts a decimal comma as typed in French: "-12,50" → "-12.50". */
 export function decimalInput(text: string): string {
   return text.trim().replace(/\s/g, "").replace(",", ".");

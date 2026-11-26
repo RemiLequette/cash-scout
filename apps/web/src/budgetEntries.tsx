@@ -34,7 +34,7 @@ import {
   type SetStateAction,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { decimalInput, type Entry } from "./journal";
+import { decimalInput, formatDate, formatDay, type Entry } from "./journal";
 import { useNameOf, type Reference } from "./reference";
 import { DataTable } from "./table";
 
@@ -210,6 +210,58 @@ interface Option {
   label: string;
 }
 
+/**
+ * A date shown as in the journal, "5 Nov" (with the year when it is not the
+ * budget's); a click turns it into the browser's date field.
+ */
+function DateCell({
+  value,
+  year,
+  disabled,
+  bad,
+  onChange,
+}: {
+  value: string;
+  year: number;
+  disabled: boolean;
+  bad: boolean;
+  onChange: (date: string) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  if (!disabled && (editing || !value)) {
+    return (
+      <input
+        type="date"
+        aria-label={t("journal.date")}
+        style={wrong(bad)}
+        autoFocus={editing}
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        // Also keeps an empty field open while its date is being typed.
+        onFocus={() => setEditing(true)}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === "Escape") setEditing(false);
+        }}
+      />
+    );
+  }
+  const format = value.startsWith(`${year}-`) ? formatDay : formatDate;
+  const text = value ? format(value, i18n.language) : "";
+  return (
+    <button
+      type="button"
+      aria-label={`${t("journal.date")} ${text}`}
+      style={{ ...wrong(bad), textAlign: "left", whiteSpace: "nowrap" }}
+      disabled={disabled}
+      onClick={() => setEditing(true)}
+    >
+      {text}
+    </button>
+  );
+}
+
 /** Up and down, or Enter, go to the same column of the next row. */
 function moveRows(event: KeyboardEvent<HTMLInputElement>) {
   const step =
@@ -268,13 +320,12 @@ const Row = memo(function Row({
         />
       </Table.Td>
       <Table.Td>
-        <input
-          type="date"
-          aria-label={t("journal.date")}
-          style={wrong(!!problems?.date)}
+        <DateCell
           value={row.date}
+          year={context.year}
           disabled={locked}
-          onChange={(e) => onPatch(row.key, { date: e.currentTarget.value })}
+          bad={!!problems?.date}
+          onChange={(date) => onPatch(row.key, { date })}
         />
       </Table.Td>
       <Table.Td>
