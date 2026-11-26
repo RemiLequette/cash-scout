@@ -334,6 +334,8 @@
     "plannedOf": "Budget {year}",
     "gridOf": "Grid {year}",
     "entriesOf": "Planned entries {year}",
+    "reconciledOf": "Reconciled {year}",
+    "remainingOf": "Remaining {year}",
     "total": "Total",
     "locked": "Reconciled month: take the reconciliation back in the journal to change it.",
     "leaveUnsaved": "Some changes are not saved. Drop them?",

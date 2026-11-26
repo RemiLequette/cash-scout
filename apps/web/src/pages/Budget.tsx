@@ -77,6 +77,7 @@ function yearOf(data: BudgetYear, categoryId: string) {
     grid,
     planned,
     actual: read(held?.actual),
+    reconciled: read(held?.reconciled),
     /** The budget of a month: its grid amount plus its planned entries. */
     budget: MONTHS.map((m) => grid[m]! + planned[m]!),
   };
@@ -465,6 +466,8 @@ function CategoryPlan({
     JSON.stringify({ ...draft, months: grid.map((v) => cellText(v, bookCurrency)) }) !==
     JSON.stringify(initial);
   const dirty = budgetChanged || entriesChanged;
+  /** The budget of the year as being planned: what is typed included. */
+  const budget = MONTHS.map((m) => grid[m]! + planned[m]!);
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
 
   const budgeted = grid.some((a) => a !== 0n);
@@ -616,9 +619,11 @@ function CategoryPlan({
                 </Table.Td>
               </Table.Tr>
               {row(t("budget.entriesOf", { year }), planned)}
+              {row(t("budget.plannedOf", { year }), budget, true)}
+              {row(t("budget.reconciledOf", { year }), now.reconciled)}
               {row(
-                t("budget.plannedOf", { year }),
-                MONTHS.map((m) => grid[m]! + planned[m]!),
+                t("budget.remainingOf", { year }),
+                MONTHS.map((m) => budget[m]! - now.reconciled[m]!),
                 true,
               )}
             </Table.Tbody>

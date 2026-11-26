@@ -35,6 +35,8 @@ export const budgetColumns = {
 export interface CategoryJournal {
   /** Every entry. */
   actual: bigint[];
+  /** The reconciled entries: what has really happened. */
+  reconciled: bigint[];
   /** The unplanned entries (planned amount 0): what consumes the grid. */
   unplanned: bigint[];
   /** The planned amounts of the entries, budgeted on top of the grid. */
@@ -66,6 +68,7 @@ export async function loadYear(tx: Tx, bookId: string, bookCurrency: string, yea
         sign: nature.sign,
         month: MONTH,
         actual: sql<string>`sum(${journalEntry.bookAmount})`,
+        reconciled: sql<string>`coalesce(sum(${journalEntry.bookAmount}) filter (where ${journalEntry.reconciled}), 0)`,
         unplanned: sql<string>`coalesce(sum(${journalEntry.bookAmount}) filter (where ${journalEntry.plannedAmount} = 0), 0)`,
       })
       .from(journalEntry)
@@ -96,6 +99,7 @@ export async function loadYear(tx: Tx, bookId: string, bookCurrency: string, yea
   const of = (categoryId: string) => {
     const found = journal.get(categoryId) ?? {
       actual: zeros(),
+      reconciled: zeros(),
       unplanned: zeros(),
       planned: zeros(),
     };
@@ -106,6 +110,7 @@ export async function loadYear(tx: Tx, bookId: string, bookCurrency: string, yea
     const sign = BigInt(row.sign);
     const category = of(row.categoryId);
     category.actual[row.month - 1] = sign * BigInt(row.actual);
+    category.reconciled[row.month - 1] = sign * BigInt(row.reconciled);
     category.unplanned[row.month - 1] = sign * BigInt(row.unplanned);
   }
   for (const row of plannedEntries) {

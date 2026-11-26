@@ -334,6 +334,8 @@
     "plannedOf": "Budget {year}",
     "gridOf": "Grille {year}",
     "entriesOf": "Écritures prévues {year}",
+    "reconciledOf": "Réalisé {year}",
+    "remainingOf": "Restant {year}",
     "total": "Total",
     "locked": "Mois rapproché : annulez le rapprochement dans le journal pour le modifier.",
     "leaveUnsaved": "Des modifications ne sont pas sauvegardées. Les abandonner ?",

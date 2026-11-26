@@ -29,7 +29,13 @@ interface Year {
   year: number;
   bookCurrency: string;
   budgets: Budget[];
-  journal: { categoryId: string; actual: string[]; planned: string[]; unplanned: string[] }[];
+  journal: {
+    categoryId: string;
+    actual: string[];
+    reconciled: string[];
+    planned: string[];
+    unplanned: string[];
+  }[];
 }
 
 /** A EUR book with food (expense) and salary (income) categories, a EUR and a MYR account. */
@@ -123,6 +129,16 @@ describe("category budgets", () => {
     await b.spend(b.bakery.id, "2026-07-14", "-100");
     await b.spend(b.bakery.id, "2026-07-20", "-30.50", true);
     await b.spend(b.bakery.id, "2025-07-20", "-999"); // another year
+    await json(
+      b.owner.request("POST", `/books/${b.bookId}/journal`, {
+        date: "2026-07-21",
+        accountId: b.current.id,
+        subCategoryId: b.bakery.id,
+        amount: "-12",
+        reconciled: true,
+      }),
+      201,
+    );
 
     const read = await b.year();
     expect(read.bookCurrency).toBe("EUR");
@@ -130,8 +146,9 @@ describe("category budgets", () => {
     expect(read.budgets[0]!.months[6]).toBe("420.00");
     const [food] = read.journal;
     // Read with the nature's sign: spending is positive.
-    expect(food!.actual[6]).toBe("130.50");
-    expect(food!.unplanned[6]).toBe("100.00");
+    expect(food!.actual[6]).toBe("142.50");
+    expect(food!.reconciled[6]).toBe("12.00");
+    expect(food!.unplanned[6]).toBe("112.00");
     expect(food!.planned[6]).toBe("30.50");
     expect((await b.year(2027)).budgets).toEqual([]);
   });

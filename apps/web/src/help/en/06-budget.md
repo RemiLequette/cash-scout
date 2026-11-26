@@ -17,6 +17,17 @@ Amounts read with the sign of the nature: spending is positive. Last year's budg
 - **Exchange rate** when that account is not in the book currency.
 - **Assumptions**: free text on what the plan relies on.
 
+## Following the year
+
+Under the year's **Budget** row, two rows, month by month and in total:
+
+- **Reconciled**: the category's **reconciled** entries. Forecasts do not count, even past ones. The **Actual** row of the previous year counts all entries.
+- **Remaining**: the budget less what is reconciled, whether the month is past or not, and whether its Budget line is reconciled or not. It follows the grid and the entries as you type them.
+
+Both read with the sign of the nature. A negative remaining means overspending for spending, and more received than budgeted for income.
+
+Nothing rolls over by itself: to carry over what was not used, add it yourself to the coming months of the grid.
+
 ## Filling the grid
 
 The grid fills like a spreadsheet.

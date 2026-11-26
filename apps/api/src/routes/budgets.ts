@@ -206,6 +206,7 @@ export function budgetsRoutes(db: Db) {
           const held = [...journal].map(([categoryId, months]) => ({
             categoryId,
             actual: months.actual.map(text),
+            reconciled: months.reconciled.map(text),
             planned: months.planned.map(text),
             unplanned: months.unplanned.map(text),
           }));
