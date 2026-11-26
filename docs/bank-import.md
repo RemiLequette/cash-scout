@@ -26,7 +26,7 @@ Consequences: one parser per bank layout, a spreadsheet reader for `.xls`, no re
 A file is read in two layers, so the same code serves any bank:
 
 - `packages/domain/src/statement.ts`: a **column mapping** (the columns by header text or position, the date format, the decimal separator, one signed amount or debit and credit columns) turns a table of cells into statement lines. A line that cannot be read is reported and left out; a file that lacks a mapped column is refused, which catches a file given to the wrong preset.
-- `apps/api/src/statements/`: reads a CSV file into that table (encoding, delimiter, byte order mark), and holds the **presets** of the banks (Boursorama, Caisse d'Epargne so far; ABN AMRO waits for the `.xls` reader).
+- `apps/api/src/statements/`: reads a CSV file into that table (encoding, delimiter, byte order mark), and holds the **presets** of the banks (Boursorama, Caisse d'Epargne and ABN AMRO). ABN AMRO gives a `.xls` file: there is no spreadsheet reader, the file is saved as CSV from a spreadsheet first (French settings, `;` and decimal comma, UTF-8 or ANSI: the encoding is detected). The counterparty is the `NAME` of the structured description (`counterpartyTag`); card payments have none.
 
 A first screen uses it: **Import a statement** in the book's menu. The user picks the account, the bank format and the CSV file; `POST /books/:bookId/statements/preview` reads it and returns the lines, the sum, the account numbers the file mentions, the lines it could not read, and the days whose balance does not follow. Nothing is saved: it is the base of the review screen.
 
@@ -131,11 +131,11 @@ Boursorama and ABN AMRO give the account number on each line. An account that st
 3. **Rules.** The rule model, the engine (pure, in `packages/domain`), creation from the review.
 4. **Duplicates, reconciliations and transfers.** The matching, then the warnings in the review.
 
-Step 1 is built: the README, the architecture and the online help are updated with it. Step 2 is built except the `.xls` reader (ABN AMRO): reading, preview, batches, the review and the import into the journal are done. Step 3 is built in its first form (see [Rules](#rules)): rules with a text, bank category, direction and amount conditions, and a sub-category, description or ignore action; regular expressions and the transfer action wait.
+Step 1 is built: the README, the architecture and the online help are updated with it. Step 2 is built (ABN AMRO through a CSV saved from its `.xls`, no spreadsheet reader): reading, preview, batches, the review and the import into the journal are done. Step 3 is built in its first form (see [Rules](#rules)): rules with a text, bank category, direction and amount conditions, and a sub-category, description or ignore action; regular expressions and the transfer action wait.
 
 ## Open points
 
 - The tolerance on amount and date to reconcile a forecast.
-- Where the spreadsheet reader runs (browser or API) and which library.
+- A real `.xls` reader (browser or API, and which library) to spare the save as CSV.
 - Whether the rules can be shared across books, or stay in one book.
 - Which fields are required to create an account's identity (IBAN format check, masking in the interface).

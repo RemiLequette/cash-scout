@@ -36,6 +36,7 @@ describe("statement preview", () => {
     expect(await res.json()).toEqual([
       { id: "boursorama", name: "Boursorama" },
       { id: "caisse-epargne", name: "Caisse d'Epargne" },
+      { id: "abn-amro", name: "ABN AMRO" },
     ]);
   });
 

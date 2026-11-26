@@ -4,7 +4,7 @@
 
 ## 1. Lire le fichier
 
-Choisissez le **compte**, le **format de la banque** et le **fichier CSV** exporté. Le fichier est lu et affiché ligne par ligne, avec la somme des lignes et un avertissement quand les soldes de la banque ne se raccordent pas. Rien n'est encore enregistré.
+Choisissez le **compte**, le **format de la banque** et le **fichier CSV** exporté. ABN AMRO fournit un fichier `.xls` : ouvrez-le dans un tableur et enregistrez-le d'abord en CSV (séparateur `;`, virgule décimale). Le fichier est lu et affiché ligne par ligne, avec la somme des lignes et un avertissement quand les soldes de la banque ne se raccordent pas. Rien n'est encore enregistré.
 
 **Garder pour la revue** enregistre les lignes comme un relevé dans la liste en dessous : la revue peut durer plusieurs séances. Une ligne qu'un relevé plus ancien du même compte contient déjà est marquée **Déjà vue** : deux exports qui se chevauchent ne comptent pas deux fois ce qu'ils ont en commun.
 

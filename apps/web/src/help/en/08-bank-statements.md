@@ -4,7 +4,7 @@
 
 ## 1. Read the file
 
-Choose the **account**, the **format of the bank** and the exported **CSV file**. The file is read and shown line by line, with the sum of the lines and a warning when the balances of the bank do not follow. Nothing is saved yet.
+Choose the **account**, the **format of the bank** and the exported **CSV file**. ABN AMRO gives an `.xls` file: open it in a spreadsheet and save it as CSV first (separator `;`, decimal comma). The file is read and shown line by line, with the sum of the lines and a warning when the balances of the bank do not follow. Nothing is saved yet.
 
 **Keep for review** saves the lines as a statement in the list below, so the review can take several sittings. A line that an earlier statement of the same account already holds is marked **Seen before**: two exports that overlap do not count twice what they share.
 

@@ -1,0 +1,4 @@
+accountNumber;mutationcode;transactiondate;valuedate;startsaldo;endsaldo;amount;description
+123456789;EUR;20260820;20260820;1000,00;2500,50;1500,50;/TRTP/SEPA OVERBOEKING/IBAN/NL00TEST0123456789/BIC/TESTNL2AXXX /NAME/ACME ROTTERDAM/REMI/Payment for period 08-2026/EREF/0001
+123456789;EUR;20260821;20260821;2500,50;2480,50;-20,00;BEA, Betaalpas                   CAFE DU COIN                    NR:AB1234, 21.08.26/10:00 NICE
+123456789;EUR;20260825;20260825;2480,50;2476,20;-4,30;ABN AMRO Bank N.V.               BasisPakket Betalen         4,30

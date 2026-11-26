@@ -30,6 +30,14 @@ export const columnMappingSchema = z
     label: field,
     /** The bank's cleaned counterparty, when it gives one. */
     counterparty: field.optional(),
+    /**
+     * When the bank gives no counterparty column but a structured label such as
+     * `/TRTP/SEPA/NAME/Acme/REMI/…`, the tag whose value is the counterparty (`NAME`).
+     */
+    counterpartyTag: z
+      .string()
+      .regex(/^[A-Z]{2,8}$/)
+      .optional(),
     memo: field.optional(),
     reference: columnRef.optional(),
     bankCategory: field.optional(),
@@ -78,6 +86,15 @@ export interface StatementError {
 export interface ParsedStatement {
   lines: StatementLine[];
   errors: StatementError[];
+}
+
+/** The value after `/TAG/` in a structured label, up to the next `/TAG/` or the end. */
+export function taggedValue(label: string, tag: string): string {
+  const start = label.indexOf(`/${tag}/`);
+  if (start < 0) return "";
+  const rest = label.slice(start + tag.length + 2);
+  const end = rest.search(/\/[A-Z]{2,8}\//);
+  return (end < 0 ? rest : rest.slice(0, end)).trim();
 }
 
 const SPACES = new RegExp(`[\\s${String.fromCharCode(0xa0, 0x202f)}]`, "g");
@@ -201,7 +218,9 @@ export function readStatement(
       valueDate,
       amount,
       label: text(col.label),
-      counterparty: text(col.counterparty),
+      counterparty:
+        text(col.counterparty) ||
+        (mapping.counterpartyTag ? taggedValue(text(col.label), mapping.counterpartyTag) : ""),
       memo: text(col.memo),
       reference: cell(col.reference),
       bankCategory: text(col.bankCategory),

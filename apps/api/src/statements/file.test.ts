@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readStatementFile } from "./file.js";
-import { boursorama, caisseEpargne } from "./presets.js";
+import { abnAmro, boursorama, caisseEpargne } from "./presets.js";
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(new URL(`../../test/fixtures/statements/${name}`, import.meta.url)));
@@ -63,5 +63,35 @@ describe("a file that is not the preset's", () => {
     expect(() => readStatementFile(fixture("caisse-epargne.csv"), boursorama, "EUR")).toThrow(
       /not in the file/,
     );
+  });
+});
+
+describe("ABN AMRO preset", () => {
+  const { lines, errors } = readStatementFile(fixture("abn-amro.csv"), abnAmro, "EUR");
+
+  it("reads the signed amounts, the dates and the balance", () => {
+    expect(errors).toEqual([]);
+    expect(lines.map((l) => [l.date, l.amount, l.balance])).toEqual([
+      ["2026-08-20", 150050n, 250050n],
+      ["2026-08-21", -2000n, 248050n],
+      ["2026-08-25", -430n, 247620n],
+    ]);
+    expect(lines[0]?.accountNumber).toBe("123456789");
+  });
+
+  it("takes the counterparty from the NAME of a structured description", () => {
+    expect(lines.map((l) => l.counterparty)).toEqual(["ACME ROTTERDAM", "", ""]);
+  });
+
+  it("reads a file saved as ANSI as well as UTF-8", () => {
+    const text = [
+      "accountNumber;transactiondate;amount;description;endsaldo;valuedate",
+      "1;20260820;-1,00;/NAME/Café/REMI/x;0,00;20260820",
+    ].join("\n");
+    const ansi = Uint8Array.from(Buffer.from(text, "latin1"));
+    const utf8 = Uint8Array.from(Buffer.from(text, "utf-8"));
+    for (const file of [ansi, utf8]) {
+      expect(readStatementFile(file, abnAmro, "EUR").lines[0]?.counterparty).toBe("Café");
+    }
   });
 });
