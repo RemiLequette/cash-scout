@@ -397,8 +397,6 @@ export const journalEntry = pgTable(
     reconciled: boolean("reconciled").notNull().default(false),
     /** Schedule that generated the entry (schedules come in a later version). */
     scheduleId: uuid("schedule_id"),
-    /** Matching entry in another book (linked entries come in a later version). */
-    linkId: uuid("link_id"),
     /** The transfer this entry is one side of, and which side. */
     transferId: uuid("transfer_id"),
     transferLeg: transferLeg("transfer_leg"),

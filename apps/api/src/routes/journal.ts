@@ -106,7 +106,6 @@ export const entryColumns = {
   originalCurrency: journalEntry.originalCurrency,
   reconciled: journalEntry.reconciled,
   scheduleId: journalEntry.scheduleId,
-  linkId: journalEntry.linkId,
   transferId: journalEntry.transferId,
   transferLeg: journalEntry.transferLeg,
   createdAt: journalEntry.createdAt,

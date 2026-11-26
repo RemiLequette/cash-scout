@@ -51,8 +51,6 @@ How the database side works:
 - A child item refers to its parent through a composite foreign key `(parent_id, book_id)`, so it cannot point to another book's item even through a bug.
 - Tests check it directly: unfiltered queries, and writes into another user's book that bypass the API.
 
-Linked entries between two books are written in one transaction, after checking editor rights on both books.
-
 ### Data rules
 
 - **Money** is stored as integer minor units (`bigint`), never floating point, with an ISO 4217 currency code; the number of decimals comes from the currency. The sign is kept as entered; how it reads comes from the category's nature.
@@ -64,7 +62,7 @@ Linked entries between two books are written in one transaction, after checking 
 - **Archiving** sets `archived_at`: the item stays for past data and is hidden from choices. A new entry cannot use an archived account, sub-category or payment type; an existing entry keeps the ones it has. Deleting is refused while an item is in use; merging a sub-category moves its entries to another one, then deletes it, in one transaction.
 - **Transfers** are a `transfer` row (the delay in days, a version) and two journal entries that point to it with `transfer_id` and `transfer_leg` (`source` or `destination`), at most one of each. `/books/:bookId/transfers` creates, changes and deletes the three in one transaction; deleting the transfer cascades to its entries. The journal API refuses to change or delete a side except its `reconciled` flag. A change is published as a `journal` event.
 - **Opening balance**: an account holds `opening_balance` (minor units of its currency) and `opening_book_amount` (minor units of the book currency, at the rate given when it was set). It is not dated and in no category: an account's balance is its opening balance plus its entries, in the journal balances, the cash projection and the dashboard. `POST /books/:bookId/reference/accounts/:id/opening` sets it, to an amount or from a bank balance (the reconciled entries, up to an optional day, then add up to it).
-- **Journal entries** reserve `schedule_id` and `link_id` for schedules and linked entries; they stay empty until those exist.
+- **Journal entries** reserve `schedule_id` for schedules; it stays empty until they exist.
 
 ### Concurrent use
 
@@ -112,7 +110,7 @@ Everything runs on the developer's machine before any server exists. Two modes, 
 - **Requirements**: Node 22 LTS, pnpm (through `corepack enable`), Docker Desktop (WSL 2 on Windows).
 - **Configuration**: `.env.example` is versioned; each developer copies it to `.env`, which is ignored.
 - **Tests**: `pnpm test` runs the API tests against a `<database>_test` database on the same server, recreated at each run; CI does the same with a PostgreSQL service.
-- **Demo data**: `pnpm seed` creates fictitious users and books (a private book, a household book, linked entries, schedules, budgets in two currencies), so every screen can be tried without real data.
+- **Demo data**: `pnpm seed` creates fictitious users and books (a private book, a household book, schedules, budgets in two currencies), so every screen can be tried without real data.
 - **Real data stays out of the repository**: imports of real books, dumps and the local restic repository go to `local/`, which is ignored by Git. Tests and examples use fictitious data only.
 - **Backup in local**: the `backup` service writes dumps to `local/backups` and its off-site copy to a restic repository in `local/offsite`, so the full backup and restore cycle is tested before a real destination is chosen.
 

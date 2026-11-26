@@ -29,10 +29,10 @@ cash-scout replaces Google Sheets with the same structure, used since 2014: one 
 
 The sheets work well. cash-scout exists to remove their two limits:
 
-| Limit of the sheets                                                                                                                                | What cash-scout does instead                                                                                                                                                                                                                                                                                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Brittle formulas, repeated on every row**: year, month, category, group and nature are looked up per row, and helper columns feed other formulas | Derived values are computed by the application from the date and the sub-category, never stored per row. Reports query the journal directly.                                                                                                                                                                       |
-| **Tedious, error-prone entry**: rows are copied by hand, it takes discipline, and bank exports cannot be loaded                                    | Bank exports are imported with rules that set the sub-category from the label, and matched against planned entries. Manual entry gets autocomplete, duplication of a past entry, and validation against the book's reference data. Schedules generate future entries. Linked entries are typed once for two books. |
+| Limit of the sheets                                                                                                                                | What cash-scout does instead                                                                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Brittle formulas, repeated on every row**: year, month, category, group and nature are looked up per row, and helper columns feed other formulas | Derived values are computed by the application from the date and the sub-category, never stored per row. Reports query the journal directly.                                                                                                                          |
+| **Tedious, error-prone entry**: rows are copied by hand, it takes discipline, and bank exports cannot be loaded                                    | Bank exports are imported with rules that set the sub-category from the label, and matched against planned entries. Manual entry gets autocomplete, duplication of a past entry, and validation against the book's reference data. Schedules generate future entries. |
 
 ## Books
 
@@ -42,7 +42,7 @@ A **book** (_livre_ in French) is a fully separate set of finances, like a _mand
 - accounts;
 - reference data: groups, categories, sub-categories, payment types, import profiles.
 
-Nothing is shared between books unless it is explicitly linked. A typical setup is one private book per person plus one household book.
+Nothing is shared between books. A typical setup is one private book per person plus one household book.
 
 ### Users and roles
 
@@ -53,28 +53,12 @@ Nothing is shared between books unless it is explicitly linked. A typical setup 
 - A book with a single member is private; a book with several is shared.
 - A **super user** maintains the installation: users, books, global settings. The super user does not see a book's data without being a member.
 
-### Linked entries between books
-
-Some operations involve two books, such as a contribution from a private book to the household book. It is entered **once**:
-
-- cash-scout creates the matching entry in the other book (outgoing on one side, incoming on the other);
-- each side uses its own account and category, picked from its own reference data, with a default per pair of books;
-- the two entries stay linked: changing or deleting one updates or flags the other;
-- the user needs editor rights on both books.
-
-A book can define **book links** (for example "private → household: contribution") that set the default accounts and categories on each side.
-
 ### Virtual accounts and compensations
 
 Not every operation moves money in each book. In the sheets, some are recorded as pairs of **virtual** entries that add up to zero. cash-scout makes this explicit:
 
 - A book can have **virtual accounts**: not tied to a bank, never reconciled, left out of the cash projection. Their balance should come back to zero; a report flags those that don't.
 - A **compensation** is a set of entries on a virtual account whose sum is zero. It moves an amount from one category to another without touching any bank balance.
-- A linked operation can use a virtual account on either side. Example: a household expense of 100 paid from a private card.
-  - Private book: the card line (−100, bank account) is classified as _contribution to the household_.
-  - Household book: a compensation on its virtual account, _food_ −100 and _contribution received_ +100.
-  - Result: the household's budget sees the food spending and the contribution; the private book sees a contribution; only the private bank balance changes, as in reality.
-- Such operations are entered once, from a **book link** template ("paid for the household from a private account"), like other linked entries.
 
 ## Journal
 
@@ -94,7 +78,6 @@ One entry per transaction, past or future, in a book:
 | Reconciled      | Matched with the bank statement. An unreconciled entry is a **forecast**                                                                                                                                             |
 | Schedule        | The schedule that generated the entry, if any                                                                                                                                                                        |
 | Transfer        | The transfer this entry is one side of, and which side, if any                                                                                                                                                       |
-| Link            | The matching entry in another book, if any                                                                                                                                                                           |
 
 **Categories** have three levels: group → category → sub-category. A category has a short code (`C01`, `P02`…) that sets its sort order, and belongs to a **nature** (see below). Money that leaves the book's accounts for assets the book does not track, such as a life insurance, is a category like any other, and a negative amount in it is a withdrawal. A movement between two accounts of the book is a **transfer**: it uses a category of a nature marked as holding transfers, and is left out of the totals.
 
@@ -129,7 +112,6 @@ A **transfer** moves money between two accounts of a book. It is two journal ent
 - **Currencies**: between accounts of the same currency one amount is entered. Between two currencies both amounts are kept, which gives the real rate; each account not in the book currency also has its rate into it, as for any entry.
 - **Sub-category**: a sub-category of a category of a _transfer_ nature, so both sides are left out of the totals.
 - **Planning**: a transfer can be part of the budget's plan, from the list of planned entries. Both sides then get a planned amount equal to their amount, which add up to zero, and the cash projection sees them on their own dates and accounts. A transfer category has no grid: it changes no total.
-- **Between books** is another operation, the [linked entries](#linked-entries-between-books).
 
 ### Currencies
 
@@ -213,26 +195,25 @@ A page for reading and analysing one year, replacing the yearly tabs of the shee
 
 Functional decisions. Technical choices are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-| Topic               | Decision                                                                                                                                                           | Serves                             | Notes                                                                                                                                  |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Separation          | Books: fully separate data and reference data in one database                                                                                                      | O1–O3 per person and per household | Every table carries the book; the API checks membership on every request                                                               |
-| Between books       | Linked entries, entered once                                                                                                                                       | O2, O3                             | Contributions appear in both books' projections and reports without double entry                                                       |
-| Virtual accounts    | Non-bank accounts per book, out of the projection, for zero-sum compensations; usable in linked operations                                                         | O1, O3                             | Covers common spending paid from a private account, without a fake bank movement                                                       |
-| Roles               | Owner, editor, viewer per book; one super user                                                                                                                     | — (security)                       |                                                                                                                                        |
-| Two ways to budget  | Planned entries and a monthly grid, which add up; only unplanned entries consume the grid                                                                          | O1, O2, O3                         | One plan per entry, so nothing is counted twice                                                                                        |
-| Planned entries     | Future entries in the journal with a planned amount; unplanned entries have a planned amount of 0                                                                  | O2, O1, O3                         | Variance = amount − planned amount, unplanned spending included                                                                        |
-| Reference data      | Empty in a new book, own level of detail per book, easy maintenance (move, merge, archive), imported from the sheets at initialization                             | O1, O3                             | Detail where the book needs it to plan and analyse                                                                                     |
-| Nature              | Set by the category, never by the sign                                                                                                                             | O1, O3                             | Negative income and positive spending are normal                                                                                       |
-| Entry               | Manual entry with helpers, and statement import that builds reusable rules                                                                                         | O2, O3                             | Both keep the journal complete and correct                                                                                             |
-| Currencies          | Book currency for budgets and reports, currency per account, fixed rate per entry, optional display currency, daily public rates                                   | O1, O2, O3                         | Projection per account in its own currency; analysis in one currency                                                                   |
-| Per-person spending | Not a dimension inside a book: a member's own spending goes in their own book                                                                                      | O3                                 | Keeps books simple; linked entries cover contributions. A virtual common book is a possible [future improvement](#future-improvements) |
-| Budget lines        | Virtual month-end entries holding what the grid still expects, reconciled to let it go                                                                             | O1, O2, O3                         | The journal and the projection show the budget without storing entries                                                                 |
-| Budget revisions    | One amount per category budget, revised freely; past years kept, no history of revisions; free-text assumptions per category and year                              | O1, O3                             | A household tool, not an accounting system                                                                                             |
-| Bank data           | File import first: CSV, OFX, QIF, matched against planned entries                                                                                                  | O2, O3                             | Reconciled balances are the starting point of the projection; bank sync can come later                                                 |
-| Interface languages | Clean i18n from the start: no text in the code, one message file per language, dates, numbers and currencies formatted by locale. English and French shipped first | — (users)                          | A new language is added by contributing a message file, without code changes; each user picks their language                           |
-| Book languages      | Each book lists the languages of its reference data, with a default one                                                                                            | — (users)                          | Members of a multilingual household each read the book's categories in their own language                                              |
-| Technical stack     | TypeScript monorepo, Hono + Drizzle on PostgreSQL, React + Mantine, Docker Compose, MIT license                                                                    | — (technical)                      | Details in [ARCHITECTURE.md](ARCHITECTURE.md)                                                                                          |
-| Devices             | Responsive web app for desktop and mobile, installable as a PWA, always online                                                                                     | O2, O3                             | Manual entry happens on the phone too                                                                                                  |
+| Topic               | Decision                                                                                                                                                           | Serves                             | Notes                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Separation          | Books: fully separate data and reference data in one database                                                                                                      | O1–O3 per person and per household | Every table carries the book; the API checks membership on every request                                     |
+| Virtual accounts    | Non-bank accounts per book, out of the projection, for zero-sum compensations                                                                                      | O1, O3                             | Moves an amount between categories without a fake bank movement                                              |
+| Roles               | Owner, editor, viewer per book; one super user                                                                                                                     | — (security)                       |                                                                                                              |
+| Two ways to budget  | Planned entries and a monthly grid, which add up; only unplanned entries consume the grid                                                                          | O1, O2, O3                         | One plan per entry, so nothing is counted twice                                                              |
+| Planned entries     | Future entries in the journal with a planned amount; unplanned entries have a planned amount of 0                                                                  | O2, O1, O3                         | Variance = amount − planned amount, unplanned spending included                                              |
+| Reference data      | Empty in a new book, own level of detail per book, easy maintenance (move, merge, archive), imported from the sheets at initialization                             | O1, O3                             | Detail where the book needs it to plan and analyse                                                           |
+| Nature              | Set by the category, never by the sign                                                                                                                             | O1, O3                             | Negative income and positive spending are normal                                                             |
+| Entry               | Manual entry with helpers, and statement import that builds reusable rules                                                                                         | O2, O3                             | Both keep the journal complete and correct                                                                   |
+| Currencies          | Book currency for budgets and reports, currency per account, fixed rate per entry, optional display currency, daily public rates                                   | O1, O2, O3                         | Projection per account in its own currency; analysis in one currency                                         |
+| Per-person spending | Not a dimension inside a book: a member's own spending goes in their own book                                                                                      | O3                                 | Keeps books simple. A virtual common book is a possible [future improvement](#future-improvements)           |
+| Budget lines        | Virtual month-end entries holding what the grid still expects, reconciled to let it go                                                                             | O1, O2, O3                         | The journal and the projection show the budget without storing entries                                       |
+| Budget revisions    | One amount per category budget, revised freely; past years kept, no history of revisions; free-text assumptions per category and year                              | O1, O3                             | A household tool, not an accounting system                                                                   |
+| Bank data           | File import first: CSV, OFX, QIF, matched against planned entries                                                                                                  | O2, O3                             | Reconciled balances are the starting point of the projection; bank sync can come later                       |
+| Interface languages | Clean i18n from the start: no text in the code, one message file per language, dates, numbers and currencies formatted by locale. English and French shipped first | — (users)                          | A new language is added by contributing a message file, without code changes; each user picks their language |
+| Book languages      | Each book lists the languages of its reference data, with a default one                                                                                            | — (users)                          | Members of a multilingual household each read the book's categories in their own language                    |
+| Technical stack     | TypeScript monorepo, Hono + Drizzle on PostgreSQL, React + Mantine, Docker Compose, MIT license                                                                    | — (technical)                      | Details in [ARCHITECTURE.md](ARCHITECTURE.md)                                                                |
+| Devices             | Responsive web app for desktop and mobile, installable as a PWA, always online                                                                                     | O2, O3                             | Manual entry happens on the phone too                                                                        |
 
 ## Future improvements
 
@@ -245,7 +226,7 @@ For households without a joint bank account, where each member pays shared spend
 - A **virtual book** has members and its own reference data, but **no bank account**.
 - A member marks an entry of their private book as **shared** with a virtual book and picks its category there. The entry stays in the private book, with its account and reconciliation; the virtual book only sees the shared part.
 - The virtual book then has its own budgets and reports over all shared spending, whoever paid it.
-- It also shows **who paid what** and the balance between members, with optional sharing ratios (for example 50/50 or by income), and settling transfers as linked entries.
+- It also shows **who paid what** and the balance between members, with optional sharing ratios (for example 50/50 or by income).
 - Each private book stays private: the other members see only what was shared.
 
 Today this is done by mixing everyone's spending in one book with a "for whom" column, which hides each person's accounts and makes the shared total hard to see.
