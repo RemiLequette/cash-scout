@@ -65,22 +65,35 @@ describe("matchLines", () => {
 });
 
 describe("decide", () => {
-  const fresh: LineDecision = { status: "review", subCategoryId: null, entryId: null };
+  const fresh: LineDecision = {
+    status: "review",
+    subCategoryId: null,
+    entryId: null,
+    transferAccountId: null,
+  };
 
   it("validates a line when a sub-category or an entry is chosen", () => {
     const sub = decide(fresh, { subCategoryId: "s" });
-    expect(sub).toEqual({ status: "validated", subCategoryId: "s", entryId: null });
-    expect(decide(sub, { entryId: "e" })).toEqual({
-      status: "validated",
-      subCategoryId: null,
-      entryId: "e",
-    });
+    expect(sub).toEqual({ ...fresh, status: "validated", subCategoryId: "s" });
+    expect(decide(sub, { entryId: "e" })).toEqual({ ...fresh, status: "validated", entryId: "e" });
     expect(decide(sub, { subCategoryId: null })).toEqual(fresh);
   });
 
   it("keeps the choice of an ignored line", () => {
     const ignored = decide({ ...fresh, subCategoryId: "s" }, { status: "ignored" });
-    expect(ignored).toEqual({ status: "ignored", subCategoryId: "s", entryId: null });
+    expect(ignored).toEqual({ ...fresh, status: "ignored", subCategoryId: "s" });
+  });
+
+  it("makes a transfer with another account, and drops it with the sub-category or when an entry is chosen", () => {
+    const transfer = decide(fresh, { subCategoryId: "t", transferAccountId: "a" });
+    expect(transfer).toEqual({
+      status: "validated",
+      subCategoryId: "t",
+      entryId: null,
+      transferAccountId: "a",
+    });
+    expect(decide(transfer, { subCategoryId: null })).toEqual(fresh);
+    expect(decide(transfer, { entryId: "e" }).transferAccountId).toBeNull();
   });
 
   it("refuses to validate nothing and to change an imported line", () => {

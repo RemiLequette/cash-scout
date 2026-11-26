@@ -17,11 +17,15 @@ Choose the **account**, the **format of the bank** and the exported **CSV file**
 
 The screen warns about the **forecasts of the period that no line is**: if one of the lines is one of them, choose it, or the entry will be written twice.
 
-- **Ignored**: the line is left out, for example a line **seen before**, or one you enter as a transfer yourself.
+- **Ignored**: the line is left out, for example a line **seen before**, or a side of a transfer you entered and reconciled yourself.
 
 - **Proposed by a rule**: see below. Rules only propose; **Accept the proposals of the rules** validates them.
 
 Tick several lines to give them the same sub-category or to ignore them together. The filters show the lines to review, validated, ignored and imported.
+
+### Transfers
+
+There is no detection: **you create the transfer from one side**. On the line, **Transfer with account…** chooses the other account of the book (same currency; the book needs a transfer sub-category). The import creates both sides: this statement's, reconciled, and the other, **not reconciled**. When you import the other account's statement, its line **proposes to reconcile** that side. Undoing the import removes the transfer, unless the other side was reconciled since.
 
 ## Rules
 

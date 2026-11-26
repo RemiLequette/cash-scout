@@ -58,6 +58,8 @@ export interface BatchLine {
   ruleId: string | null;
   /** The payment type of the entry to create. */
   paymentTypeId: string | null;
+  /** For a transfer to create: the other account. */
+  transferAccountId: string | null;
   /** The entry of the journal the line is, chosen or created. */
   entry: MatchedEntry | null;
   /** The entries the line may be, the proposal first; only for a line to review. */

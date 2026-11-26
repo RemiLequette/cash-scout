@@ -312,3 +312,99 @@ describe("statement review and import", () => {
     expect((await b.read(id)).lines[0]!.status).toBe("review");
   });
 });
+
+describe("a line imported as a transfer", () => {
+  async function withTransfers() {
+    const b = await setup();
+    const ref = `/books/${b.bookId}/reference`;
+    const made = async (path: string, body: unknown) => {
+      const res = await b.owner.request("POST", `${ref}${path}`, body);
+      expect(res.status).toBe(201);
+      return ((await res.json()) as { id: string }).id;
+    };
+    const savings = await made("/accounts", {
+      names: { fr: "Livret" },
+      kind: "bank",
+      currency: "EUR",
+    });
+    const groupId = await made("/groups", { names: { fr: "Mouvements" } });
+    const categoryId = await made("/categories", {
+      code: "V",
+      names: { fr: "Virements" },
+      groupId,
+      natureId: await defaultNature(b.owner, b.bookId, "transfer"),
+    });
+    const transferSub = await made("/sub-categories", {
+      categoryId,
+      names: { fr: "Entre comptes" },
+    });
+    const id = await b.keep();
+    const line = (await b.read(id)).lines.find((l) => l.amount === "-7.20")!;
+    const sides = async () =>
+      (await b.entries()) as (Entry & { accountId: string; transferId: string | null })[];
+    return { ...b, savings, transferSub, id, line, sides };
+  }
+
+  it("refuses another sub-category and the batch's own account", async () => {
+    const b = await withTransfers();
+    const to = (subCategoryId: string, transferAccountId: string) =>
+      b.change(b.id, [{ id: b.line.id, subCategoryId, transferAccountId }]);
+    expect((await to(b.subCategoryId, b.savings)).status).toBe(400);
+    expect((await to(b.transferSub, b.accountId)).status).toBe(400);
+    expect((await to(b.transferSub, b.savings)).status).toBe(204);
+  });
+
+  it("creates both sides, the other one for its statement to reconcile, and undoes them", async () => {
+    const b = await withTransfers();
+    await b.change(b.id, [
+      { id: b.line.id, subCategoryId: b.transferSub, transferAccountId: b.savings },
+    ]);
+    expect(await (await b.run(b.id)).json()).toMatchObject({ created: 1 });
+    const entries = await b.sides();
+    expect(entries).toHaveLength(2);
+    expect(entries.find((e) => e.accountId === b.accountId)).toMatchObject({
+      amount: "-7.20",
+      reconciled: true,
+    });
+    const other = entries.find((e) => e.accountId === b.savings)!;
+    expect(other).toMatchObject({ amount: "7.20", reconciled: false, date: "2026-10-30" });
+    expect(other.transferId).toBe(entries.find((e) => e.id !== other.id)!.transferId);
+
+    // The other account's statement proposes that side.
+    const [header] = new TextDecoder().decode(statement).split(/\r?\n/);
+    const row = new TextDecoder()
+      .decode(statement)
+      .split(/\r?\n/)
+      .find((l) => l.includes("-7,20"))!
+      .replace("-7,20", "7,20");
+    const res = await b.owner.request(
+      "POST",
+      `${b.batches}?preset=boursorama&account=${b.savings}&name=b.csv`,
+      new TextEncoder().encode(`${header}\n${row}\n`),
+    );
+    expect(res.status).toBe(201);
+    const second = ((await res.json()) as { id: string }).id;
+    expect((await b.read(second)).lines[0]!.candidates.map((c) => c.id)).toEqual([other.id]);
+
+    expect(await (await b.undo(b.id)).json()).toMatchObject({ removed: 1, skipped: 0 });
+    expect(await b.sides()).toEqual([]);
+  });
+
+  it("keeps the transfer when undoing after the other side was reconciled", async () => {
+    const b = await withTransfers();
+    await b.change(b.id, [
+      { id: b.line.id, subCategoryId: b.transferSub, transferAccountId: b.savings },
+    ]);
+    await b.run(b.id);
+    const other = (await b.sides()).find((e) => e.accountId === b.savings)!;
+    const journal = `/books/${b.bookId}/journal`;
+    const full = (await b.sides()).find((e) => e.id === other.id) as Entry & { version: number };
+    const res = await b.owner.request("PATCH", `${journal}/${other.id}`, {
+      version: full.version,
+      reconciled: true,
+    });
+    expect(res.status).toBe(200);
+    expect(await (await b.undo(b.id)).json()).toMatchObject({ removed: 0, skipped: 1 });
+    expect(await b.sides()).toHaveLength(2);
+  });
+});
