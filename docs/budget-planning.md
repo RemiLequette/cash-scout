@@ -1,6 +1,6 @@
 # Budget planning
 
-Design notes from a brainstorm. Step 1 is built; the planning view's spreadsheet tools and previous year helps are not. Once all is built, this model replaces the [Budgets and cash projection](../README.md#budgets-and-cash-projection) section of the README.
+Design notes from a brainstorm. Step 1 and the grid's spreadsheet tools are built (without a fill handle); the entry list's tools and previous year helps are not. Once all is built, this model replaces the [Budgets and cash projection](../README.md#budgets-and-cash-projection) section of the README.
 
 A [clickable mockup](https://claude.ai/artifact/8vXcbxfpCMEnHrkh8yFBrp) (private, fictitious data) shows the spreadsheet behaviour of the planning view. It predates the model below: it still has the budget type and does not show the budget line.
 

@@ -21,6 +21,22 @@ The grid is saved with **Save**. Planned entries are saved one by one.
 
 From this page, a planned entry is changed by its **planned amount**: writing it also replaces the expected amount. The journal only changes the expected amount, and reconciling is done there.
 
+## Filling the grid
+
+The grid fills like a spreadsheet.
+
+- **Move** with Enter and the left and right arrows. While typing, the arrows move in the text; Escape drops what was typed.
+- **Select** several months by dragging, Shift+click or Shift+arrows. The sum of the selection is shown.
+- **In a cell**: an amount, a formula (`=450*3`), or a change (`+10`, `+3%`, `-5%`, `*2`, `/2`). `-250` is a negative amount.
+- **On the selection**, with the field and **Apply**: the same forms; here `-10` takes 10 away.
+- **Fill right** (Ctrl+R): the first selected month up to the end of the selection, or to December for a single cell.
+- **Copy last year's budget or actuals**: onto the selection, or the whole row when a single cell is selected.
+- **Spread a total**: evenly, after the current shape, or after a row of last year. With no total typed, the current one is used.
+- **Copy and paste** with a spreadsheet: Ctrl+C copies the selection, Ctrl+V pastes from the active cell. Delete empties a selection.
+- **Undo and redo** (Ctrl+Z, Ctrl+Y) until you save.
+
+Reconciled months do not change.
+
 ## The Budget line
 
 Each month whose grid is not zero has a **Budget** line on its last day, in the journal. Its amount is the grid less the month's **unplanned** entries, never past zero. A refund raises it.

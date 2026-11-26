@@ -326,7 +326,21 @@
     "plannedTransfersHint": "Transfers between accounts have no grid.",
     "noPlannedEntries": "No entry this year.",
     "searchCategory": "Search a category",
-    "noCategory": "No category"
+    "noCategory": "No category",
+    "tools": {
+      "operation": "Operation on the selection",
+      "apply": "Apply",
+      "fillRight": "Fill right",
+      "copyBudget": "Copy {year} budget",
+      "copyActual": "Copy {year} actuals",
+      "undo": "Undo",
+      "redo": "Redo",
+      "spread": "Spread a total",
+      "even": "Evenly",
+      "currentShape": "Current shape",
+      "budgetShape": "{year} budget shape",
+      "actualShape": "{year} actuals shape"
+    }
   },
   "accountKinds": {
     "bank": "Bank",

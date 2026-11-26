@@ -17,10 +17,11 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap } from "../api";
 import { useBudgetYear, type BudgetYear, type CategoryBudgetRow } from "../budget";
+import { cellText, GridTools, useGrid } from "../budgetGrid";
 import {
   decimalInput,
   formatDate,
@@ -408,28 +409,34 @@ function CategoryPlan({
   const [initial] = useState(() => draftFrom(now.saved, before.saved));
   const [draft, setDraft] = useState(initial);
 
-  const update = (patch: Partial<Draft>) => {
-    const next = { ...draft, ...patch };
-    setDraft(next);
-    onDirty(JSON.stringify(next) !== JSON.stringify(initial));
-  };
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
-
-  const amounts = draft.months.map((m) => parsed(m, bookCurrency));
-  const grid = amounts.map((a) => a ?? 0n);
-  const budgeted = grid.some((a) => a !== 0n);
-  const account = reference.accounts.find((a) => a.id === draft.accountId);
-  const needsRate = account !== undefined && account.currency !== bookCurrency;
+  const update = (patch: Partial<Draft>) => setDraft((old) => ({ ...old, ...patch }));
   const locked = new Set(
     lines.filter((l) => l.categoryId === category.id && l.reconciled).map((l) => l.month - 1),
   );
-  const problem = amounts.includes(null)
-    ? "budget.problemAmount"
-    : budgeted && !draft.accountId
-      ? "budget.problemAccount"
-      : draft.accountId && needsRate && draft.exchangeRate.trim() === ""
-        ? "budget.problemRate"
-        : undefined;
+  const editor = useGrid({
+    values: MONTHS.map((m) => minorOf(draft.months[m], bookCurrency)),
+    onChange: (values) => update({ months: values.map((v) => cellText(v, bookCurrency)) }),
+    locked,
+    currency: bookCurrency,
+  });
+  /** The amounts as they would be saved, what is being typed included. */
+  const grid = editor.effective;
+  const dirty =
+    JSON.stringify({ ...draft, months: grid.map((v) => cellText(v, bookCurrency)) }) !==
+    JSON.stringify(initial);
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
+
+  const budgeted = grid.some((a) => a !== 0n);
+  const account = reference.accounts.find((a) => a.id === draft.accountId);
+  const needsRate = account !== undefined && account.currency !== bookCurrency;
+  const problem =
+    editor.invalid !== null
+      ? "budget.problemAmount"
+      : budgeted && !draft.accountId
+        ? "budget.problemAccount"
+        : draft.accountId && needsRate && draft.exchangeRate.trim() === ""
+          ? "budget.problemRate"
+          : undefined;
 
   const save = useMutation({
     mutationFn: () => {
@@ -488,6 +495,16 @@ function CategoryPlan({
         {save.error && (
           <Alert color="red">{t("common.error", { message: save.error.message })}</Alert>
         )}
+        {canEdit && (
+          <GridTools
+            grid={editor}
+            monthNames={monthNames}
+            format={text}
+            previousBudget={before.budget}
+            previousActual={before.actual}
+            year={year}
+          />
+        )}
         <DataTable minWidth={820} verticalSpacing={4} horizontalSpacing={2} fz="xs">
           <Table.Thead>
             <Table.Tr>
@@ -507,25 +524,29 @@ function CategoryPlan({
               <Table.Td fw={600} style={{ whiteSpace: "nowrap" }}>
                 {t("budget.gridOf", { year })}
               </Table.Td>
-              {MONTHS.map((m) => (
-                <Table.Td key={m}>
-                  <TextInput
-                    size="xs"
-                    miw={44}
-                    aria-label={`${t("budget.gridOf", { year })} ${monthNames[m]}`}
-                    title={locked.has(m) ? t("budget.locked") : undefined}
-                    disabled={!canEdit || locked.has(m)}
-                    inputMode="decimal"
-                    value={draft.months[m]}
-                    error={amounts[m] === null}
-                    onChange={(e) => {
-                      const value = e.currentTarget.value;
-                      update({ months: draft.months.map((old, i) => (i === m ? value : old)) });
-                    }}
-                    styles={{ input: { textAlign: "right", paddingInline: 3 } }}
-                  />
-                </Table.Td>
-              ))}
+              {MONTHS.map((m) => {
+                const { selected, ...cell } = editor.cell(m);
+                return (
+                  <Table.Td key={m}>
+                    <TextInput
+                      {...cell}
+                      size="xs"
+                      miw={44}
+                      aria-label={`${t("budget.gridOf", { year })} ${monthNames[m]}`}
+                      title={locked.has(m) ? t("budget.locked") : undefined}
+                      disabled={!canEdit || locked.has(m)}
+                      error={editor.invalid === m}
+                      styles={{
+                        input: {
+                          textAlign: "right",
+                          paddingInline: 3,
+                          ...(selected && { background: "var(--mantine-color-blue-light)" }),
+                        },
+                      }}
+                    />
+                  </Table.Td>
+                );
+              })}
               <Table.Td ta="right" fw={600}>
                 {text(sum(grid))}
               </Table.Td>

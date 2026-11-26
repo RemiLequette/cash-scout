@@ -326,7 +326,21 @@
     "plannedTransfersHint": "Les virements entre comptes n'ont pas de grille.",
     "noPlannedEntries": "Aucune écriture cette année.",
     "searchCategory": "Chercher une catégorie",
-    "noCategory": "Aucune catégorie"
+    "noCategory": "Aucune catégorie",
+    "tools": {
+      "operation": "Opération sur la sélection",
+      "apply": "Appliquer",
+      "fillRight": "Recopier à droite",
+      "copyBudget": "Copier budget {year}",
+      "copyActual": "Copier réel {year}",
+      "undo": "Annuler",
+      "redo": "Rétablir",
+      "spread": "Répartir un total",
+      "even": "À parts égales",
+      "currentShape": "Forme actuelle",
+      "budgetShape": "Forme budget {year}",
+      "actualShape": "Forme réel {year}"
+    }
   },
   "accountKinds": {
     "bank": "Bancaire",
