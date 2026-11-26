@@ -20,7 +20,7 @@ The category decides whether an amount is income or spending, never its sign.
 
 ## Entering fast
 
-- **New entry** opens the form. **Start from a frequent entry** proposes the ones you use most in the last 12 months, dated today.
+- **New entry** opens the form. **Start from a frequent entry** proposes the ones you use most in the last 12 months, dated today. A new entry is ticked **Reconciled**: untick it to enter a forecast.
 - **Duplicate** copies an existing entry.
 - **Mark reconciled** and **Mark as forecast** change the status of an entry from the list.
 

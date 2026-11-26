@@ -222,11 +222,15 @@ export function EntryForm({
   const formatAmount = useMoney();
   const change = useJournalChange(bookId);
   // From the budget, an existing entry shows what was planned, not what is now expected.
-  const [start] = useState(() =>
-    planned && initial.id && initial.plannedAmount
-      ? { ...initial, amount: initial.plannedAmount }
-      : initial,
-  );
+  // A new entry of the journal is usually one the bank already shows: it starts reconciled.
+  const [start] = useState(() => {
+    if (planned) {
+      return initial.id && initial.plannedAmount
+        ? { ...initial, amount: initial.plannedAmount }
+        : initial;
+    }
+    return initial.id ? initial : { ...initial, reconciled: true };
+  });
   const [draft, setDraft] = useState(start);
   const [shown, setShown] = useState<Partial<Record<Field, true>>>({});
   const [showOriginal, setShowOriginal] = useState(initial.originalAmount !== "");

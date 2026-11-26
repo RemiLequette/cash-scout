@@ -20,7 +20,7 @@ La catégorie décide si un montant est un revenu ou une dépense, jamais son si
 
 ## Saisir vite
 
-- **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose celles que vous utilisez le plus sur les 12 derniers mois, datées d'aujourd'hui.
+- **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose celles que vous utilisez le plus sur les 12 derniers mois, datées d'aujourd'hui. Une nouvelle écriture est cochée **Rapproché** : décochez pour saisir une prévision.
 - **Dupliquer** copie une écriture existante.
 - **Marquer rapprochées** et **Marquer en prévision** changent le statut d'une écriture depuis la liste.
 
