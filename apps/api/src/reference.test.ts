@@ -187,6 +187,12 @@ describe("categories", () => {
     const { owner, ref } = await bilingualBook();
     const { group, food, bakery } = await categoryTree(owner, ref);
     expect((await owner.request("DELETE", ref(`/groups/${group.id}`))).status).toBe(409);
+    // The refusal says what still refers to the item, and how many.
+    const refused = await owner.request("DELETE", ref(`/categories/${food.id}`));
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      references: [{ type: "subCategories", count: 1 }],
+    });
     expect((await owner.request("DELETE", ref(`/sub-categories/${bakery.id}`))).status).toBe(204);
     expect((await owner.request("DELETE", ref(`/categories/${food.id}`))).status).toBe(204);
     expect((await owner.request("DELETE", ref(`/groups/${group.id}`))).status).toBe(204);

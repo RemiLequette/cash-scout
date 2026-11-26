@@ -34,16 +34,19 @@ async function send(bookId: string, method: string, path: string, body?: unknown
   });
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
+    let references: ApiError["references"];
     try {
       const payload = (await response.json()) as {
         error?: string | { issues?: { message: string }[] };
+        references?: ApiError["references"];
       };
+      references = payload.references;
       if (typeof payload.error === "string") message = payload.error;
       else if (payload.error?.issues?.[0]) message = payload.error.issues[0].message;
     } catch {
       // No JSON body.
     }
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, references);
   }
   return response;
 }

@@ -11,6 +11,7 @@ Categories have three levels: **group → category → sub-category**. Groups ca
 - Use the arrows to reorder, and give a group a colour for the dashboard. A group without a colour takes its parent's.
 - A sub-category can be **moved** to another category. Existing entries follow.
 - **Archive** what you no longer use instead of deleting it. Archived items stay on old entries and come back with _Show archived_.
+- An item still in use cannot be deleted: the message says by what, and how many (sub-categories, entries, budgets…).
 
 ## Natures and balances
 

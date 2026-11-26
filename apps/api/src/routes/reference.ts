@@ -48,6 +48,7 @@ import {
 } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { checked, idOf, languagesOf, missing, requireRole, rowOf } from "./access.js";
+import { requireUnused } from "./in-use.js";
 import { bookCurrencyOf } from "./journal.js";
 
 /** A table of reference data: every one has id, book_id, names and archived_at. */
@@ -862,7 +863,7 @@ export function referenceRoutes(db: Db) {
 
 /**
  * Deletes an item. An item still used (a group with categories, a
- * sub-category with entries) is refused by its foreign keys: archive it instead.
+ * sub-category with entries) is refused, saying by what: archive it instead.
  */
 async function deleteItem(
   c: {
@@ -878,6 +879,7 @@ async function deleteItem(
   const bookId = idOf(c.req.param("bookId"));
   await withUser(db, me, async (tx) => {
     await requireRole(tx, bookId, me, "editor");
+    await requireUnused(tx, table, bookId, id);
     const deleted = await tx
       .delete(table)
       .where(and(eq(table.id, id), eq(table.bookId, bookId)))
