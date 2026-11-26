@@ -464,7 +464,6 @@ export const importRule = pgTable(
     /** Conditions: all that are set must hold. */
     text: text("text"),
     bankCategory: text("bank_category"),
-    accountId: uuid("account_id").references(() => bookAccount.id, { onDelete: "set null" }),
     direction: ruleDirection("direction").notNull().default("any"),
     /** Bounds on the size of the amount, as decimal text in the account's currency. */
     minAmount: numeric("min_amount"),

@@ -11,7 +11,6 @@ let counter = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++counter).padStart(12, "0")}`;
 
 const line: RuleTarget = {
-  accountId: "a1",
   currency: "EUR",
   amount: -1915n,
   counterparty: "Supermarché Test",
@@ -45,7 +44,6 @@ describe("ruleMatches", () => {
     expect(ruleMatches(fits, { ...line, amount: 1915n })).toBe(false);
     expect(ruleMatches(fits, { ...line, amount: -2001n })).toBe(false);
     expect(ruleMatches(fits, { ...line, amount: -999n })).toBe(false);
-    expect(ruleMatches(rule({ accountId: uuid() }), line)).toBe(false);
     expect(ruleMatches(rule({ bankCategory: "alimentation" }), line)).toBe(true);
     expect(ruleMatches(rule({ bankCategory: "loisirs" }), line)).toBe(false);
   });

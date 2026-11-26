@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useNameOf, useReference } from "../reference";
 import { useBatches, useDeleteBatch, useKeepBatch, usePresets, usePreview } from "../statements";
 import { BatchReview } from "./BatchReview";
+import { QuickCreate, WithCreate } from "./QuickCreate";
 import { RulesPanel } from "./Rules";
 import { DataTable } from "../table";
 
@@ -49,6 +50,7 @@ export function Statements({ bookId }: { bookId: string }) {
   const [presetId, setPresetId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [kept, setKept] = useState<{ lines: number } | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const accounts = (reference.data?.accounts ?? [])
     .filter((a) => a.kind === "bank" && !a.archived)
@@ -92,12 +94,14 @@ export function Statements({ bookId }: { bookId: string }) {
         </Text>
         <Paper withBorder p="md">
           <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            <Select
-              label={t("statements.account")}
-              data={accounts.map((a) => ({ value: a.id, label: nameOf(a.names) }))}
-              value={accountId}
-              onChange={(value) => read({ accountId: value, presetId, file })}
-            />
+            <WithCreate label={t("reference.newAccount")} onCreate={() => setCreating(true)}>
+              <Select
+                label={t("statements.account")}
+                data={accounts.map((a) => ({ value: a.id, label: nameOf(a.names) }))}
+                value={accountId}
+                onChange={(value) => read({ accountId: value, presetId, file })}
+              />
+            </WithCreate>
             <Select
               label={t("statements.format")}
               data={(presets.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
@@ -127,6 +131,14 @@ export function Statements({ bookId }: { bookId: string }) {
       </Stack>
       <SavedBatches bookId={bookId} />
       <RulesPanel bookId={bookId} />
+      {creating && (
+        <QuickCreate
+          kind="account"
+          bookId={bookId}
+          onClose={() => setCreating(false)}
+          onCreated={(id) => read({ accountId: id, presetId, file })}
+        />
+      )}
     </Stack>
   );
 }

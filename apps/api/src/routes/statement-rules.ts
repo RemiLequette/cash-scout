@@ -7,7 +7,7 @@ import { withUser, type Db, type Tx } from "../db/client.js";
 import { importLine, importRule } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, requireRole } from "./access.js";
-import { accountOf, paymentTypeOf, subCategoryOf, usable } from "./journal.js";
+import { paymentTypeOf, subCategoryOf, usable } from "./journal.js";
 
 const columns = {
   id: importRule.id,
@@ -15,7 +15,6 @@ const columns = {
   name: importRule.name,
   text: importRule.text,
   bankCategory: importRule.bankCategory,
-  accountId: importRule.accountId,
   direction: importRule.direction,
   minAmount: importRule.minAmount,
   maxAmount: importRule.maxAmount,
@@ -27,7 +26,6 @@ const columns = {
 
 /** The values to store: the account and sub-category must be of the book, and usable. */
 async function values(tx: Tx, bookId: string, rule: RuleFields) {
-  if (rule.accountId) await usable(accountOf(tx, bookId, rule.accountId), "account");
   if (rule.subCategoryId) {
     await usable(subCategoryOf(tx, bookId, rule.subCategoryId), "sub-category");
   }

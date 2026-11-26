@@ -45,24 +45,32 @@ async function send(bookId: string, method: string, path: string, body?: unknown
     }
     throw new ApiError(message, response.status);
   }
+  return response;
 }
 
 /** Create, update and delete reference items; the reference data is reloaded after each. */
 export function useReferenceChange(bookId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (change: {
+    mutationFn: async (change: {
       kind: ReferenceKind;
       id?: string;
       method: "POST" | "PATCH" | "DELETE";
       body?: unknown;
-    }) =>
-      send(
-        bookId,
-        change.method,
-        `/${change.kind}${change.id ? `/${change.id}` : ""}`,
-        change.body,
-      ),
+    }) => {
+      const path = `/${change.kind}${change.id ? `/${change.id}` : ""}`;
+      await send(bookId, change.method, path, change.body);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId, "reference"] }),
+  });
+}
+
+/** Creates a reference item and gives its id; the reference data is read again before it returns. */
+export function useCreateItem(bookId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (item: { kind: ReferenceKind; body: unknown }) =>
+      (await (await send(bookId, "POST", `/${item.kind}`, item.body)).json()) as { id: string },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId, "reference"] }),
   });
 }
@@ -74,17 +82,18 @@ export function useReferenceChange(bookId: string) {
 export function useSetOpening(bookId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (change: {
+    mutationFn: async (change: {
       accountId: string;
       body: { opening: string } | { balance: string };
       exchangeRate?: string;
       version?: number;
-    }) =>
-      send(bookId, "POST", `/accounts/${change.accountId}/opening`, {
+    }) => {
+      await send(bookId, "POST", `/accounts/${change.accountId}/opening`, {
         ...change.body,
         ...(change.exchangeRate && { exchangeRate: change.exchangeRate }),
         version: change.version,
-      }),
+      });
+    },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId] }),
   });
 }

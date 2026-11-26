@@ -25,11 +25,23 @@ Cochez plusieurs lignes pour leur donner la même sous-catégorie ou les ignorer
 
 ## Les règles
 
-La section **Règles** de l'écran d'import liste les règles du livre, dans l'ordre où elles sont essayées : la première qui convient à une ligne l'emporte. Une règle a des **conditions** (le libellé contient un texte, la catégorie de la banque, un compte, entrées ou sorties d'argent, un montant minimum ou maximum) et des **actions** (une sous-catégorie, un type de paiement, une nouvelle description, ou ignorer la ligne). Les règles sont conservées avec le livre : vous pouvez les modifier, les réordonner ou les supprimer à tout moment. Supprimer une règle retire ce qu'elle proposait aux lignes pas encore acceptées.
+La section **Règles** de l'écran d'import liste les règles du livre, dans l'ordre où elles sont essayées : la première qui convient à une ligne l'emporte. Une règle a des **conditions** (le libellé contient un texte, la catégorie de la banque, entrées ou sorties d'argent, un montant minimum ou maximum) et des **actions** (une sous-catégorie, un moyen de paiement, une nouvelle description, ou ignorer la ligne). Les règles sont conservées avec le livre : vous pouvez les modifier, les réordonner ou les supprimer à tout moment. Supprimer une règle retire ce qu'elle proposait aux lignes pas encore acceptées.
 
 Les règles sont essayées sur un relevé quand il est gardé, puis à nouveau avec **Essayer les règles**, qui suit les règles telles qu'elles sont pour les propositions que vous n'avez pas modifiées à la main. Elles ne font que proposer : la ligne montre sa sous-catégorie, avec le nom de la règle, et reste à revoir jusqu'à ce que vous l'acceptiez. Une ligne qui peut être rapprochée d'une écriture du journal n'est pas acceptée en bloc.
 
-Depuis une ligne qui a une sous-catégorie, **Créer une règle** remplit le formulaire avec la contrepartie de la ligne, pour que les relevés suivants demandent moins de travail. Le formulaire dit combien de lignes à revoir du relevé la règle concerne.
+Quand vous classez une ligne à la main, une note propose de **créer une règle** pour elle, et dit combien d'autres lignes à revoir du relevé elle concernerait. **Créer une règle** reste disponible sur toute ligne qui a une sous-catégorie. Le formulaire est rempli avec la contrepartie de la ligne, pour que les relevés suivants demandent moins de travail. Le formulaire dit combien de lignes à revoir du relevé la règle concerne.
+
+## Créer ce qui manque
+
+Le **+** à côté d'une liste crée l'élément sans quitter l'écran, et le sélectionne :
+
+- un **compte**, sur l'écran d'import et dans une règle (un compte bancaire, dans la devise du livre sauf si vous en choisissez une autre) ;
+- une **sous-catégorie**, sur une ligne, pour les lignes cochées et dans une règle. Choisissez sa catégorie, ou créez-la avec un code, une nature et un groupe, qui peut être nouveau lui aussi. Depuis une ligne, le nom part de la catégorie de la banque ;
+- un **moyen de paiement**, sur une ligne et dans une règle.
+
+L'élément est nommé dans la langue par défaut du livre. Les autres noms, les couleurs et l'ordre se règlent dans les données de référence.
+
+Dans une règle, **le libellé contient** cherche dans la contrepartie, le libellé et le mémo, sans tenir compte des majuscules ni des accents. Une **description** remplace la contrepartie de la banque dans l'écriture.
 
 ## 3. Importer
 

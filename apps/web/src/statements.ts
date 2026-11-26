@@ -225,7 +225,6 @@ export interface Rule {
   name: string;
   text: string | null;
   bankCategory: string | null;
-  accountId: string | null;
   direction: "any" | "in" | "out";
   minAmount: string | null;
   maxAmount: string | null;

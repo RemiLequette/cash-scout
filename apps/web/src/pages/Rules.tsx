@@ -30,6 +30,7 @@ import {
   type Reference,
 } from "../reference";
 import { useDeleteRule, useOrderRules, useRules, useSaveRule, type Rule } from "../statements";
+import { QuickCreate, WithCreate } from "./QuickCreate";
 import { DataTable } from "../table";
 
 function ErrorAlert({ error }: { error: Error | null }) {
@@ -39,8 +40,9 @@ function ErrorAlert({ error }: { error: Error | null }) {
 
 /** The statement lines a rule form shows how many it would touch. */
 export interface RuleSample {
-  accountId: string;
   currency: string;
+  /** A name to start a new sub-category from. */
+  suggestedName?: string;
   lines: {
     amount: string;
     counterparty: string;
@@ -54,7 +56,6 @@ interface Draft {
   name: string;
   text: string;
   bankCategory: string;
-  accountId: string | null;
   direction: "any" | "in" | "out";
   minAmount: string;
   maxAmount: string;
@@ -68,7 +69,6 @@ const blank: Draft = {
   name: "",
   text: "",
   bankCategory: "",
-  accountId: null,
   direction: "any",
   minAmount: "",
   maxAmount: "",
@@ -83,7 +83,6 @@ export function draftOf(rule: Partial<Rule>): Draft {
     name: rule.name ?? "",
     text: rule.text ?? "",
     bankCategory: rule.bankCategory ?? "",
-    accountId: rule.accountId ?? null,
     direction: rule.direction ?? "any",
     minAmount: rule.minAmount ?? "",
     maxAmount: rule.maxAmount ?? "",
@@ -98,7 +97,6 @@ const input = (draft: Draft): RuleInput => ({
   name: draft.name.trim() || draft.text.trim() || draft.bankCategory.trim(),
   text: draft.text,
   bankCategory: draft.bankCategory,
-  accountId: draft.accountId,
   direction: draft.direction,
   minAmount: draft.minAmount.trim().replace(",", ".") || null,
   maxAmount: draft.maxAmount.trim().replace(",", ".") || null,
@@ -139,20 +137,18 @@ function RuleFormBody({
   reference: Reference;
 }) {
   const { t } = useTranslation();
-  const nameOf = useNameOf(reference.defaultLanguage);
   const save = useSaveRule(bookId);
   const [draft, setDraft] = useState(initial);
+  const [creating, setCreating] = useState<"subCategory" | "paymentType" | null>(null);
   const set = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
 
   const options = useSubCategoryOptions(reference, initial.subCategoryId ?? undefined);
   const payments = usePaymentTypeOptions(reference, initial.paymentTypeId ?? undefined);
-  const accounts = reference.accounts.filter((a) => a.kind === "bank" && !a.archived);
   const parsed = ruleInputSchema.safeParse(input(draft));
   const touched =
     parsed.success && sample
       ? sample.lines.filter((line) => {
           const target: RuleTarget = {
-            accountId: sample.accountId,
             currency: sample.currency,
             amount: parseAmount(line.amount, sample.currency).minor,
             counterparty: line.counterparty,
@@ -180,7 +176,6 @@ function RuleFormBody({
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <TextInput
             label={t("statements.rules.text")}
-            description={t("statements.rules.textHint")}
             maxLength={100}
             value={draft.text}
             onChange={(e) => set({ text: e.currentTarget.value })}
@@ -191,13 +186,6 @@ function RuleFormBody({
             maxLength={100}
             value={draft.bankCategory}
             onChange={(e) => set({ bankCategory: e.currentTarget.value })}
-          />
-          <Select
-            label={t("statements.account")}
-            clearable
-            data={accounts.map((a) => ({ value: a.id, label: nameOf(a.names) }))}
-            value={draft.accountId}
-            onChange={(value) => set({ accountId: value })}
           />
           <Select
             label={t("statements.rules.direction")}
@@ -232,28 +220,37 @@ function RuleFormBody({
           onChange={(e) => set({ ignore: e.currentTarget.checked })}
         />
         {!draft.ignore && (
-          <Select
-            label={t("statements.review.subCategory")}
-            searchable
-            clearable
-            data={options}
-            value={draft.subCategoryId}
-            onChange={(value) => set({ subCategoryId: value })}
-          />
+          <WithCreate
+            label={t("reference.newSubCategory")}
+            onCreate={() => setCreating("subCategory")}
+          >
+            <Select
+              label={t("statements.review.subCategory")}
+              searchable
+              clearable
+              data={options}
+              value={draft.subCategoryId}
+              onChange={(value) => set({ subCategoryId: value })}
+            />
+          </WithCreate>
         )}
         {!draft.ignore && (
-          <Select
-            label={t("statements.review.paymentType")}
-            searchable
-            clearable
-            data={payments}
-            value={draft.paymentTypeId}
-            onChange={(value) => set({ paymentTypeId: value })}
-          />
+          <WithCreate
+            label={t("reference.newPaymentType")}
+            onCreate={() => setCreating("paymentType")}
+          >
+            <Select
+              label={t("statements.review.paymentType")}
+              searchable
+              clearable
+              data={payments}
+              value={draft.paymentTypeId}
+              onChange={(value) => set({ paymentTypeId: value })}
+            />
+          </WithCreate>
         )}
         <TextInput
           label={t("statements.review.description")}
-          description={t("statements.rules.descriptionHint")}
           maxLength={500}
           value={draft.description}
           onChange={(e) => set({ description: e.currentTarget.value })}
@@ -292,6 +289,17 @@ function RuleFormBody({
           </Button>
         </Group>
       </Stack>
+      {creating && (
+        <QuickCreate
+          kind={creating}
+          bookId={bookId}
+          initialName={creating === "subCategory" ? sample?.suggestedName : undefined}
+          onClose={() => setCreating(null)}
+          onCreated={(id) =>
+            set(creating === "subCategory" ? { subCategoryId: id } : { paymentTypeId: id })
+          }
+        />
+      )}
     </Modal>
   );
 }
@@ -307,8 +315,6 @@ export function RulesPanel({ bookId }: { bookId: string }) {
   const [editing, setEditing] = useState<{ id?: string; draft: Draft } | null>(null);
 
   const list = rules.data ?? [];
-  const accountName = (id: string) =>
-    nameOf(reference.data?.accounts.find((a) => a.id === id)?.names ?? {});
   const subName = (id: string) =>
     nameOf(reference.data?.subCategories.find((s) => s.id === id)?.names ?? {});
 
@@ -316,7 +322,6 @@ export function RulesPanel({ bookId }: { bookId: string }) {
     [
       rule.text && t("statements.rules.contains", { text: rule.text }),
       rule.bankCategory && t("statements.rules.bankIs", { text: rule.bankCategory }),
-      rule.accountId && accountName(rule.accountId),
       rule.direction !== "any" && t(`statements.rules.${rule.direction}`),
       rule.minAmount && t("statements.rules.atLeast", { amount: rule.minAmount }),
       rule.maxAmount && t("statements.rules.atMost", { amount: rule.maxAmount }),

@@ -204,6 +204,13 @@
       "when": 1795685774551,
       "tag": "0028_budget_without_types",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795703244146,
+      "tag": "0029_rules_without_account",
+      "breakpoints": true
     }
   ]
 }

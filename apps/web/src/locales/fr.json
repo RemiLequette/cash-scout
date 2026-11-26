@@ -158,7 +158,10 @@
     "openingRateHint": "1 {from} = combien de {to}. Obligatoire sauf si le compte a déjà des écritures : le dernier taux est repris.",
     "openingNow": "Solde initial actuel : {amount}",
     "openingAfter": "Nouveau solde initial : {amount}",
-    "emptyPaymentTypes": "Aucun moyen de paiement."
+    "emptyPaymentTypes": "Aucun moyen de paiement.",
+    "itemName": "Nom",
+    "categoryName": "Nom de la catégorie",
+    "groupName": "Nom du groupe"
   },
   "statements": {
     "keep": "Garder pour la revue",
@@ -236,7 +239,10 @@
       "pickForecast": "Choisir une prévision",
       "unmatched": "{count, plural, one {# prévision de la période sans ligne} other {# prévisions de la période sans ligne}}",
       "unmatchedHint": "Si une ligne du relevé est l'une d'elles, choisissez-la sur la ligne : sinon l'écriture sera créée en double.",
-      "paymentType": "Type de paiement"
+      "paymentType": "Moyen de paiement",
+      "suggestRule": "« {text} » est classé dans {subCategory}. Une règle ferait pareil pour les prochains relevés.",
+      "suggestOthers": "{count, plural, one {# autre ligne à revoir de ce relevé correspond} other {# autres lignes à revoir de ce relevé correspondent}}",
+      "suggestNo": "Non merci"
     },
     "rules": {
       "title": "Règles",
@@ -247,7 +253,6 @@
       "conditions": "Conditions",
       "actions": "Actions",
       "text": "Le libellé contient",
-      "textHint": "Contrepartie, libellé ou mémo, sans tenir compte des majuscules ni des accents",
       "bankCategory": "La catégorie de la banque contient",
       "direction": "Sens",
       "any": "Tous",
@@ -256,7 +261,6 @@
       "min": "Montant d'au moins",
       "max": "Montant d'au plus",
       "ignore": "Ignorer ces lignes",
-      "descriptionHint": "Remplace la contrepartie de la banque dans l'écriture",
       "touches": "{count, plural, =0 {Aucune ligne à revoir de ce relevé ne correspond} one {# ligne à revoir de ce relevé correspond} other {# lignes à revoir de ce relevé correspondent}}",
       "contains": "contient « {text} »",
       "bankIs": "catégorie banque : {text}",
