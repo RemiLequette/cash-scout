@@ -423,7 +423,8 @@
     "overdraftBetween": "is overdrawn from {from} until {until} (lowest {lowest} on {lowestDate}).",
     "overdraftFrom": "is overdrawn from {from}, to the end of the chart (lowest {lowest} on {lowestDate}).",
     "overdue": "{count, plural, one {# past entry is not reconciled.} other {# past entries are not reconciled.}}",
-    "overdueShow": "Show"
+    "overdueShow": "Show",
+    "replacesExpected": "Will also replace the expected amount, now {amount}."
   },
   "password": {
     "reset": "Set a new password",

@@ -19,6 +19,8 @@ Les montants se lisent dans le sens de la nature : une dépense est positive. Le
 
 La grille s'enregistre avec **Enregistrer**. Les écritures planifiées s'enregistrent une par une.
 
+Depuis cette page, une écriture planifiée se modifie par son **montant prévu** : le changer remplace aussi le montant attendu. Le journal, lui, ne change que le montant attendu, et le rapprochement s'y fait.
+
 ## La ligne Budget
 
 Chaque mois dont la grille n'est pas à zéro a une ligne **Budget** à son dernier jour, dans le journal. Son montant est la grille moins les écritures **non prévues** du mois, jamais au-delà de zéro. Un remboursement l'augmente.

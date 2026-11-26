@@ -219,6 +219,11 @@ export function transferRoutes(db: Db) {
         const result = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           const { header, source, destination } = await readTransfer(tx, bookId, id);
+          if (input.planned && (source.reconciled || destination.reconciled)) {
+            throw new HTTPException(400, {
+              message: "The plan of a reconciled transfer does not change",
+            });
+          }
           const sourceAccountId = input.sourceAccountId ?? source.accountId;
           const destinationAccountId = input.destinationAccountId ?? destination.accountId;
           if (sourceAccountId === destinationAccountId) {
@@ -287,6 +292,7 @@ export function transferRoutes(db: Db) {
           };
           const side = (minor: bigint, currency: string, rate: string) => ({
             amount: minor,
+            plannedAmount: input.planned ? minor : undefined,
             exchangeRate: rate,
             bookAmount: checked(() => bookAmount(money(minor, currency), rate, bookCurrency)).minor,
           });

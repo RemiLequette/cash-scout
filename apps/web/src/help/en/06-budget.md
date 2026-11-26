@@ -19,6 +19,8 @@ Amounts read with the sign of the nature: spending is positive. Last year's budg
 
 The grid is saved with **Save**. Planned entries are saved one by one.
 
+From this page, a planned entry is changed by its **planned amount**: writing it also replaces the expected amount. The journal only changes the expected amount, and reconciling is done there.
+
 ## The Budget line
 
 Each month whose grid is not zero has a **Budget** line on its last day, in the journal. Its amount is the grid less the month's **unplanned** entries, never past zero. A refund raises it.

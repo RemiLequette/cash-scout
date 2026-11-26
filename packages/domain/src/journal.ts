@@ -134,7 +134,8 @@ export type TransferInput = z.input<typeof transferInputSchema>;
 
 /** Changing a transfer changes both of its sides. */
 export const transferUpdateSchema = z
-  .object({ ...transferFields, version: versionSchema })
+  // `planned`: written in the budget's plan, the planned amounts become the amounts.
+  .object({ ...transferFields, version: versionSchema, planned: z.boolean() })
   .partial()
   .refine(
     (t) =>
