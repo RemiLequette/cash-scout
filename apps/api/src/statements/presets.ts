@@ -44,4 +44,26 @@ export const caisseEpargne: StatementPreset = {
   },
 };
 
-export const presets: StatementPreset[] = [boursorama, caisseEpargne];
+/**
+ * ABN AMRO's statement is a `.xls` file; this reads it saved as CSV from a spreadsheet
+ * (French settings: `;` and decimal comma, UTF-8 or ANSI). The counterparty is the `NAME`
+ * of the structured description; card payments have none.
+ */
+export const abnAmro: StatementPreset = {
+  id: "abn-amro",
+  name: "ABN AMRO",
+  file: { kind: "csv", encoding: "auto", delimiter: ";" },
+  mapping: {
+    date: "transactiondate",
+    valueDate: "valuedate",
+    label: "description",
+    counterpartyTag: "NAME",
+    amount: "amount",
+    balance: "endsaldo",
+    accountNumber: "accountNumber",
+    dateFormat: "yyyymmdd",
+    decimal: ",",
+  },
+};
+
+export const presets: StatementPreset[] = [boursorama, caisseEpargne, abnAmro];

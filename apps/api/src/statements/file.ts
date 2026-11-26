@@ -9,7 +9,10 @@ import {
 /** How a statement file is laid out, before its columns are looked at. */
 export interface CsvFormat {
   kind: "csv";
-  /** A label the platform's decoder knows: "utf-8", "windows-1252"… */
+  /**
+   * A label the platform's decoder knows: "utf-8", "windows-1252"… or "auto": UTF-8 when
+   * the file is valid UTF-8, else Windows-1252 (a spreadsheet's two ways to save a CSV).
+   */
   encoding: string;
   delimiter: ";" | "," | "\t";
 }
@@ -22,9 +25,18 @@ export interface StatementPreset {
   mapping: ColumnMappingInput;
 }
 
+function decode(content: Uint8Array, encoding: string): string {
+  if (encoding !== "auto") return new TextDecoder(encoding).decode(content);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch {
+    return new TextDecoder("windows-1252").decode(content);
+  }
+}
+
 /** Reads a CSV file into a table of cells; a byte order mark is dropped. */
 export function readCsvTable(content: Uint8Array, format: CsvFormat): string[][] {
-  const text = new TextDecoder(format.encoding).decode(content);
+  const text = decode(content, format.encoding);
   return parse(text, {
     bom: true,
     delimiter: format.delimiter,
