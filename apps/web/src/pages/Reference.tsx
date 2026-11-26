@@ -394,7 +394,6 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
         />
         <Select
           label={t("reference.nature")}
-          description={t("reference.natureHint")}
           required
           data={reference.natures
             .filter((n) => !n.archived || n.id === fields.natureId)
@@ -1004,9 +1003,6 @@ function NaturesTab({ bookId, reference, canEdit, showArchived, openEditor }: Ta
             value={String(fields.sign)}
             onChange={(value) => set({ sign: Number(value) })}
           />
-          <Text size="xs" c="dimmed">
-            {t("reference.signHint")}
-          </Text>
         </Stack>
         <Switch
           label={t("reference.transfer")}

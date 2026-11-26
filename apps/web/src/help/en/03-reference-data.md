@@ -14,10 +14,30 @@ Categories have three levels: **group → category → sub-category**. Groups ca
 
 ## Natures and balances
 
-A **nature** says what kind of flow a category carries: income, spending, savings, exceptional… It sets the sections of the dashboard and how budgets count the category.
+A **nature** says what kind of flow a category carries: income, spending, savings, exceptional… It sets the category's section in the dashboard.
 
-- **The category decides, not the sign.** A tax withheld is negative income; a refund is positive spending. Reports add signed amounts within each category and read them with the sign of its nature.
-- _Display_ **Reversed** makes amounts entered as negative (spending) read as positive in the dashboard and in budgets.
+- **The category decides, not the sign.** A tax withheld is negative income; a refund is positive spending. Reports add signed amounts within each category.
+
+### Display
+
+Each nature has a **display**:
+
+- **Reversed**, for spending: negative amounts read as positive.
+- **As entered**, for income.
+
+It acts on the dashboard, and on the budget in one way only: it says what an amount typed in the grid means, since the grid carries no sign.
+
+| 300 in the grid            | **Reversed** nature (Spending) | **As entered** nature (Income) |
+| -------------------------- | ------------------------------ | ------------------------------ |
+| What it means              | 300 to spend                   | 300 to receive                 |
+| Budget line in the journal | -300                           | +300                           |
+| Expected account balance   | goes down                      | goes up                        |
+| What consumes the grid     | unplanned negative amounts     | unplanned positive amounts     |
+
+Entries and balances always keep their sign. So changing the display of a nature that already has budgets turns their grids around.
+
+### Transfers and balances
+
 - A nature can be marked **Transfers between accounts**: its categories are used by transfers and stay out of the totals.
 - A **balance** is a subtotal: the sum of the natures you choose, as entered.
 
