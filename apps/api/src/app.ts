@@ -6,6 +6,7 @@ import type { Db } from "./db/client.js";
 import { createBookEvents } from "./events.js";
 import type { AppEnv } from "./http.js";
 import { booksRoutes } from "./routes/books.js";
+import { InUseError } from "./routes/in-use.js";
 
 /** PostgreSQL constraint errors that are the user's to fix, as a message; else undefined. */
 function conflictMessage(error: unknown): string | undefined {
@@ -38,6 +39,9 @@ export function createApp({ db, auth, pingDatabase }: AppDeps) {
   return new Hono<AppEnv>()
     .basePath("/api")
     .onError((error, c) => {
+      if (error instanceof InUseError) {
+        return c.json({ error: error.message, references: error.references }, 409);
+      }
       if (error instanceof HTTPException) {
         return c.json({ error: error.message }, error.status);
       }

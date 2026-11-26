@@ -83,6 +83,17 @@
     "error": "La base de données est injoignable."
   },
   "reference": {
+    "inUse": "Suppression impossible, élément encore utilisé par : {list}. Vous pouvez l'archiver.",
+    "usedBy": {
+      "groups": "{count, plural, one {# sous-groupe} other {# sous-groupes}}",
+      "categories": "{count, plural, one {# catégorie} other {# catégories}}",
+      "subCategories": "{count, plural, one {# sous-catégorie} other {# sous-catégories}}",
+      "balances": "{count, plural, one {# solde analytique} other {# soldes analytiques}}",
+      "budgets": "{count, plural, one {# budget annuel} other {# budgets annuels}}",
+      "budgetMonths": "{count, plural, one {# mois de budget rapproché} other {# mois de budget rapprochés}}",
+      "entries": "{count, plural, one {# écriture} other {# écritures}}",
+      "statements": "{count, plural, one {# relevé importé} other {# relevés importés}}"
+    },
     "categories": "Catégories",
     "accounts": "Comptes",
     "paymentTypes": "Moyens de paiement",

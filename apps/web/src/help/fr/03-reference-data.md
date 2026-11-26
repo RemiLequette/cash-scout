@@ -11,6 +11,7 @@ Les catégories ont trois niveaux : **groupe → catégorie → sous-catégorie*
 - Les flèches réordonnent ; donnez une couleur à un groupe pour le tableau de bord. Un groupe sans couleur prend celle de son parent.
 - Une sous-catégorie peut être **déplacée** vers une autre catégorie. Les écritures existantes suivent.
 - **Archivez** ce que vous n'utilisez plus plutôt que de le supprimer. Les éléments archivés restent sur les anciennes écritures et reviennent avec _Afficher les archivés_.
+- Un élément encore utilisé ne se supprime pas : le message dit par quoi et combien (sous-catégories, écritures, budgets…).
 
 ## Natures et soldes
 

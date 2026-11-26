@@ -9,6 +9,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** For a refused deletion: what still refers to the item. */
+    readonly references?: { type: string; count: number }[],
   ) {
     super(message);
   }

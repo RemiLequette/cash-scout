@@ -83,6 +83,17 @@
     "error": "The database cannot be reached."
   },
   "reference": {
+    "inUse": "Cannot delete, still used by: {list}. You can archive it.",
+    "usedBy": {
+      "groups": "{count, plural, one {# sub-group} other {# sub-groups}}",
+      "categories": "{count, plural, one {# category} other {# categories}}",
+      "subCategories": "{count, plural, one {# sub-category} other {# sub-categories}}",
+      "balances": "{count, plural, one {# analytic balance} other {# analytic balances}}",
+      "budgets": "{count, plural, one {# yearly budget} other {# yearly budgets}}",
+      "budgetMonths": "{count, plural, one {# reconciled budget month} other {# reconciled budget months}}",
+      "entries": "{count, plural, one {# entry} other {# entries}}",
+      "statements": "{count, plural, one {# imported statement} other {# imported statements}}"
+    },
     "categories": "Categories",
     "accounts": "Accounts",
     "paymentTypes": "Payment types",

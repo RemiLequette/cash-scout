@@ -30,6 +30,7 @@ import {
 } from "@mantine/core";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { ApiError } from "../api";
 import { currencyOptions } from "../options";
 import { useBalances } from "../journal";
 import {
@@ -239,7 +240,20 @@ function ItemMenu({
           onClick={() =>
             change.mutate(
               { kind, id, method: "DELETE" },
-              { onError: (error) => window.alert(error.message) },
+              {
+                onError: (error) => {
+                  const used = error instanceof ApiError ? error.references : undefined;
+                  window.alert(
+                    used
+                      ? t("reference.inUse", {
+                          list: used
+                            .map((r) => t(`reference.usedBy.${r.type}`, { count: r.count }))
+                            .join(", "),
+                        })
+                      : error.message,
+                  );
+                },
+              },
             )
           }
         >
