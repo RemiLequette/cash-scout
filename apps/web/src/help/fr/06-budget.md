@@ -17,10 +17,6 @@ Les montants se lisent dans le sens de la nature : une dépense est positive. Le
 - **Taux de change** quand ce compte n'est pas dans la devise du livre.
 - **Hypothèses** : texte libre sur ce sur quoi repose le plan.
 
-La grille s'enregistre avec **Enregistrer**. Les écritures planifiées s'enregistrent une par une.
-
-Depuis cette page, une écriture planifiée se modifie par son **montant prévu** : le changer remplace aussi le montant attendu. Le journal, lui, ne change que le montant attendu, et le rapprochement s'y fait.
-
 ## Remplir la grille
 
 La grille se remplit comme un tableur.
@@ -36,6 +32,18 @@ La grille se remplit comme un tableur.
 - **Annuler et rétablir** (Ctrl+Z, Ctrl+Y) jusqu'à l'enregistrement.
 
 Les mois rapprochés ne changent pas.
+
+## Les écritures planifiées
+
+La liste sous la grille se modifie en place. Elle s'enregistre avec la grille par **Enregistrer**, tout ou rien : tant que vous n'avez pas enregistré, le journal ne change pas.
+
+- **Copier l'année précédente** reprend toutes les écritures de la catégorie de l'année d'avant, prévues ou non, un an plus tard, avec leur libellé, sous-catégorie, compte et type de paiement. Leur montant devient le montant prévu. Une écriture déjà là (même date, sous-catégorie et libellé) n'est pas recopiée. Les virements ne sont pas copiés.
+- **Échéancier** crée une série d'écritures : première et dernière date, fréquence, sous-catégorie, libellé, compte, montant. La série n'est pas mémorisée : ce sont des écritures ordinaires.
+- **Cochez** des lignes pour leur donner un nouveau montant ou un autre jour, changer leur compte ou leur sous-catégorie, les dupliquer ou les supprimer. Maj+clic coche une plage ; la case du titre coche toutes les lignes affichées par le **filtre**.
+- Les flèches haut et bas et Entrée passent d'une ligne à l'autre.
+- **Annuler** revient sur la dernière copie, création ou action sur les lignes cochées.
+
+Une écriture rapprochée ne se modifie pas ici. Dans cette liste, le montant est le montant **prévu** : le changer remplace aussi le montant attendu.
 
 ## La ligne Budget
 

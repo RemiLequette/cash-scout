@@ -26,6 +26,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { Hono } from "hono";
+import type { z } from "zod";
 import { HTTPException } from "hono/http-exception";
 import { withUser, type Db, type Tx } from "../db/client.js";
 import { book, bookAccount, journalEntry, paymentType, subCategory } from "../db/schema.js";
@@ -128,6 +129,132 @@ export function outEntry(row: EntryRow, currency: string, bookCurrency: string) 
         ? null
         : text(row.originalAmount, row.originalCurrency),
   };
+}
+
+/** Creates an entry; `planned` makes its planned amount the amount. */
+export async function createEntry(
+  tx: Tx,
+  bookId: string,
+  input: z.output<typeof entryInputSchema>,
+) {
+  const account = await usable(accountOf(tx, bookId, input.accountId), "account");
+  await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
+  if (input.paymentTypeId) {
+    await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
+  }
+  const bookCurrency = await bookCurrencyOf(tx, bookId);
+  const amount = checked(() => parseAmount(input.amount, account.currency));
+  const rate = checked(() => resolveRate(account.currency, bookCurrency, input.exchangeRate));
+  const [created] = await tx
+    .insert(journalEntry)
+    .values({
+      bookId,
+      date: input.date,
+      accountId: input.accountId,
+      subCategoryId: input.subCategoryId,
+      description: input.description,
+      paymentTypeId: input.paymentTypeId ?? null,
+      amount: amount.minor,
+      plannedAmount: input.planned ? amount.minor : 0n,
+      exchangeRate: rate,
+      bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
+      ...originalOf(input.originalAmount, input.originalCurrency),
+      reconciled: input.reconciled ?? false,
+    })
+    .returning(entryColumns);
+  return outEntry(created!, account.currency, bookCurrency);
+}
+
+/** Changes an entry; with `version`, only if nobody changed it since. */
+export async function updateEntry(
+  tx: Tx,
+  bookId: string,
+  id: string,
+  input: Omit<z.output<typeof entryUpdateSchema>, "version">,
+  version?: number,
+) {
+  const [current] = await tx
+    .select({ ...entryColumns, currency: bookAccount.currency })
+    .from(journalEntry)
+    .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
+    .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
+  if (!current) {
+    throw new HTTPException(404, { message: "Entry not found" });
+  }
+  // A side of a transfer changes with the transfer; only its reconciling is its own.
+  if (current.transferId && Object.keys(input).some((key) => key !== "reconciled")) {
+    throw new HTTPException(400, {
+      message: "This entry is one side of a transfer: change the transfer",
+    });
+  }
+  if (input.planned && current.reconciled) {
+    throw new HTTPException(400, {
+      message: "The plan of a reconciled entry does not change",
+    });
+  }
+  // Items the entry already uses stay allowed even once archived.
+  if (input.accountId && input.accountId !== current.accountId) {
+    const account = await usable(accountOf(tx, bookId, input.accountId), "account");
+    if (account.currency !== current.currency) {
+      throw new HTTPException(400, {
+        message: "An entry cannot move to an account in another currency",
+      });
+    }
+  }
+  if (input.subCategoryId && input.subCategoryId !== current.subCategoryId) {
+    await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
+  }
+  if (input.paymentTypeId && input.paymentTypeId !== current.paymentTypeId) {
+    await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
+  }
+  const bookCurrency = await bookCurrencyOf(tx, bookId);
+  const amount =
+    input.amount === undefined
+      ? money(current.amount, current.currency)
+      : checked(() => parseAmount(input.amount!, current.currency));
+  const rate = checked(() =>
+    resolveRate(current.currency, bookCurrency, input.exchangeRate ?? current.exchangeRate),
+  );
+  const [updated] = await tx
+    .update(journalEntry)
+    .set({
+      date: input.date,
+      accountId: input.accountId,
+      subCategoryId: input.subCategoryId,
+      description: input.description,
+      paymentTypeId: input.paymentTypeId,
+      reconciled: input.reconciled,
+      amount: amount.minor,
+      // Written in the budget's plan: the plan and the expected amount move together.
+      plannedAmount: input.planned ? amount.minor : undefined,
+      exchangeRate: rate,
+      bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
+      ...(input.originalAmount !== undefined || input.originalCurrency !== undefined
+        ? originalOf(input.originalAmount, input.originalCurrency)
+        : {}),
+    })
+    .where(rowOf(journalEntry, bookId, id, version))
+    .returning(entryColumns);
+  if (!updated) return missing("Entry", version);
+  return outEntry(updated, current.currency, bookCurrency);
+}
+
+/** Deletes an entry that is not a side of a transfer; with `version`, only if unchanged. */
+export async function deleteEntry(tx: Tx, bookId: string, id: string, version?: number) {
+  const [found] = await tx
+    .select({ transferId: journalEntry.transferId })
+    .from(journalEntry)
+    .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
+  if (found?.transferId) {
+    throw new HTTPException(400, {
+      message: "This entry is one side of a transfer: delete the transfer",
+    });
+  }
+  const deleted = await tx
+    .delete(journalEntry)
+    .where(rowOf(journalEntry, bookId, id, version))
+    .returning({ id: journalEntry.id });
+  if (deleted.length === 0) return missing("Entry", version);
 }
 
 /**
@@ -413,34 +540,7 @@ export function journalRoutes(db: Db) {
         const input = c.req.valid("json");
         const entry = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
-          const account = await usable(accountOf(tx, bookId, input.accountId), "account");
-          await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
-          if (input.paymentTypeId) {
-            await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
-          }
-          const bookCurrency = await bookCurrencyOf(tx, bookId);
-          const amount = checked(() => parseAmount(input.amount, account.currency));
-          const rate = checked(() =>
-            resolveRate(account.currency, bookCurrency, input.exchangeRate),
-          );
-          const [created] = await tx
-            .insert(journalEntry)
-            .values({
-              bookId,
-              date: input.date,
-              accountId: input.accountId,
-              subCategoryId: input.subCategoryId,
-              description: input.description,
-              paymentTypeId: input.paymentTypeId ?? null,
-              amount: amount.minor,
-              plannedAmount: input.planned ? amount.minor : 0n,
-              exchangeRate: rate,
-              bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
-              ...originalOf(input.originalAmount, input.originalCurrency),
-              reconciled: input.reconciled ?? false,
-            })
-            .returning(entryColumns);
-          return outEntry(created!, account.currency, bookCurrency);
+          return createEntry(tx, bookId, input);
         });
         return c.json(entry, 201);
       })
@@ -467,70 +567,7 @@ export function journalRoutes(db: Db) {
         const { version, ...input } = c.req.valid("json");
         const entry = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
-          const [current] = await tx
-            .select({ ...entryColumns, currency: bookAccount.currency })
-            .from(journalEntry)
-            .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
-            .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
-          if (!current) {
-            throw new HTTPException(404, { message: "Entry not found" });
-          }
-          // A side of a transfer changes with the transfer; only its reconciling is its own.
-          if (current.transferId && Object.keys(input).some((key) => key !== "reconciled")) {
-            throw new HTTPException(400, {
-              message: "This entry is one side of a transfer: change the transfer",
-            });
-          }
-          if (input.planned && current.reconciled) {
-            throw new HTTPException(400, {
-              message: "The plan of a reconciled entry does not change",
-            });
-          }
-          // Items the entry already uses stay allowed even once archived.
-          if (input.accountId && input.accountId !== current.accountId) {
-            const account = await usable(accountOf(tx, bookId, input.accountId), "account");
-            if (account.currency !== current.currency) {
-              throw new HTTPException(400, {
-                message: "An entry cannot move to an account in another currency",
-              });
-            }
-          }
-          if (input.subCategoryId && input.subCategoryId !== current.subCategoryId) {
-            await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
-          }
-          if (input.paymentTypeId && input.paymentTypeId !== current.paymentTypeId) {
-            await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
-          }
-          const bookCurrency = await bookCurrencyOf(tx, bookId);
-          const amount =
-            input.amount === undefined
-              ? money(current.amount, current.currency)
-              : checked(() => parseAmount(input.amount!, current.currency));
-          const rate = checked(() =>
-            resolveRate(current.currency, bookCurrency, input.exchangeRate ?? current.exchangeRate),
-          );
-          const [updated] = await tx
-            .update(journalEntry)
-            .set({
-              date: input.date,
-              accountId: input.accountId,
-              subCategoryId: input.subCategoryId,
-              description: input.description,
-              paymentTypeId: input.paymentTypeId,
-              reconciled: input.reconciled,
-              amount: amount.minor,
-              // Written in the budget's plan: the plan and the expected amount move together.
-              plannedAmount: input.planned ? amount.minor : undefined,
-              exchangeRate: rate,
-              bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
-              ...(input.originalAmount !== undefined || input.originalCurrency !== undefined
-                ? originalOf(input.originalAmount, input.originalCurrency)
-                : {}),
-            })
-            .where(rowOf(journalEntry, bookId, id, version))
-            .returning(entryColumns);
-          if (!updated) return missing("Entry", version);
-          return outEntry(updated, current.currency, bookCurrency);
+          return updateEntry(tx, bookId, id, input, version);
         });
         return c.json(entry);
       })
@@ -541,22 +578,7 @@ export function journalRoutes(db: Db) {
         const id = idOf(c.req.param("id"), "Entry");
         await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
-          const [found] = await tx
-            .select({ transferId: journalEntry.transferId })
-            .from(journalEntry)
-            .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
-          if (found?.transferId) {
-            throw new HTTPException(400, {
-              message: "This entry is one side of a transfer: delete the transfer",
-            });
-          }
-          const deleted = await tx
-            .delete(journalEntry)
-            .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)))
-            .returning({ id: journalEntry.id });
-          if (deleted.length === 0) {
-            throw new HTTPException(404, { message: "Entry not found" });
-          }
+          await deleteEntry(tx, bookId, id);
         });
         return c.body(null, 204);
       })

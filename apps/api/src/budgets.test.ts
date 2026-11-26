@@ -320,3 +320,51 @@ describe("budget access", () => {
     expect((await stranger.request("GET", b.budgets("?year=2026"))).status).toBe(404);
   });
 });
+
+describe("saving a category's plan", () => {
+  it("saves the grid and the entries together, or nothing", async () => {
+    const b = await bookWithCategories();
+    const entry = (date: string, extra = {}) => ({
+      date,
+      accountId: b.current.id,
+      subCategoryId: b.bakery.id,
+      description: "Pain",
+      amount: "-20",
+      ...extra,
+    });
+    const batch = (versions = {}) => ({
+      year: 2026,
+      save: [b.budget()],
+      versions,
+    });
+    const plan = (body: Record<string, unknown>) =>
+      b.owner.request("POST", b.budgets("/plan"), body);
+    const entries = async () =>
+      (
+        await json<{
+          entries: { id: string; version: number; amount: string; plannedAmount: string }[];
+        }>(b.owner.request("GET", `/books/${b.bookId}/journal?limit=50&offset=0`))
+      ).entries;
+
+    expect(
+      (await plan({ budget: batch(), create: [entry("2026-01-05"), entry("2026-02-05")] })).status,
+    ).toBe(204);
+    const [second, first] = await entries();
+    expect(first).toMatchObject({ amount: "-20.00", plannedAmount: "-20.00" });
+
+    const [saved] = (await b.year()).budgets;
+    const change = {
+      budget: batch({ [b.food.id]: saved!.version }),
+      update: [{ id: first!.id, version: first!.version, amount: "-25", planned: true }],
+      remove: [{ id: second!.id, version: second!.version + 1 }], // moved on
+    };
+    expect((await plan(change)).status).toBe(409);
+    expect((await entries()).map((e) => e.amount)).toEqual(["-20.00", "-20.00"]);
+
+    change.remove = [{ id: second!.id, version: second!.version }];
+    expect((await plan(change)).status).toBe(204);
+    expect(await entries()).toEqual([
+      expect.objectContaining({ amount: "-25.00", plannedAmount: "-25.00" }),
+    ]);
+  });
+});

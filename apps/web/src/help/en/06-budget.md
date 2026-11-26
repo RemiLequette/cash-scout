@@ -17,10 +17,6 @@ Amounts read with the sign of the nature: spending is positive. Last year's budg
 - **Exchange rate** when that account is not in the book currency.
 - **Assumptions**: free text on what the plan relies on.
 
-The grid is saved with **Save**. Planned entries are saved one by one.
-
-From this page, a planned entry is changed by its **planned amount**: writing it also replaces the expected amount. The journal only changes the expected amount, and reconciling is done there.
-
 ## Filling the grid
 
 The grid fills like a spreadsheet.
@@ -36,6 +32,18 @@ The grid fills like a spreadsheet.
 - **Undo and redo** (Ctrl+Z, Ctrl+Y) until you save.
 
 Reconciled months do not change.
+
+## Planned entries
+
+The list under the grid is edited in place. It is saved with the grid by **Save**, all or nothing: until you save, the journal does not change.
+
+- **Copy the previous year** takes all of the category's entries of the year before, planned or not, one year later, with their description, sub-category, account and payment type. Their amount becomes the planned amount. An entry already there (same date, sub-category and description) is not copied again. Transfers are not copied.
+- **Schedule** creates a series of entries: first and last date, frequency, sub-category, description, account, amount. The series is not remembered: these are ordinary entries.
+- **Tick** rows to give them a new amount or another day, change their account or sub-category, duplicate or delete them. Shift+click ticks a range; the box in the titles ticks all the rows the **filter** shows.
+- The up and down arrows and Enter go from row to row.
+- **Undo** takes back the last copy, creation or action on the ticked rows.
+
+A reconciled entry is not changed here. In this list the amount is the **planned** one: changing it also replaces the expected amount.
 
 ## The Budget line
 

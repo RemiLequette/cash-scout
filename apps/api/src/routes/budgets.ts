@@ -6,9 +6,11 @@ import {
   categoryBudgetUpdateSchema,
   money,
   parseAmount,
+  planSchema,
   resolveRate,
   settlementSchema,
   toDecimalString,
+  type BudgetBatch,
   type CategoryBudgetInput,
 } from "@cash-scout/domain";
 import { and, eq } from "drizzle-orm";
@@ -26,6 +28,7 @@ import {
 import type { AppEnv } from "../http.js";
 import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
 import { budgetColumns, loadYear, monthEnds } from "./budget-months.js";
+import { createEntry, deleteEntry, updateEntry } from "./journal.js";
 
 type BudgetRow = Omit<typeof categoryBudget.$inferSelect, "bookId" | "createdAt" | "updatedAt">;
 
@@ -134,6 +137,49 @@ function inputOf(row: BudgetRow, bookCurrency: string): Record<string, unknown> 
   };
 }
 
+/** Creates, replaces and removes budgets of a year, unless one moved on since it was read. */
+async function saveBudgets(tx: Tx, bookId: string, batch: BudgetBatch) {
+  const { year, save, remove = [], versions = {} } = batch;
+  const existing = await tx
+    .select({
+      id: categoryBudget.id,
+      categoryId: categoryBudget.categoryId,
+      year: categoryBudget.year,
+      months: categoryBudget.months,
+      version: categoryBudget.version,
+    })
+    .from(categoryBudget)
+    .where(and(eq(categoryBudget.bookId, bookId), eq(categoryBudget.year, year)));
+  const byCategory = new Map(existing.map((row) => [row.categoryId, row]));
+  // What the screen read must still be there: else someone else changed it.
+  for (const categoryId of [...save.map((item) => item.categoryId), ...remove]) {
+    const row = byCategory.get(categoryId);
+    if (row?.version !== versions[categoryId]) {
+      throw new HTTPException(409, {
+        message: "A budget was changed or deleted by someone else: reload the year",
+      });
+    }
+  }
+  for (const item of save) {
+    const values = await budgetValues(tx, bookId, item);
+    const row = byCategory.get(item.categoryId);
+    if (row) {
+      await unlocked(tx, row, values.months);
+      await tx.update(categoryBudget).set(values).where(eq(categoryBudget.id, row.id));
+    } else {
+      await tx.insert(categoryBudget).values({ bookId, ...values });
+    }
+  }
+  for (const categoryId of remove) {
+    const row = byCategory.get(categoryId);
+    if (row) {
+      await unlocked(tx, row, NO_MONTHS);
+      await tx.delete(categoryBudget).where(eq(categoryBudget.id, row.id));
+    }
+  }
+  return { saved: save.length, removed: remove.filter((id) => byCategory.has(id)).length };
+}
+
 /**
  * The budgets of a book, mounted under /books/:bookId/budgets. What remains of
  * a month is computed on demand from the grid and the journal, so it is never
@@ -218,51 +264,30 @@ export function budgetsRoutes(db: Db) {
         });
         return c.body(null, 204);
       })
-      // Saves the budgets of a year at once, all or nothing: the preparation screen's save.
+      // The grid and the planned entries of a category, saved together, all or nothing.
+      .post("/plan", zValidator("json", planSchema), async (c) => {
+        const me = c.var.user.id;
+        const bookId = idOf(c.req.param("bookId"));
+        const { budget, create, update, remove } = c.req.valid("json");
+        await withUser(db, me, async (tx) => {
+          await requireRole(tx, bookId, me, "editor");
+          await saveBudgets(tx, bookId, budget);
+          for (const { id, version } of remove) await deleteEntry(tx, bookId, id, version);
+          for (const { id, version, ...change } of update) {
+            await updateEntry(tx, bookId, id, change, version);
+          }
+          for (const entry of create) await createEntry(tx, bookId, { ...entry, planned: true });
+        });
+        return c.body(null, 204);
+      })
+      // Saves the budgets of a year at once, all or nothing.
       .post("/batch", zValidator("json", budgetBatchSchema), async (c) => {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
-        const { year, save, remove = [], versions = {} } = c.req.valid("json");
+        const input = c.req.valid("json");
         const result = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
-          const existing = await tx
-            .select({
-              id: categoryBudget.id,
-              categoryId: categoryBudget.categoryId,
-              year: categoryBudget.year,
-              months: categoryBudget.months,
-              version: categoryBudget.version,
-            })
-            .from(categoryBudget)
-            .where(and(eq(categoryBudget.bookId, bookId), eq(categoryBudget.year, year)));
-          const byCategory = new Map(existing.map((row) => [row.categoryId, row]));
-          // What the screen read must still be there: else someone else changed it.
-          for (const categoryId of [...save.map((item) => item.categoryId), ...remove]) {
-            const row = byCategory.get(categoryId);
-            if (row?.version !== versions[categoryId]) {
-              throw new HTTPException(409, {
-                message: "A budget was changed or deleted by someone else: reload the year",
-              });
-            }
-          }
-          for (const item of save) {
-            const values = await budgetValues(tx, bookId, item);
-            const row = byCategory.get(item.categoryId);
-            if (row) {
-              await unlocked(tx, row, values.months);
-              await tx.update(categoryBudget).set(values).where(eq(categoryBudget.id, row.id));
-            } else {
-              await tx.insert(categoryBudget).values({ bookId, ...values });
-            }
-          }
-          for (const categoryId of remove) {
-            const row = byCategory.get(categoryId);
-            if (row) {
-              await unlocked(tx, row, NO_MONTHS);
-              await tx.delete(categoryBudget).where(eq(categoryBudget.id, row.id));
-            }
-          }
-          return { saved: save.length, removed: remove.filter((id) => byCategory.has(id)).length };
+          return saveBudgets(tx, bookId, input);
         });
         return c.json(result);
       })

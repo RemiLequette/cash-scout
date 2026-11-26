@@ -322,8 +322,6 @@
     "accountHint": "The account this budget should be spent from: where what is still expected shows at the end of each month.",
     "problemAccount": "Choose the account of this budget.",
     "plannedTransfers": "Planned transfers {year}",
-    "plannedEntriesHint": "They add to the grid. Each is planned at its amount; changing it later in the journal shows as a variance.",
-    "plannedTransfersHint": "Transfers between accounts have no grid.",
     "noPlannedEntries": "No entry this year.",
     "searchCategory": "Search a category",
     "noCategory": "No category",
@@ -340,7 +338,29 @@
       "currentShape": "Current shape",
       "budgetShape": "{year} budget shape",
       "actualShape": "{year} actuals shape"
-    }
+    },
+    "entries": {
+      "copy": "Copy {year}",
+      "schedule": "Schedule",
+      "filter": "Filter (description, sub-category)",
+      "tickAll": "Tick the rows shown",
+      "ticked": "{count, plural, one {# ticked} other {# ticked}}",
+      "newAmount": "New amount",
+      "day": "Day",
+      "copied": "{count, plural, =0 {Nothing to copy} one {# entry copied} other {# entries copied}}",
+      "first": "First date",
+      "last": "Last date",
+      "every": "Every",
+      "frequency": {
+        "m1": "Month",
+        "m3": "Quarter",
+        "m6": "Half year",
+        "m12": "Year"
+      }
+    },
+    "problemEntries": "{count, plural, one {# entry to fix} other {# entries to fix}}",
+    "createPlanned": "{count, plural, one {Create # entry} other {Create # entries}}",
+    "reload": "Reload"
   },
   "accountKinds": {
     "bank": "Bank",
@@ -437,8 +457,7 @@
     "overdraftBetween": "is overdrawn from {from} until {until} (lowest {lowest} on {lowestDate}).",
     "overdraftFrom": "is overdrawn from {from}, to the end of the chart (lowest {lowest} on {lowestDate}).",
     "overdue": "{count, plural, one {# past entry is not reconciled.} other {# past entries are not reconciled.}}",
-    "overdueShow": "Show",
-    "replacesExpected": "Will also replace the expected amount, now {amount}."
+    "overdueShow": "Show"
   },
   "password": {
     "reset": "Set a new password",

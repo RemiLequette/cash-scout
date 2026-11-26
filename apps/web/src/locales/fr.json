@@ -322,8 +322,6 @@
     "accountHint": "Le compte d'où ce budget devrait être dépensé : c'est là qu'apparaît, à la fin de chaque mois, ce qui reste attendu.",
     "problemAccount": "Choisissez le compte de ce budget.",
     "plannedTransfers": "Virements planifiés {year}",
-    "plannedEntriesHint": "Elles s'ajoutent à la grille. Chacune est prévue à son montant ; le changer ensuite dans le journal apparaît comme un écart.",
-    "plannedTransfersHint": "Les virements entre comptes n'ont pas de grille.",
     "noPlannedEntries": "Aucune écriture cette année.",
     "searchCategory": "Chercher une catégorie",
     "noCategory": "Aucune catégorie",
@@ -340,7 +338,29 @@
       "currentShape": "Forme actuelle",
       "budgetShape": "Forme budget {year}",
       "actualShape": "Forme réel {year}"
-    }
+    },
+    "entries": {
+      "copy": "Copier {year}",
+      "schedule": "Échéancier",
+      "filter": "Filtrer (libellé, sous-catégorie)",
+      "tickAll": "Cocher les lignes affichées",
+      "ticked": "{count, plural, one {# cochée} other {# cochées}}",
+      "newAmount": "Nouveau montant",
+      "day": "Jour",
+      "copied": "{count, plural, =0 {Rien à copier} one {# écriture copiée} other {# écritures copiées}}",
+      "first": "Première date",
+      "last": "Dernière date",
+      "every": "Fréquence",
+      "frequency": {
+        "m1": "Tous les mois",
+        "m3": "Tous les trimestres",
+        "m6": "Tous les semestres",
+        "m12": "Tous les ans"
+      }
+    },
+    "problemEntries": "{count, plural, one {# écriture à corriger} other {# écritures à corriger}}",
+    "createPlanned": "{count, plural, one {Créer # écriture} other {Créer # écritures}}",
+    "reload": "Recharger"
   },
   "accountKinds": {
     "bank": "Bancaire",
@@ -437,8 +457,7 @@
     "overdraftBetween": "est à découvert du {from} au {until} (point bas {lowest} le {lowestDate}).",
     "overdraftFrom": "est à découvert à partir du {from}, jusqu'à la fin du graphique (point bas {lowest} le {lowestDate}).",
     "overdue": "{count, plural, one {# écriture passée n'est pas rapprochée.} other {# écritures passées ne sont pas rapprochées.}}",
-    "overdueShow": "Afficher",
-    "replacesExpected": "Remplacera aussi le montant attendu, aujourd'hui {amount}."
+    "overdueShow": "Afficher"
   },
   "password": {
     "reset": "Définir un nouveau mot de passe",

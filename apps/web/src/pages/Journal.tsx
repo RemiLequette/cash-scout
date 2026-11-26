@@ -199,8 +199,6 @@ export function EntryForm({
   initial,
   onClose,
   onDuplicate,
-  planned = false,
-  categoryIds,
 }: {
   bookId: string;
   bookCurrency: string;
@@ -209,29 +207,15 @@ export function EntryForm({
   onClose: () => void;
   /** Starts a new entry from the saved one. */
   onDuplicate?: (draft: Draft) => void;
-  /**
-   * Opened from the budget: the amount asked for is the planned amount, and writing it
-   * also overwrites the expected amount. Reconciling is left to the journal.
-   */
-  planned?: boolean;
-  /** Only the sub-categories of these categories can be picked. */
-  categoryIds?: string[];
 }) {
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
   const formatAmount = useMoney();
   const change = useJournalChange(bookId);
-  // From the budget, an existing entry shows what was planned, not what is now expected.
-  // A new entry of the journal is usually one the bank already shows: it starts reconciled.
-  const [start] = useState(() => {
-    if (planned) {
-      return initial.id && initial.plannedAmount
-        ? { ...initial, amount: initial.plannedAmount }
-        : initial;
-    }
-    return initial.id ? initial : { ...initial, reconciled: true };
-  });
-  const [draft, setDraft] = useState(start);
+  // A new entry is usually one the bank already shows: it starts reconciled.
+  const [draft, setDraft] = useState(() =>
+    initial.id ? initial : { ...initial, reconciled: true },
+  );
   const [shown, setShown] = useState<Partial<Record<Field, true>>>({});
   const [showOriginal, setShowOriginal] = useState(initial.originalAmount !== "");
   const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
@@ -246,7 +230,6 @@ export function EntryForm({
   const subCategoryOptions = useSubCategoryOptions(
     reference,
     initial.id ? (initial.subCategoryId ?? undefined) : undefined,
-    categoryIds,
   );
   const paymentTypeOptions = reference.paymentTypes
     .filter((p) => !p.archived || p.id === initial.paymentTypeId)
@@ -265,30 +248,13 @@ export function EntryForm({
       return;
     }
     if (draft.id) {
-      // From the budget, a new planned amount replaces both amounts; left as it was, it
-      // changes neither. The journal never touches the planned amount.
-      const { amount, ...rest } = body;
-      const replanned = decimalInput(draft.amount) !== decimalInput(start.amount);
+      // The planned amount is fixed here: it only changes from the budget.
       change.mutate(
-        {
-          action: "update",
-          id: draft.id,
-          body: planned
-            ? {
-                ...rest,
-                reconciled: undefined,
-                version: draft.version,
-                ...(replanned && { amount, planned: true }),
-              }
-            : { ...body, version: draft.version },
-        },
+        { action: "update", id: draft.id, body: { ...body, version: draft.version } },
         { onSuccess: onClose },
       );
     } else {
-      change.mutate(
-        { action: "create", body: planned ? { ...body, planned: true } : body },
-        { onSuccess: onClose },
-      );
+      change.mutate({ action: "create", body }, { onSuccess: onClose });
     }
   }
 
@@ -334,16 +300,8 @@ export function EntryForm({
         />
         <Group grow align="flex-start">
           <TextInput
-            label={`${t(planned ? "budget.plannedAmount" : "journal.amount")}${
-              account ? ` (${account.currency})` : ""
-            }`}
-            description={
-              planned && draft.id && initial.currency && initial.amount !== initial.plannedAmount
-                ? t("journal.replacesExpected", {
-                    amount: formatAmount(initial.amount, initial.currency),
-                  })
-                : t("journal.amountHint")
-            }
+            label={account ? `${t("journal.amount")} (${account.currency})` : t("journal.amount")}
+            description={t("journal.amountHint")}
             required
             inputMode="decimal"
             placeholder={t("journal.amountPlaceholder")}
@@ -373,18 +331,14 @@ export function EntryForm({
             onChange={(e) => set({ exchangeRate: e.currentTarget.value })}
           />
         )}
-        {!planned &&
-          draft.id &&
-          Number(draft.plannedAmount) !== 0 &&
-          draft.plannedAmount &&
-          draft.currency && (
-            <Text size="sm" c="dimmed">
-              {t("journal.plannedAndVariance", {
-                planned: formatAmount(draft.plannedAmount, draft.currency),
-                variance: formatAmount(draft.variance ?? "0", draft.currency),
-              })}
-            </Text>
-          )}
+        {draft.id && Number(draft.plannedAmount) !== 0 && draft.plannedAmount && draft.currency && (
+          <Text size="sm" c="dimmed">
+            {t("journal.plannedAndVariance", {
+              planned: formatAmount(draft.plannedAmount, draft.currency),
+              variance: formatAmount(draft.variance ?? "0", draft.currency),
+            })}
+          </Text>
+        )}
         <Button
           variant="subtle"
           size="compact-sm"
@@ -414,14 +368,12 @@ export function EntryForm({
             />
           </Group>
         </Collapse>
-        {!planned && (
-          <Switch
-            label={t("journal.reconciled")}
-            description={t("journal.reconciledHint")}
-            checked={draft.reconciled}
-            onChange={(e) => set({ reconciled: e.currentTarget.checked })}
-          />
-        )}
+        <Switch
+          label={t("journal.reconciled")}
+          description={t("journal.reconciledHint")}
+          checked={draft.reconciled}
+          onChange={(e) => set({ reconciled: e.currentTarget.checked })}
+        />
         <Group justify="space-between">
           <Group gap="xs">
             {initial.id && (

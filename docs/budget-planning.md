@@ -1,6 +1,6 @@
 # Budget planning
 
-Design notes from a brainstorm. Step 1 and the grid's spreadsheet tools are built (without a fill handle); the entry list's tools and previous year helps are not. Once all is built, this model replaces the [Budgets and cash projection](../README.md#budgets-and-cash-projection) section of the README.
+Design notes from a brainstorm. Step 1, the grid's spreadsheet tools (without a fill handle) and the entry list are built; the copy of transfers is not. Once all is built, this model replaces the [Budgets and cash projection](../README.md#budgets-and-cash-projection) section of the README.
 
 A [clickable mockup](https://claude.ai/artifact/8vXcbxfpCMEnHrkh8yFBrp) (private, fictitious data) shows the spreadsheet behaviour of the planning view. It predates the model below: it still has the budget type and does not show the budget line.
 
@@ -88,8 +88,7 @@ It shows:
 - the **grid**: the 12 months and the total, editable;
 - above it, read only, the previous year: its budget and what the journal holds;
 - under it, the planned entries per month;
-- the **planned entries** of the year, as an editable list;
-- the entries of the previous year, to pick from.
+- the **planned entries** of the year, as an editable list.
 
 ### Spreadsheet tools
 
@@ -106,9 +105,10 @@ Grid:
 Entry list:
 
 - columns: date, sub-category, description, account, planned amount, and the current amount for information;
-- add, duplicate and delete rows; repeat a row every month to the end of the year;
-- operations on the selected rows; paste a column of amounts;
-- take chosen entries of the previous year, one year later, at their planned amount.
+- **copy the previous year**, one category at a time: all its entries, planned or not, one year later, with their description, sub-category, account and payment type, which later reconciling relies on. The amount of each becomes its planned amount. An entry already there (same date, sub-category and description) is not copied again. Transfers keep their two sides;
+- **create from a schedule**: description, sub-category, account, amount, frequency (month, quarter, year), day, first and last date;
+- tick rows, all of those a filter on description or sub-category shows included, to delete them, set a new planned amount (such as a rise known from July), or change their day, account or sub-category. No percentages;
+- add and duplicate rows.
 
 Undo and redo work until the save.
 

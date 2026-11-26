@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Group,
+  Loader,
   Modal,
   Paper,
   Select,
@@ -21,6 +22,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap } from "../api";
 import { useBudgetYear, type BudgetYear, type CategoryBudgetRow } from "../budget";
+import { entryChanges, invalidRows, PlanEntries, plannedByMonth, rowsOf } from "../budgetEntries";
 import { cellText, GridTools, useGrid } from "../budgetGrid";
 import {
   decimalInput,
@@ -33,12 +35,6 @@ import {
 import { useMonthNames } from "../options";
 import { useNameOf, useReference, type Reference } from "../reference";
 import { DataTable } from "../table";
-import {
-  draftOf as entryDraftOf,
-  emptyDraft,
-  EntryForm,
-  type Draft as EntryDraft,
-} from "./Journal";
 import { TransferForm } from "./TransferForm";
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i);
@@ -102,6 +98,8 @@ export function BudgetPage({
   const { t, i18n } = useTranslation();
   const [year, setYear] = useState(new Date().getFullYear());
   const [planning, setPlanning] = useState<string | null>(null);
+  /** Raised to start the category's editor again, from what is stored. */
+  const [revision, setRevision] = useState(0);
   /** Whether the category being planned has changes not saved yet. */
   const [dirty, setDirty] = useState(false);
   const reference = useReference(bookId);
@@ -164,7 +162,6 @@ export function BudgetPage({
       leave(() =>
         setPlanning(categories[(index + step + categories.length) % categories.length]!.id),
       );
-    const saved = current.data.budgets.find((b) => b.categoryId === category.id);
     return (
       <Stack>
         {header}
@@ -205,9 +202,9 @@ export function BudgetPage({
           <Badge variant="light">{category.code}</Badge>
           <Title order={4}>{nameOf(category.names)}</Title>
         </Group>
-        <CategoryPlan
-          // A saved or reloaded budget starts the draft again.
-          key={`${category.id}|${year}|${saved?.version ?? "none"}`}
+        <CategoryEditor
+          // Not on the saved version: the editor starts again once everything is reloaded.
+          key={`${category.id}|${year}|${revision}`}
           bookId={bookId}
           bookCurrency={bookCurrency}
           canEdit={canEdit}
@@ -218,14 +215,7 @@ export function BudgetPage({
           previous={previous.data}
           lines={lines.data}
           onDirty={setDirty}
-        />
-        <PlannedEntries
-          bookId={bookId}
-          bookCurrency={bookCurrency}
-          canEdit={canEdit}
-          year={year}
-          reference={ref}
-          categoryIds={[category.id]}
+          onReload={() => setRevision((r) => r + 1)}
         />
       </Stack>
     );
@@ -312,13 +302,12 @@ export function BudgetPage({
         </DataTable>
       </Paper>
       {transferNatures.size > 0 && (
-        <PlannedEntries
+        <PlannedTransfers
           bookId={bookId}
           bookCurrency={bookCurrency}
           canEdit={canEdit}
           year={year}
           reference={ref}
-          categoryIds={[]}
         />
       )}
       <Paper withBorder p="sm">
@@ -377,6 +366,51 @@ function draftFrom(
   };
 }
 
+type CategoryProps = {
+  bookId: string;
+  bookCurrency: string;
+  canEdit: boolean;
+  year: number;
+  reference: Reference;
+  category: Category;
+  current: BudgetYear;
+  previous: BudgetYear;
+  lines: MonthEnd[];
+  onDirty: (dirty: boolean) => void;
+  onReload: () => void;
+};
+
+/** Reads the category's entries of the year and the one before, then starts planning. */
+function CategoryEditor(props: CategoryProps) {
+  const { t } = useTranslation();
+  const { bookId, year, reference, category } = props;
+  const subCategoryIds = reference.subCategories
+    .filter((s) => s.categoryId === category.id)
+    .map((s) => s.id)
+    .join(",");
+  const filters = (y: number) => ({
+    from: `${y}-01-01`,
+    to: `${y}-12-31`,
+    subCategoryIds,
+    limit: 2000,
+    offset: 0,
+  });
+  const entries = useJournal(bookId, filters(year));
+  const before = useJournal(bookId, filters(year - 1));
+  // The list shown while another loads is of another category: wait for ours.
+  if (entries.error) {
+    return <Alert color="red">{t("common.error", { message: entries.error.message })}</Alert>;
+  }
+  if (!entries.data || entries.isPlaceholderData || entries.isFetching) return <Loader size="sm" />;
+  return (
+    <CategoryPlan
+      {...props}
+      entries={entries.data.entries}
+      previousEntries={before.isPlaceholderData ? undefined : before.data?.entries}
+    />
+  );
+}
+
 function CategoryPlan({
   bookId,
   bookCurrency,
@@ -388,18 +422,10 @@ function CategoryPlan({
   previous,
   lines,
   onDirty,
-}: {
-  bookId: string;
-  bookCurrency: string;
-  canEdit: boolean;
-  year: number;
-  reference: Reference;
-  category: Category;
-  current: BudgetYear;
-  previous: BudgetYear;
-  lines: MonthEnd[];
-  onDirty: (dirty: boolean) => void;
-}) {
+  onReload,
+  entries,
+  previousEntries,
+}: CategoryProps & { entries: Entry[]; previousEntries: Entry[] | undefined }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const nameOf = useNameOf(reference.defaultLanguage);
@@ -408,6 +434,20 @@ function CategoryPlan({
   const before = yearOf(previous, category.id);
   const [initial] = useState(() => draftFrom(now.saved, before.saved));
   const [draft, setDraft] = useState(initial);
+  // As read when planning started: what is saved is the difference.
+  const [read] = useState(() => ({ rows: rowsOf(entries), entries }));
+  const [rows, setRows] = useState(read.rows);
+  const context = {
+    accounts: new Map(reference.accounts.map((a) => [a.id, a])),
+    bookCurrency,
+    year,
+  };
+  const sign = BigInt(reference.natures.find((n) => n.id === category.natureId)?.sign ?? 1);
+  /** The planned entries per month, read like the grid. */
+  const planned = plannedByMonth(rows, context).map((v) => sign * v);
+  const changes = entryChanges(rows, read.rows, context);
+  const entriesChanged = changes.create.length + changes.update.length + changes.remove.length > 0;
+  const wrongRows = invalidRows(rows, context);
 
   const update = (patch: Partial<Draft>) => setDraft((old) => ({ ...old, ...patch }));
   const locked = new Set(
@@ -421,9 +461,10 @@ function CategoryPlan({
   });
   /** The amounts as they would be saved, what is being typed included. */
   const grid = editor.effective;
-  const dirty =
+  const budgetChanged =
     JSON.stringify({ ...draft, months: grid.map((v) => cellText(v, bookCurrency)) }) !==
     JSON.stringify(initial);
+  const dirty = budgetChanged || entriesChanged;
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
 
   const budgeted = grid.some((a) => a !== 0n);
@@ -436,41 +477,56 @@ function CategoryPlan({
         ? "budget.problemAccount"
         : draft.accountId && needsRate && draft.exchangeRate.trim() === ""
           ? "budget.problemRate"
-          : undefined;
+          : wrongRows > 0
+            ? "budget.problemEntries"
+            : undefined;
 
   const save = useMutation({
     mutationFn: () => {
       const keep = budgeted || draft.assumptions.trim() !== "";
+      const budget = {
+        year,
+        save:
+          budgetChanged && keep
+            ? [
+                {
+                  categoryId: category.id,
+                  year,
+                  assumptions: draft.assumptions.trim(),
+                  months: grid.map((minor) => toDecimalString(money(minor, bookCurrency))),
+                  ...(draft.accountId && {
+                    accountId: draft.accountId,
+                    ...(needsRate && { exchangeRate: decimalInput(draft.exchangeRate) }),
+                  }),
+                },
+              ]
+            : [],
+        remove: budgetChanged && !keep && now.saved ? [category.id] : [],
+        versions: now.saved ? { [category.id]: now.saved.version } : {},
+      };
       return unwrap(
-        api.books[":bookId"].budgets.batch.$post({
+        api.books[":bookId"].budgets.plan.$post({
           param: { bookId },
-          json: {
-            year,
-            save: keep
-              ? [
-                  {
-                    categoryId: category.id,
-                    year,
-                    assumptions: draft.assumptions.trim(),
-                    months: grid.map((minor) => toDecimalString(money(minor, bookCurrency))),
-                    ...(draft.accountId && {
-                      accountId: draft.accountId,
-                      ...(needsRate && { exchangeRate: decimalInput(draft.exchangeRate) }),
-                    }),
-                  },
-                ]
-              : [],
-            remove: keep ? [] : [category.id],
-            versions: now.saved ? { [category.id]: now.saved.version } : {},
-          },
+          json: { budget, ...changes },
         }),
       );
     },
     onSuccess: async () => {
       onDirty(false);
-      await queryClient.invalidateQueries({ queryKey: ["books", bookId, "budgets"] });
+      await queryClient.invalidateQueries({ queryKey: ["books", bookId] });
+      onReload();
     },
   });
+
+  const saveButton = (
+    <Button
+      disabled={!dirty || problem !== undefined}
+      loading={save.isPending}
+      onClick={() => save.mutate()}
+    >
+      {t("common.save")}
+    </Button>
+  );
 
   const figure = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 });
   const text = (minor: bigint) =>
@@ -490,215 +546,203 @@ function CategoryPlan({
   );
 
   return (
-    <Paper withBorder p="sm">
-      <Stack gap="sm">
-        {save.error && (
-          <Alert color="red">{t("common.error", { message: save.error.message })}</Alert>
-        )}
-        {canEdit && (
-          <GridTools
-            grid={editor}
-            monthNames={monthNames}
-            format={text}
-            previousBudget={before.budget}
-            previousActual={before.actual}
-            year={year}
-          />
-        )}
-        <DataTable minWidth={820} verticalSpacing={4} horizontalSpacing={2} fz="xs">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th />
-              {MONTHS.map((m) => (
-                <Table.Th key={m} ta="right">
-                  {monthNames[m]}
-                </Table.Th>
-              ))}
-              <Table.Th ta="right">{t("budget.total")}</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {row(t("budget.plannedOf", { year: year - 1 }), before.budget)}
-            {row(t("budget.actualOf", { year: year - 1 }), before.actual)}
-            <Table.Tr>
-              <Table.Td fw={600} style={{ whiteSpace: "nowrap" }}>
-                {t("budget.gridOf", { year })}
-              </Table.Td>
-              {MONTHS.map((m) => {
-                const { selected, ...cell } = editor.cell(m);
-                return (
-                  <Table.Td key={m}>
-                    <TextInput
-                      {...cell}
-                      size="xs"
-                      miw={44}
-                      aria-label={`${t("budget.gridOf", { year })} ${monthNames[m]}`}
-                      title={locked.has(m) ? t("budget.locked") : undefined}
-                      disabled={!canEdit || locked.has(m)}
-                      error={editor.invalid === m}
-                      styles={{
-                        input: {
-                          textAlign: "right",
-                          paddingInline: 3,
-                          ...(selected && { background: "var(--mantine-color-blue-light)" }),
-                        },
-                      }}
-                    />
-                  </Table.Td>
-                );
-              })}
-              <Table.Td ta="right" fw={600}>
-                {text(sum(grid))}
-              </Table.Td>
-            </Table.Tr>
-            {row(t("budget.entriesOf", { year }), now.planned)}
-            {row(
-              t("budget.plannedOf", { year }),
-              MONTHS.map((m) => grid[m]! + now.planned[m]!),
-              true,
-            )}
-          </Table.Tbody>
-        </DataTable>
-        <Group align="flex-start" grow>
-          <Stack gap="xs">
-            <Select
-              size="xs"
-              label={t("budget.account")}
-              description={t("budget.accountHint")}
-              disabled={!canEdit}
-              withAsterisk={budgeted}
-              clearable={!budgeted}
-              error={problem === "budget.problemAccount"}
-              data={reference.accounts
-                .filter((a) => (!a.archived && a.kind === "bank") || a.id === draft.accountId)
-                .map((a) => ({ value: a.id, label: `${nameOf(a.names)} (${a.currency})` }))}
-              value={draft.accountId}
-              onChange={(value) => update({ accountId: value, exchangeRate: "" })}
+    <Stack>
+      <Paper withBorder p="sm">
+        <Stack gap="sm">
+          {save.error && (
+            <Alert color="red">
+              <Group justify="space-between">
+                <Text size="sm">{t("common.error", { message: save.error.message })}</Text>
+                <Button size="xs" variant="default" onClick={onReload}>
+                  {t("budget.reload")}
+                </Button>
+              </Group>
+            </Alert>
+          )}
+          {canEdit && (
+            <GridTools
+              grid={editor}
+              monthNames={monthNames}
+              format={text}
+              previousBudget={before.budget}
+              previousActual={before.actual}
+              year={year}
             />
-            {needsRate && (
-              <TextInput
+          )}
+          <DataTable minWidth={820} verticalSpacing={4} horizontalSpacing={2} fz="xs">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th />
+                {MONTHS.map((m) => (
+                  <Table.Th key={m} ta="right">
+                    {monthNames[m]}
+                  </Table.Th>
+                ))}
+                <Table.Th ta="right">{t("budget.total")}</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {row(t("budget.plannedOf", { year: year - 1 }), before.budget)}
+              {row(t("budget.actualOf", { year: year - 1 }), before.actual)}
+              <Table.Tr>
+                <Table.Td fw={600} style={{ whiteSpace: "nowrap" }}>
+                  {t("budget.gridOf", { year })}
+                </Table.Td>
+                {MONTHS.map((m) => {
+                  const { selected, ...cell } = editor.cell(m);
+                  return (
+                    <Table.Td key={m}>
+                      <TextInput
+                        {...cell}
+                        size="xs"
+                        miw={44}
+                        aria-label={`${t("budget.gridOf", { year })} ${monthNames[m]}`}
+                        title={locked.has(m) ? t("budget.locked") : undefined}
+                        disabled={!canEdit || locked.has(m)}
+                        error={editor.invalid === m}
+                        styles={{
+                          input: {
+                            textAlign: "right",
+                            paddingInline: 3,
+                            ...(selected && { background: "var(--mantine-color-blue-light)" }),
+                          },
+                        }}
+                      />
+                    </Table.Td>
+                  );
+                })}
+                <Table.Td ta="right" fw={600}>
+                  {text(sum(grid))}
+                </Table.Td>
+              </Table.Tr>
+              {row(t("budget.entriesOf", { year }), planned)}
+              {row(
+                t("budget.plannedOf", { year }),
+                MONTHS.map((m) => grid[m]! + planned[m]!),
+                true,
+              )}
+            </Table.Tbody>
+          </DataTable>
+          <Group align="flex-start" grow>
+            <Stack gap="xs">
+              <Select
                 size="xs"
-                label={t("budget.rate", { from: account.currency, to: bookCurrency })}
+                label={t("budget.account")}
+                description={t("budget.accountHint")}
                 disabled={!canEdit}
-                inputMode="decimal"
-                value={draft.exchangeRate}
-                error={problem === "budget.problemRate"}
-                onChange={(e) => update({ exchangeRate: e.currentTarget.value })}
+                withAsterisk={budgeted}
+                clearable={!budgeted}
+                error={problem === "budget.problemAccount"}
+                data={reference.accounts
+                  .filter((a) => (!a.archived && a.kind === "bank") || a.id === draft.accountId)
+                  .map((a) => ({ value: a.id, label: `${nameOf(a.names)} (${a.currency})` }))}
+                value={draft.accountId}
+                onChange={(value) => update({ accountId: value, exchangeRate: "" })}
               />
-            )}
-          </Stack>
-          <Textarea
-            size="xs"
-            label={t("budget.assumptions")}
-            disabled={!canEdit}
-            autosize
-            minRows={2}
-            maxLength={2000}
-            value={draft.assumptions}
-            onChange={(e) => update({ assumptions: e.currentTarget.value })}
-          />
-        </Group>
-        {canEdit && (
-          <Group justify="flex-end">
-            {problem && (
-              <Text size="sm" c="red">
-                {t(problem)}
-              </Text>
-            )}
-            <Button
-              disabled={!dirty || problem !== undefined}
-              loading={save.isPending}
-              onClick={() => save.mutate()}
-            >
-              {t("common.save")}
-            </Button>
+              {needsRate && (
+                <TextInput
+                  size="xs"
+                  label={t("budget.rate", { from: account.currency, to: bookCurrency })}
+                  disabled={!canEdit}
+                  inputMode="decimal"
+                  value={draft.exchangeRate}
+                  error={problem === "budget.problemRate"}
+                  onChange={(e) => update({ exchangeRate: e.currentTarget.value })}
+                />
+              )}
+            </Stack>
+            <Textarea
+              size="xs"
+              label={t("budget.assumptions")}
+              disabled={!canEdit}
+              autosize
+              minRows={2}
+              maxLength={2000}
+              value={draft.assumptions}
+              onChange={(e) => update({ assumptions: e.currentTarget.value })}
+            />
           </Group>
-        )}
-      </Stack>
-    </Paper>
+          {canEdit && (
+            <Group justify="flex-end">
+              {problem && (
+                <Text size="sm" c="red">
+                  {t(problem, { count: wrongRows })}
+                </Text>
+              )}
+              {saveButton}
+            </Group>
+          )}
+        </Stack>
+      </Paper>
+      <PlanEntries
+        canEdit={canEdit}
+        year={year}
+        reference={reference}
+        categoryId={category.id}
+        bookCurrency={bookCurrency}
+        rows={rows}
+        setRows={setRows}
+        previous={previousEntries}
+        unplanned={read.entries.filter((e) => Number(e.plannedAmount) === 0)}
+      />
+      {canEdit && <Group justify="flex-end">{saveButton}</Group>}
+    </Stack>
   );
 }
 
 // ---------------------------------------------------------------------------
+// Planned transfers: their two sides add up to zero, so they have no budget
+// ---------------------------------------------------------------------------
 
-function PlannedEntries({
+function PlannedTransfers({
   bookId,
   bookCurrency,
   canEdit,
   year,
   reference,
-  categoryIds,
 }: {
   bookId: string;
   bookCurrency: string;
   canEdit: boolean;
   year: number;
   reference: Reference;
-  categoryIds: string[];
 }) {
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
-  // Without a category, the list is that of the planned transfers: their two sides add up to
-  // zero, so they have no budget.
-  const transferNatures = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
-  const transferCategoryIds = reference.categories
-    .filter((c) => transferNatures.has(c.natureId))
-    .map((c) => c.id);
-  const transfers = categoryIds.length === 0;
-  const subCategories = reference.subCategories.filter((s) =>
-    (transfers ? transferCategoryIds : categoryIds).includes(s.categoryId),
+  const natures = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
+  const categories = new Set(
+    reference.categories.filter((c) => natures.has(c.natureId)).map((c) => c.id),
   );
-  const filters = (y: number) => ({
-    from: `${y}-01-01`,
-    to: `${y}-12-31`,
+  const subCategories = reference.subCategories.filter((s) => categories.has(s.categoryId));
+  const current = useJournal(bookId, {
+    from: `${year}-01-01`,
+    to: `${year}-12-31`,
     subCategoryIds: subCategories.map((s) => s.id).join(","),
     limit: 2000,
     offset: 0,
   });
-  const current = useJournal(bookId, filters(year));
-  const [editing, setEditing] = useState<EntryDraft | null>(null);
   /** A planned transfer being created (no id) or edited. */
   const [transfer, setTransfer] = useState<{ id?: string } | null>(null);
 
-  const planned = (entry: Entry) => Number(entry.plannedAmount) !== 0;
-  // Only the plan: what was not planned consumes the grid instead.
   const entries = (current.data?.entries ?? [])
-    .filter(planned)
+    .filter((entry) => Number(entry.plannedAmount) !== 0)
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   const format = (amount: string, currency: string) =>
     formatMoney(parseAmount(amount, currency), i18n.language);
   const subOf = new Map(reference.subCategories.map((s) => [s.id, s]));
-  const categoryOf = new Map(reference.categories.map((c) => [c.id, c]));
   const accountOf = new Map(reference.accounts.map((a) => [a.id, a]));
 
   return (
     <Paper withBorder p="sm">
       <Stack>
         <Group justify="space-between">
-          <Title order={4}>
-            {t(transfers ? "budget.plannedTransfers" : "budget.plannedEntries", { year })}
-          </Title>
+          <Title order={4}>{t("budget.plannedTransfers", { year })}</Title>
           {canEdit && (
-            <Group>
-              {transfers && (
-                <Button variant="default" size="xs" onClick={() => setTransfer({})}>
-                  {t("budget.newPlannedTransfer")}
-                </Button>
-              )}
-              {!transfers && (
-                <Button
-                  size="xs"
-                  onClick={() => setEditing({ ...emptyDraft(), date: `${year}-01-01` })}
-                >
-                  {t("budget.newPlanned")}
-                </Button>
-              )}
-            </Group>
+            <Button variant="default" size="xs" onClick={() => setTransfer({})}>
+              {t("budget.newPlannedTransfer")}
+            </Button>
           )}
         </Group>
-        <Text size="sm" c="dimmed">
-          {t(transfers ? "budget.plannedTransfersHint" : "budget.plannedEntriesHint")}
-        </Text>
         {current.error && (
           <Alert color="red">{t("common.error", { message: current.error.message })}</Alert>
         )}
@@ -716,44 +760,23 @@ function PlannedEntries({
                 <Table.Th w={110} ta="right">
                   {t("budget.plannedAmount")}
                 </Table.Th>
-                <Table.Th w={110} ta="right">
-                  {t("journal.amount")}
-                </Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {entries.map((entry) => {
-                const sub = subOf.get(entry.subCategoryId);
-                const category = sub && categoryOf.get(sub.categoryId);
+                const editable = canEdit && !entry.reconciled && entry.transferId;
                 return (
                   <Table.Tr
                     key={entry.id}
-                    style={{ cursor: canEdit && !entry.reconciled ? "pointer" : undefined }}
+                    style={{ cursor: editable ? "pointer" : undefined }}
                     c={entry.reconciled ? "dimmed" : undefined}
-                    onClick={() =>
-                      // A reconciled entry is no longer part of what can be planned.
-                      canEdit &&
-                      !entry.reconciled &&
-                      (entry.transferId
-                        ? setTransfer({ id: entry.transferId })
-                        : setEditing(entryDraftOf(entry, "edit")))
-                    }
+                    onClick={() => editable && setTransfer({ id: entry.transferId! })}
                   >
                     <Table.Td>{formatDate(entry.date, i18n.language)}</Table.Td>
-                    <Table.Td>
-                      <Text size="sm">
-                        {category ? `${category.code} ` : ""}
-                        {sub ? nameOf(sub.names) : ""}
-                      </Text>
-                    </Table.Td>
+                    <Table.Td>{nameOf(subOf.get(entry.subCategoryId)?.names ?? {})}</Table.Td>
                     <Table.Td>{entry.description}</Table.Td>
                     <Table.Td>{nameOf(accountOf.get(entry.accountId)?.names ?? {})}</Table.Td>
                     <Table.Td ta="right">{format(entry.plannedAmount, entry.currency)}</Table.Td>
-                    <Table.Td ta="right">
-                      <Text size="sm" fw={600}>
-                        {format(entry.amount, entry.currency)}
-                      </Text>
-                    </Table.Td>
                   </Table.Tr>
                 );
               })}
@@ -761,25 +784,6 @@ function PlannedEntries({
           </DataTable>
         )}
       </Stack>
-      <Modal
-        opened={editing !== null}
-        onClose={() => setEditing(null)}
-        title={editing?.id ? t("journal.editEntry") : t("budget.newPlanned")}
-        size="lg"
-      >
-        {editing && (
-          <EntryForm
-            key={editing.id ?? "new"}
-            bookId={bookId}
-            bookCurrency={bookCurrency}
-            reference={reference}
-            initial={editing}
-            planned
-            categoryIds={categoryIds}
-            onClose={() => setEditing(null)}
-          />
-        )}
-      </Modal>
       <Modal
         opened={transfer !== null}
         onClose={() => setTransfer(null)}
