@@ -242,7 +242,10 @@
       "paymentType": "Payment type",
       "suggestRule": "\"{text}\" is filed under {subCategory}. A rule would do the same for the next statements.",
       "suggestOthers": "{count, plural, one {# other line to review of this statement fits} other {# other lines to review of this statement fit}}",
-      "suggestNo": "No thanks"
+      "suggestNo": "No thanks",
+      "makeTransfer": "Transfer with account…",
+      "transferTo": "Transfer to {account} (the other side is left to reconcile)",
+      "transferFrom": "Transfer from {account} (the other side is left to reconcile)"
     },
     "rules": {
       "title": "Rules",

@@ -242,7 +242,10 @@
       "paymentType": "Moyen de paiement",
       "suggestRule": "« {text} » est classé dans {subCategory}. Une règle ferait pareil pour les prochains relevés.",
       "suggestOthers": "{count, plural, one {# autre ligne à revoir de ce relevé correspond} other {# autres lignes à revoir de ce relevé correspondent}}",
-      "suggestNo": "Non merci"
+      "suggestNo": "Non merci",
+      "makeTransfer": "Virement avec le compte…",
+      "transferTo": "Virement vers {account} (l'autre côté sera à rapprocher)",
+      "transferFrom": "Virement depuis {account} (l'autre côté sera à rapprocher)"
     },
     "rules": {
       "title": "Règles",

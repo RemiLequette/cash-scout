@@ -101,6 +101,8 @@ export interface LineDecision {
   status: LineStatus;
   subCategoryId: string | null;
   entryId: string | null;
+  /** With a sub-category of a transfer nature: the other account of a transfer to create. */
+  transferAccountId: string | null;
 }
 
 export const lineChangeSchema = z
@@ -111,6 +113,11 @@ export const lineChangeSchema = z
     subCategoryId: z.uuid().nullable().optional(),
     /** The line is this entry of the journal: it gets reconciled. */
     entryId: z.uuid().nullable().optional(),
+    /**
+     * The line is one side of a new transfer with this account, the other side being left to
+     * reconcile with the other statement. Goes with a sub-category of a transfer nature.
+     */
+    transferAccountId: z.uuid().nullable().optional(),
     /** The payment type of the entry to create. */
     paymentTypeId: z.uuid().nullable().optional(),
     description: z.string().trim().max(500).nullable().optional(),
@@ -147,15 +154,24 @@ export function decide(current: LineDecision, change: Omit<LineChange, "id">): L
     status: current.status,
     subCategoryId: current.subCategoryId,
     entryId: current.entryId,
+    transferAccountId: current.transferAccountId,
   };
   if (change.subCategoryId !== undefined) {
     next.subCategoryId = change.subCategoryId;
     if (change.subCategoryId) next.entryId = null;
+    else next.transferAccountId = null;
     next.status = change.subCategoryId ? "validated" : "review";
+  }
+  if (change.transferAccountId !== undefined) {
+    next.transferAccountId = change.transferAccountId;
+    if (change.transferAccountId) next.entryId = null;
   }
   if (change.entryId !== undefined) {
     next.entryId = change.entryId;
-    if (change.entryId) next.subCategoryId = null;
+    if (change.entryId) {
+      next.subCategoryId = null;
+      next.transferAccountId = null;
+    }
     next.status = change.entryId || next.subCategoryId ? "validated" : "review";
   }
   if (change.status !== undefined) next.status = change.status;

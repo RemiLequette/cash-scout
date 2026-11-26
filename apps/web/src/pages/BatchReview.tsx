@@ -106,6 +106,19 @@ function Review({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const options = useSubCategoryOptions(reference);
   const payments = usePaymentTypeOptions(reference);
+  const nameOf = useNameOf(reference.defaultLanguage);
+  // A transfer made from a line: the other accounts in its currency, and the sub-category to use.
+  const transfers = {
+    accounts: reference.accounts
+      .filter((a) => !a.archived && a.id !== batch.accountId && a.currency === batch.currency)
+      .map((a) => ({ value: a.id, label: nameOf(a.names) })),
+    subCategoryId:
+      reference.subCategories.find((sub) => {
+        const cat = reference.categories.find((c) => c.id === sub.categoryId);
+        const nat = reference.natures.find((n) => n.id === cat?.natureId);
+        return !sub.archived && !cat?.archived && nat?.transfer;
+      })?.id ?? null,
+  };
 
   const count = (f: Filter) =>
     f === "all" ? batch.lines.length : batch.lines.filter((l) => l.status === f).length;
@@ -136,7 +149,9 @@ function Review({
   const saveLine = (line: BatchLine, change: Omit<Change, "id">) =>
     review.mutate([{ id: line.id, ...change }], {
       onSuccess: () => {
-        if (change.subCategoryId && !line.ruleId && (line.counterparty || line.label)) {
+        // Not for a transfer: a rule cannot make one.
+        const filed = change.subCategoryId && !change.transferAccountId;
+        if (filed && !line.ruleId && (line.counterparty || line.label)) {
           setSuggested(line.id);
         }
       },
@@ -305,6 +320,7 @@ function Review({
                 line={line}
                 currency={batch.currency}
                 options={options}
+                transfers={transfers}
                 forecasts={batch.forecasts}
                 payments={payments}
                 rule={ruleOf(line)}
@@ -383,6 +399,7 @@ function Line({
   line,
   currency,
   options,
+  transfers,
   forecasts,
   payments,
   rule,
@@ -395,6 +412,7 @@ function Line({
   line: BatchLine;
   currency: string;
   options: ReturnType<typeof useSubCategoryOptions>;
+  transfers: Transfers;
   forecasts: MatchedEntry[];
   payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
@@ -450,6 +468,7 @@ function Line({
           line={line}
           currency={currency}
           options={options}
+          transfers={transfers}
           forecasts={forecasts}
           payments={payments}
           rule={rule}
@@ -475,10 +494,18 @@ function Line({
 }
 
 /** What the line becomes in the journal, and the means to choose it. */
+/** What a line needs to become one side of a new transfer. */
+interface Transfers {
+  accounts: { value: string; label: string }[];
+  /** A sub-category of a transfer nature, null when the book has none. */
+  subCategoryId: string | null;
+}
+
 function Decision({
   line,
   currency,
   options,
+  transfers,
   forecasts,
   payments,
   rule,
@@ -489,6 +516,7 @@ function Decision({
   line: BatchLine;
   currency: string;
   options: ReturnType<typeof useSubCategoryOptions>;
+  transfers: Transfers;
   forecasts: MatchedEntry[];
   payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
@@ -542,6 +570,31 @@ function Decision({
     );
   }
   const suggested = line.description ?? (line.counterparty || line.label);
+  const transferAccount = transfers.accounts.find((a) => a.value === line.transferAccountId);
+  if (line.transferAccountId) {
+    return (
+      <Group gap={6} wrap="nowrap">
+        <Text size="sm">
+          {t(
+            line.amount.startsWith("-")
+              ? "statements.review.transferTo"
+              : "statements.review.transferFrom",
+            {
+              account: transferAccount?.label ?? "",
+            },
+          )}
+        </Text>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          aria-label={t("statements.review.unmatch")}
+          onClick={() => onChange({ subCategoryId: null })}
+        >
+          ✕
+        </ActionIcon>
+      </Group>
+    );
+  }
   return (
     <Stack gap={4}>
       {line.candidates.slice(0, 3).map((entry, i) => (
@@ -585,6 +638,19 @@ function Decision({
           onChange={(value) => onChange({ subCategoryId: value })}
         />
       </WithCreate>
+      {!line.subCategoryId && transfers.subCategoryId && transfers.accounts.length > 0 && (
+        <Select
+          size="xs"
+          aria-label={t("statements.review.makeTransfer")}
+          placeholder={t("statements.review.makeTransfer")}
+          searchable
+          data={transfers.accounts}
+          value={null}
+          onChange={(value) =>
+            value && onChange({ subCategoryId: transfers.subCategoryId, transferAccountId: value })
+          }
+        />
+      )}
       {rule && (
         <Text size="xs" c="grape">
           {rule.ignore

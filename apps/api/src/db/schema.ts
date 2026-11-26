@@ -551,6 +551,10 @@ export const importLine = pgTable(
     }),
     /** The rule that proposed the sub-category, description or ignoring. */
     ruleId: uuid("rule_id").references(() => importRule.id, { onDelete: "set null" }),
+    /** For a transfer to create: the other account (this one is the batch's). */
+    transferAccountId: uuid("transfer_account_id").references(() => bookAccount.id, {
+      onDelete: "set null",
+    }),
     /** The description of the entry to create, when it was rewritten. */
     description: text("description"),
     /** The journal entry the line is: chosen in the review, or created by the import. */

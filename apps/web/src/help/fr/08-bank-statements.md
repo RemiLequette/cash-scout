@@ -17,11 +17,15 @@ Choisissez le **compte**, le **format de la banque** et le **fichier CSV** expor
 
 L'écran avertit des **prévisions de la période qu'aucune ligne n'est** : si une ligne est l'une d'elles, choisissez-la, sinon l'écriture sera créée en double.
 
-- **Ignorée** : la ligne est laissée de côté, par exemple une ligne **déjà vue**, ou un virement que vous saisissez vous-même.
+- **Ignorée** : la ligne est laissée de côté, par exemple une ligne **déjà vue**, ou le côté d'un virement que vous avez saisi vous-même et déjà pointé.
 
 - **Proposée par une règle** : voir plus bas. Les règles ne font que proposer ; **Accepter les propositions des règles** les valide.
 
 Cochez plusieurs lignes pour leur donner la même sous-catégorie ou les ignorer ensemble. Les filtres montrent les lignes à revoir, validées, ignorées et importées.
+
+### Les virements
+
+Il n'y a pas de détection : **vous créez le virement depuis un côté**. Sur la ligne, **Virement avec le compte…** choisit l'autre compte du livre (même devise ; le livre doit avoir une sous-catégorie de transfert). L'import crée les deux côtés : celui du relevé, pointé, et l'autre, **non pointé**. Quand vous importez le relevé de l'autre compte, sa ligne **propose de pointer** ce côté. Annuler l'import supprime le virement, sauf si l'autre côté a été pointé entre-temps.
 
 ## Les règles
 

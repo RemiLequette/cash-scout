@@ -1,0 +1,2 @@
+ALTER TABLE "import_line" ADD COLUMN "transfer_account_id" uuid;--> statement-breakpoint
+ALTER TABLE "import_line" ADD CONSTRAINT "import_line_transfer_account_id_book_account_id_fk" FOREIGN KEY ("transfer_account_id") REFERENCES "public"."book_account"("id") ON DELETE set null ON UPDATE no action;

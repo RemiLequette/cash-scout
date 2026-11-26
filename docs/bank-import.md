@@ -50,13 +50,13 @@ All of it happens in the web application. There is no command line import for st
 
 1. **Parse.** The file is read through the **column mapping** of the target account: encoding, delimiter, header line, the column of each field, date format, decimal separator, sign convention (one signed column, or debit and credit apart). Three presets (Boursorama, Caisse d'Epargne, ABN AMRO) ship with the application; a user duplicates one to describe another bank. Some fields are not a column but a transformation, such as the `NAME` of an ABN AMRO label.
 2. **Batch.** The parsed lines are stored as an **import batch**, in the database, not in memory: a review of hundreds of lines spans several sittings, and duplicates are also looked for among earlier batches.
-3. **Prepare.** In this order, on each line: look for a duplicate, look for a forecast to reconcile, look for a transfer, then apply the rules to what is left. A line already imported needs no category; a reconciled forecast already has one; a transfer has none to choose.
-4. **Review.** The user sees each line with its status (new, probable duplicate, reconciled to a forecast, possible transfer, to categorise), corrects it, creates sub-categories on the way, and creates or edits rules.
+3. **Prepare.** In this order, on each line: look for a duplicate, look for a forecast or a side of a transfer to reconcile, then apply the rules to what is left. A line already imported needs no category; a reconciled forecast already has one; a side of a transfer already has one.
+4. **Review.** The user sees each line with its status (new, probable duplicate, reconciled to a forecast, to categorise), corrects it, creates sub-categories on the way, and creates or edits rules.
 5. **Import.** The user confirms; the lines become journal entries in one transaction. Every entry keeps the id of its batch, so a whole import can be undone.
 
 ### Batch lines
 
-A line holds: account, operation date, value date, signed amount and currency, raw label, cleaned counterparty, memo, bank reference, the bank's own category (a hint only), running balance, a fingerprint, and the raw source line for traceability. The proposals come next: sub-category, payment type, rule applied, matched entry, transfer counterpart. Then a status: to review, validated, ignored.
+A line holds: account, operation date, value date, signed amount and currency, raw label, cleaned counterparty, memo, bank reference, the bank's own category (a hint only), running balance, a fingerprint, and the raw source line for traceability. The proposals come next: sub-category, payment type, rule applied, matched entry, other account of a transfer. Then a status: to review, validated, ignored.
 
 ### Duplicates
 
@@ -68,7 +68,9 @@ An imported line that matches an unreconciled entry of the journal reconciles it
 
 ### Transfers
 
-A statement line that is one side of a movement between two accounts of the book can be paired with its other side, in the same batch, in another batch, or already in the journal, and imported as a [transfer](../README.md#transfers). The date gap between the two sides is the transfer's delay (0 to 60 days). The pairing is proposed, never done silently.
+**Built, without detection.** A line is declared a [transfer](../README.md#transfers) with another account of the book (same currency) and given a sub-category of a transfer nature (`import_line.transfer_account_id`). The import creates both sides: the line's, reconciled, and the other, not reconciled and without delay, dated as the line. The line of the other account's statement then proposes to reconcile it, by the ordinary matching of transfer sides (exact amount). Undoing removes the transfer unless its other side was reconciled since.
+
+Pairing two statement lines automatically, and a rule action for transfers, are not planned for now.
 
 ### Rules
 
@@ -76,7 +78,7 @@ A statement line that is one side of a movement between two accounts of the book
 
 The design intent:
 
-A rule belongs to the book, so editors share it. A condition: text of the counterparty or label (contains, regex), direction, amount range, bank category. There is no account condition: a batch is imported into one account, and a rule only looks at the lines of the batch it is tried on. An action: sub-category, payment type, a rewritten description, "transfer to account X", "ignore". The mapping from a bank category to a sub-category is a rule like any other.
+A rule belongs to the book, so editors share it. A condition: text of the counterparty or label (contains, regex), direction, amount range, bank category. There is no account condition: a batch is imported into one account, and a rule only looks at the lines of the batch it is tried on. An action: sub-category, payment type, a rewritten description, "ignore". The mapping from a bank category to a sub-category is a rule like any other.
 
 A rule is created from the review ("always do this for this merchant"), and the application shows how many lines of the batch and of the existing journal it would touch before it is saved. Rules have an order, visible and editable. As the README says, the category decides, not the sign: a rule never picks a sub-category from the sign alone.
 

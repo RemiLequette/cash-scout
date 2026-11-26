@@ -12,17 +12,20 @@ import {
   type ImportRequest,
   type LineChange,
 } from "@cash-scout/domain";
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import type { Tx } from "../db/client.js";
 import {
   bookAccount,
+  category,
   importBatch,
   importLine,
   importRule,
   journalEntry,
+  nature,
   paymentType,
   subCategory,
+  transfer,
 } from "../db/schema.js";
 import { checked } from "../routes/access.js";
 import { bookCurrencyOf } from "../routes/journal.js";
@@ -156,6 +159,37 @@ function lineMayBe(
   );
 }
 
+/** The accounts a line of the batch can make a transfer with: same currency, not archived, not its own. */
+async function usableTransferAccounts(
+  tx: Tx,
+  bookId: string,
+  batch: { accountId: string; account: { currency: string } },
+) {
+  const rows = await tx
+    .select({ id: bookAccount.id })
+    .from(bookAccount)
+    .where(
+      and(
+        eq(bookAccount.bookId, bookId),
+        eq(bookAccount.currency, batch.account.currency),
+        isNull(bookAccount.archivedAt),
+        ne(bookAccount.id, batch.accountId),
+      ),
+    );
+  return new Set(rows.map((r) => r.id));
+}
+
+/** The sub-categories whose category has a transfer nature. */
+async function transferSubCategories(tx: Tx, bookId: string) {
+  const rows = await tx
+    .select({ id: subCategory.id })
+    .from(subCategory)
+    .innerJoin(category, eq(category.id, subCategory.categoryId))
+    .innerJoin(nature, eq(nature.id, category.natureId))
+    .where(and(eq(subCategory.bookId, bookId), eq(nature.transfer, true)));
+  return new Set(rows.map((r) => r.id));
+}
+
 /** Applies the user's decisions to the lines of a batch. */
 export async function applyChanges(
   tx: Tx,
@@ -205,10 +239,21 @@ export async function applyChanges(
         ).map((e) => [e.id, e]),
   );
 
+  const transferAccounts = await usableTransferAccounts(tx, bookId, batch);
+  const transferSubs = await transferSubCategories(tx, bookId);
+
   for (const change of changes) {
     const line = lines.get(change.id);
     if (!line) throw bad("Unknown line");
     const next = checked(() => decide(line, change));
+    if (next.transferAccountId) {
+      if (!transferAccounts.has(next.transferAccountId)) {
+        throw bad("A transfer goes to another account of the book, in the same currency");
+      }
+      if (!next.subCategoryId || !transferSubs.has(next.subCategoryId)) {
+        throw bad("A transfer needs a sub-category of a transfer category");
+      }
+    }
     if (change.entryId) {
       const entry = entries.get(change.entryId);
       if (!entry || !lineMayBe(line, batch.accountId, entry)) {
@@ -397,6 +442,35 @@ export async function importBatchLines(
         });
       }
       const description = line.description ?? (line.counterparty || line.label);
+      let transferId: string | null = null;
+      if (line.transferAccountId) {
+        // The other side waits, not reconciled, for the line of the other statement.
+        if (!(await usableTransferAccounts(tx, bookId, batch)).has(line.transferAccountId)) {
+          throw new HTTPException(409, {
+            message: `The account of the transfer of ${line.date} has changed: review it again`,
+          });
+        }
+        const [header] = await tx
+          .insert(transfer)
+          .values({ bookId, delayDays: 0 })
+          .returning({ id: transfer.id });
+        transferId = header!.id;
+        await tx.insert(journalEntry).values({
+          bookId,
+          transferId,
+          transferLeg: line.amount < 0n ? "destination" : "source",
+          date: line.date,
+          accountId: line.transferAccountId,
+          subCategoryId: line.subCategoryId,
+          description: description.slice(0, 500),
+          paymentTypeId: line.paymentTypeId,
+          amount: -line.amount,
+          plannedAmount: 0n,
+          exchangeRate: rate,
+          bookAmount: inBook(-line.amount),
+          reconciled: false,
+        });
+      }
       const [entry] = await tx
         .insert(journalEntry)
         .values({
@@ -412,6 +486,12 @@ export async function importBatchLines(
           bookAmount: inBook(line.amount),
           reconciled: true,
           importBatchId: batch.id,
+          ...(transferId
+            ? {
+                transferId,
+                transferLeg: line.amount < 0n ? ("source" as const) : ("destination" as const),
+              }
+            : {}),
         })
         .returning({ id: journalEntry.id });
       entryId = entry!.id;
@@ -452,6 +532,49 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
       skipped++;
     } else if (line.previousReconciled === null) {
       // Created by the import: only while it still is what the import wrote.
+      const [side] = await tx
+        .select({ transferId: journalEntry.transferId })
+        .from(journalEntry)
+        .where(and(eq(journalEntry.id, line.entryId), eq(journalEntry.bookId, bookId)));
+      if (side?.transferId) {
+        // A transfer goes with its other side, unless the other statement reconciled it.
+        const [other] = await tx
+          .select({ id: journalEntry.id })
+          .from(journalEntry)
+          .where(
+            and(
+              eq(journalEntry.transferId, side.transferId),
+              ne(journalEntry.id, line.entryId),
+              eq(journalEntry.reconciled, false),
+            ),
+          );
+        const [own] = await tx
+          .select({ id: journalEntry.id })
+          .from(journalEntry)
+          .where(
+            and(
+              eq(journalEntry.id, line.entryId),
+              eq(journalEntry.importBatchId, batch.id),
+              eq(journalEntry.amount, line.amount),
+            ),
+          );
+        const gone = other !== undefined && own !== undefined;
+        if (gone) {
+          await tx.delete(transfer).where(eq(transfer.id, side.transferId));
+          removed++;
+        } else skipped++;
+        await tx
+          .update(importLine)
+          .set({
+            status: "validated",
+            previousDate: null,
+            previousReconciled: null,
+            previousAmount: null,
+            ...(gone ? { entryId: null } : {}),
+          })
+          .where(eq(importLine.id, line.id));
+        continue;
+      }
       const gone = await tx
         .delete(journalEntry)
         .where(
