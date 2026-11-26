@@ -30,7 +30,7 @@ The statements and their lines are part of the copy, although the architecture d
 
 Not exported: members and users. Whoever imports becomes the owner, and the author of a statement is left empty.
 
-Schedules and linked entries are not built yet. When they are, schedules join the export. A link to another book cannot be carried by the file of one book: decide then what the copy keeps.
+Schedules are not built yet. When they are, they join the export.
 
 ## Rules to confirm
 
