@@ -58,8 +58,9 @@ describe("importJournal", () => {
     expect(
       rows.map((r) => [r.date, r.amount, r.plannedAmount, r.bookAmount, r.reconciled]),
     ).toEqual([
-      ["2026-11-02", -320n, -320n, -320n, true],
-      ["2026-11-03", -1200n, -1200n, -1200n, false],
+      // An empty planned amount is an unplanned entry.
+      ["2026-11-02", -320n, 0n, -320n, true],
+      ["2026-11-03", -1200n, 0n, -1200n, false],
       ["2026-11-25", 200000n, 190000n, 200000n, false],
     ]);
     expect(rows[0]!.paymentTypeId).not.toBeNull();

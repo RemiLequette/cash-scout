@@ -1,6 +1,6 @@
 # Budget planning
 
-Design notes from a brainstorm. Nothing here is built yet. When built, this model replaces the [Budgets and cash projection](../README.md#budgets-and-cash-projection) section of the README.
+Design notes from a brainstorm. Step 1 is built; the planning view's spreadsheet tools and previous year helps are not. Once all is built, this model replaces the [Budgets and cash projection](../README.md#budgets-and-cash-projection) section of the README.
 
 A [clickable mockup](https://claude.ai/artifact/8vXcbxfpCMEnHrkh8yFBrp) (private, fictitious data) shows the spreadsheet behaviour of the planning view. It predates the model below: it still has the budget type and does not show the budget line.
 
@@ -29,7 +29,7 @@ Consumption is **by month**: only the **unplanned** entries (planned amount 0) d
 
 ### Budget sub-category
 
-Every category has one sub-category kept by the application, **Budget**, which holds the budget lines. It is created with the category. The user cannot put an entry in it, rename, move, merge or archive it, and neither the entry forms nor the import rules offer it.
+Budget lines show under a sub-category called **Budget** in their category. Like the lines, it is virtual: it is not part of the reference data, so no entry can be put in it, and it cannot be renamed, moved or merged.
 
 Budgets are per category. The other sub-categories only record what money was.
 
@@ -37,11 +37,11 @@ Budgets are per category. The other sub-categories only record what money was.
 
 A month with a grid amount other than zero has one **budget line** in the Budget sub-category, dated the last day of the month, on the budget's account.
 
-| Field          | Value                                                              |
-| -------------- | ------------------------------------------------------------------ |
-| Planned amount | The grid amount                                                    |
+| Field          | Value                                                               |
+| -------------- | ------------------------------------------------------------------- |
+| Planned amount | The grid amount                                                     |
 | Amount         | The grid amount less the month's unplanned entries, never past zero |
-| Reconciled     | Set by the user; the amount is then 0                              |
+| Reconciled     | Set by the user; the amount is then 0                               |
 
 - The line is a **virtual entry**: computed, not stored. Only the grid and the reconciled months are.
 - It is shown as long as its planned amount is not zero, even used up or reconciled.
@@ -132,11 +132,10 @@ There is no "reviewed" mark.
 ## Data
 
 - `category_budget`: 12 monthly amounts replace `type`, `amount`, `profile_id` and `consumption`.
-- `sub_category`: a flag marks the Budget sub-category; the migration creates one per category.
 - Dropped: `budget_profile`, `category.default_budget_type`, the budget type and consumption mode enums.
-- The import of the sheets writes the monthly amounts as they are, instead of picking a profile.
+- A stored annual amount is spread by its profile into the 12 months, so that no value is lost.
 
-Existing data is adjusted by hand: the migration does no more than the change of schema needs.
+Beyond that, existing data is adjusted by hand.
 
 ## Transfers
 

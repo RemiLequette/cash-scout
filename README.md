@@ -29,10 +29,10 @@ cash-scout replaces Google Sheets with the same structure, used since 2014: one 
 
 The sheets work well. cash-scout exists to remove their two limits:
 
-| Limit of the sheets                                                                                                                                | What cash-scout does instead                                                                                                                                                                                                                                                                                         |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Brittle formulas, repeated on every row**: year, month, category, group and nature are looked up per row, and helper columns feed other formulas | Derived values are computed by the application from the date and the sub-category, never stored per row. Reports query the journal directly.                                                                                                                                                                         |
-| **Tedious, error-prone entry**: rows are copied by hand, it takes discipline, and bank exports cannot be loaded                                    | Bank exports are imported with rules that set the sub-category from the label, and matched against scheduled entries. Manual entry gets autocomplete, duplication of a past entry, and validation against the book's reference data. Schedules generate future entries. Linked entries are typed once for two books. |
+| Limit of the sheets                                                                                                                                | What cash-scout does instead                                                                                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Brittle formulas, repeated on every row**: year, month, category, group and nature are looked up per row, and helper columns feed other formulas | Derived values are computed by the application from the date and the sub-category, never stored per row. Reports query the journal directly.                                                                                                                                                                       |
+| **Tedious, error-prone entry**: rows are copied by hand, it takes discipline, and bank exports cannot be loaded                                    | Bank exports are imported with rules that set the sub-category from the label, and matched against planned entries. Manual entry gets autocomplete, duplication of a past entry, and validation against the book's reference data. Schedules generate future entries. Linked entries are typed once for two books. |
 
 ## Books
 
@@ -40,7 +40,7 @@ A **book** (_livre_ in French) is a fully separate set of finances, like a _mand
 
 - journal entries, schedules and budgets;
 - accounts;
-- reference data: groups, categories, sub-categories, payment types, budget profiles, import profiles. Each category also has a default budget type, scheduled or periodic.
+- reference data: groups, categories, sub-categories, payment types, import profiles.
 
 Nothing is shared between books unless it is explicitly linked. A typical setup is one private book per person plus one household book.
 
@@ -80,21 +80,21 @@ Not every operation moves money in each book. In the sheets, some are recorded a
 
 One entry per transaction, past or future, in a book:
 
-| Field           | Notes                                                                                                                                                                                                                                                                                           |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Date            | Year and month are derived from it, not stored                                                                                                                                                                                                                                                  |
-| Account         | One of the book's accounts; its currency is the entry's currency                                                                                                                                                                                                                                |
-| Sub-category    | Sets the category, the group and the nature                                                                                                                                                                                                                                                     |
-| Description     | Free text, from the bank label on import                                                                                                                                                                                                                                                        |
-| Payment type    | Card, transfer, direct debit, cash, ATM, cheque, deposit, fees…                                                                                                                                                                                                                                 |
-| Amount          | Signed, in the account's currency. The expected amount until reconciled, then the bank amount                                                                                                                                                                                                   |
-| Book amount     | The amount in the book's currency, at the entry's exchange rate. Same as the amount when the account is in the book's currency                                                                                                                                                                  |
-| Original amount | Optional, for information: amount and currency actually paid, for example a purchase in US dollars paid from a ringgit account                                                                                                                                                                  |
-| Planned amount  | The amount first planned, in a [scheduled category](#scheduled-categories): equal to the amount for an entry made in the budget's plan, 0 for an entry made in the journal. Never changed afterwards; the difference with the amount is the variance, shown only when there is a planned amount |
-| Reconciled      | Matched with the bank statement. An unreconciled entry is a **forecast**                                                                                                                                                                                                                        |
-| Schedule        | The schedule that generated the entry, if any                                                                                                                                                                                                                                                   |
-| Transfer        | The transfer this entry is one side of, and which side, if any                                                                                                                                                                                                                                  |
-| Link            | The matching entry in another book, if any                                                                                                                                                                                                                                                      |
+| Field           | Notes                                                                                                                                                                                                                |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Date            | Year and month are derived from it, not stored                                                                                                                                                                       |
+| Account         | One of the book's accounts; its currency is the entry's currency                                                                                                                                                     |
+| Sub-category    | Sets the category, the group and the nature                                                                                                                                                                          |
+| Description     | Free text, from the bank label on import                                                                                                                                                                             |
+| Payment type    | Card, transfer, direct debit, cash, ATM, cheque, deposit, fees…                                                                                                                                                      |
+| Amount          | Signed, in the account's currency. The expected amount until reconciled, then the bank amount                                                                                                                        |
+| Book amount     | The amount in the book's currency, at the entry's exchange rate. Same as the amount when the account is in the book's currency                                                                                       |
+| Original amount | Optional, for information: amount and currency actually paid, for example a purchase in US dollars paid from a ringgit account                                                                                       |
+| Planned amount  | The amount planned for an entry made in the budget's plan, 0 for an entry made in the journal. Changed only in the budget; the difference with the amount is the variance, shown only when there is a planned amount |
+| Reconciled      | Matched with the bank statement. An unreconciled entry is a **forecast**                                                                                                                                             |
+| Schedule        | The schedule that generated the entry, if any                                                                                                                                                                        |
+| Transfer        | The transfer this entry is one side of, and which side, if any                                                                                                                                                       |
+| Link            | The matching entry in another book, if any                                                                                                                                                                           |
 
 **Categories** have three levels: group → category → sub-category. A category has a short code (`C01`, `P02`…) that sets its sort order, and belongs to a **nature** (see below). Money that leaves the book's accounts for assets the book does not track, such as a life insurance, is a category like any other, and a negative amount in it is a withdrawal. A movement between two accounts of the book is a **transfer**: it uses a category of a nature marked as holding transfers, and is left out of the totals.
 
@@ -128,7 +128,7 @@ A **transfer** moves money between two accounts of a book. It is two journal ent
 - **One change, two entries**: the amount, the accounts, the sub-category, the description and the payment type are edited on the transfer, never on one side. A side opened from the journal opens the whole transfer. Only reconciling is a side's own: each side is matched with its own bank statement line.
 - **Currencies**: between accounts of the same currency one amount is entered. Between two currencies both amounts are kept, which gives the real rate; each account not in the book currency also has its rate into it, as for any entry.
 - **Sub-category**: a sub-category of a category of a _transfer_ nature, so both sides are left out of the totals.
-- **Planning**: a transfer can be part of the budget's plan, from the list of planned entries. Both sides then get a planned amount equal to their amount, which add up to zero, and the cash projection sees them on their own dates and accounts. A transfer does not need a budget type: it changes no total.
+- **Planning**: a transfer can be part of the budget's plan, from the list of planned entries. Both sides then get a planned amount equal to their amount, which add up to zero, and the cash projection sees them on their own dates and accounts. A transfer category has no grid: it changes no total.
 - **Between books** is another operation, the [linked entries](#linked-entries-between-books).
 
 ### Currencies
@@ -141,100 +141,49 @@ A **transfer** moves money between two accounts of a book. It is two journal ent
 
 ## Budgets and cash projection
 
-A book plans each year category by category. Each category's plan follows one of two **budget types**:
+A book plans each year category by category. The design notes are in [Budget planning](docs/budget-planning.md).
 
-| Budget type   | The plan                                                                   | Typical categories                            | Measured by                            |
-| ------------- | -------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------- |
-| **Scheduled** | Future entries in the journal, each with a planned amount                  | Income, taxes, rent, utilities, subscriptions | Variance per entry: amount − planned   |
-| **Periodic**  | An annual amount, spread over months by a profile, with a consumption mode | Food, outings, holidays, shopping             | Consumption of each month's allocation |
+Any category can be budgeted in two ways, which **add up**:
 
-- The type is set **per category**, never per sub-category, so every entry belongs to exactly one plan and nothing is counted twice. Sub-categories keep the detail: a scheduled entry still has its sub-category and description.
-- A new category is **periodic** by default. Its type can be changed later.
-- The type is kept **per year**, with the rest of the category's budget. The category's type is only the default for years not yet budgeted, so changing it never rewrites past years. A change made during a year applies to that whole year.
+- **planned entries**: future entries of the journal, each with a planned amount, unreconciled until the bank shows them;
+- a **grid**: an amount per month, in the book's currency and read with the sign of the category's nature, for money budgeted without saying which entries will spend it.
+
+The budget of a month is its grid amount plus the planned amounts of its entries. A transfer category has no grid.
 
 ### Category budget
 
-A **category budget** is the plan of one category for one year:
+One per category and year: the **12 monthly amounts**, free-text **assumptions**, and the **account** the budget should be spent from, with its exchange rate into the book currency. The account is required as soon as a month is not zero, so that overdrafts can be anticipated. Budgets of every past year are kept; no history of revisions is.
 
-| Element     | Applies to | Meaning                                                                                                                                                                                                    |
-| ----------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Category    | both       |                                                                                                                                                                                                            |
-| Year        | both       | Calendar year                                                                                                                                                                                              |
-| Type        | both       | Scheduled or periodic                                                                                                                                                                                      |
-| Assumptions | both       | Free text: what the plan relies on, such as "rent +3 % in July" or "no long trip this year"                                                                                                                |
-| Amount      | periodic   | The annual amount, in the book's currency                                                                                                                                                                  |
-| Profile     | periodic   | How the annual amount is spread over the 12 months                                                                                                                                                         |
-| Consumption | periodic   | **Lapse**: what a month did not use, or overspent, is gone. **Roll over**: it moves to the next month. **Annual pool**: the whole year is one envelope                                                     |
-| Account     | periodic   | The category's **reference account**, required: where the remaining budget is expected to be spent, for the projection, and where a month's unused budget is shown in the journal                          |
-| Rate        | periodic   | Exchange rate of the account's currency into the book's currency, as for entries (1 when they are the same). It is kept with the budget to convert it for the projection; a first version, to refine later |
+### Planned entries and variance
 
-Budgets of every past year are kept: reports compare each year with its own plan.
+- An entry created as part of the plan gets a **planned amount** equal to its amount. The amount then moves as more is known and takes the bank's on reconciliation.
+- An entry made in the journal has a planned amount of **0**: it was not part of the plan.
+- The variance, amount − planned amount, shows how far reality drifted from the plan (O3).
+- A **schedule** (monthly, quarterly, yearly, on a given day) will generate entries instead of copying rows.
 
-A category budget has **one amount**. Revising it during the year replaces it; no history of revisions is kept. cash-scout is a household tool, not an accounting system: the plan is a guide, and the scheduled entries keep their own planned amounts anyway.
+### Budget lines
 
-### Profiles
+For every month whose grid amount is not zero, the journal shows a **budget line** on the month's last day, on the budget's account, under a sub-category called Budget.
 
-A **profile** is a set of 12 monthly weights adding up to 100 %. Profiles are reference data of the book, shared by its categories, and meant to stay few: _even_, _summer_ (70 % in July–August, the rest even), _December_… The consumption mode belongs to the category budget, not to the profile.
-
-### Scheduled categories
-
-- Their plan is **future entries in the journal**, unreconciled until the bank shows them. They feed the cash projection directly.
-- An entry created **as part of the plan** (from the budget's list of scheduled entries, or by a schedule) gets a **planned amount** equal to its amount. The planned amount then **never changes**; only the amount moves: it is updated as more is known, which changes the projection (O2), and set to the bank amount on reconciliation.
-- An entry made **in the journal** (an unplanned tax adjustment, an unexpected bill) has a planned amount of **0**, and shows no variance: it was not part of the plan.
-- The variance, amount − planned amount, shows how far reality drifted from the plan (O3). Example: an electricity bill planned at −120 is announced at −135, then debited at −138. The planned amount stays −120, the amount goes −120 → −135 → −138, and the final variance is −18.
-- A **schedule** (monthly, quarterly, yearly, on a given day) generates entries instead of copying rows. Changing a schedule rewrites the amount _and_ planned amount of its future, unreconciled entries, since that is a new plan.
-
-### Periodic categories
-
-- The plan is **not journal entries**: the category budget is its own object, and reports and the projection compute from it.
-- **Allocation**: each month gets annual amount × the profile's weight for that month. Amounts are in minor units, so the rounding remainder goes to the last month and the 12 months always add up to the annual amount. Revising the amount re-spreads it over the whole year.
-- **Consumption**: every journal entry of the category consumes its month, whatever its date, reconciled or not. A future entry known in advance, such as a holiday deposit, consumes the budget like any other and appears at its date in the projection.
-- **Remaining** = allocated (after the consumption mode) − consumed.
-- **Month-end lines**: the journal shows, at the end of each month, what a periodic category's budget did not use, as a computed line on the budget's reference account, dated the month's last day. See [Month-end lines of the unused budget](#month-end-lines-of-the-unused-budget).
-
-### Preparing and revising
-
-There is no budgeting season enforced by the application: a year's budget can be started whenever its data is there (usually at the end of the year, for the next one) and revised at any time during the year.
-
-Budgeting a year means:
-
-1. **Classify** the categories (scheduled or periodic) and pick their profiles, creating a profile only when none fits.
-2. **Scheduled categories**: create the year's planned entries, in a list like the journal's that shows only scheduled categories. The proposal takes the current year's planned entries, those with a planned amount, moves them one year ahead at the amount they ended at, and applies an increase in percent; entries are then added, changed or removed one by one. A sub-category already planned for the year is not proposed again. Smoothing amounts over the months comes later.
-3. **Periodic categories**: set the annual amount. The proposal is the current year's actuals, then adjusted.
-4. Write the **assumptions** of each category as the plan is made.
-
-### Migration from the sheets
-
-The sheets record a periodic budget as one pseudo-entry per month, with an amount of 0 and the month's budget in the _budget_ column. They are not imported into the journal: for each year and periodic category, they become a category budget whose amount is their sum, with the profile closest to their monthly spread. In scheduled categories, the _budget_ column becomes the planned amount.
+- It is **virtual**: computed, not stored. Its planned amount is the grid amount; its amount is what the month's **unplanned** entries (planned amount 0) have not used, never past zero. A refund raises it.
+- **Reconciling** is the only action: it sets the line to 0 and locks the month's grid amount. It can be taken back.
+- Each month stands alone: until its line is reconciled, what remains is expected, past months included.
+- It follows the journal's period, account, category and status filters, but not its text search.
+- A message above the journal reports the past entries that are not reconciled, budget lines included.
 
 ### Yearly balance (O1)
 
-The year's plan is checked as a whole. Since each category has a single type, planned income and planned spending are each the sum of:
-
-- the planned amounts of the year's entries in scheduled categories;
-- the annual amounts of periodic categories.
-
-Saving is budgeted like any other category, for instance scheduled payments to a life insurance; a budget amount may be negative, for a planned withdrawal. The plan is not meant to balance to zero: planned income − planned spending − planned saving is the **planned change of the book's accounts**, shown for information, not as a target. During the year, the same balance is shown with actuals to date plus what remains planned.
+Planned income, spending and saving are the grids plus the planned amounts of the year's entries. Saving is budgeted like any other category; an amount may be negative, for a planned withdrawal. The plan is not meant to balance to zero: planned income − planned spending − planned saving is the **planned change of the book's accounts**, shown for information.
 
 ### Cash projection
 
-For each account, in **the account's currency**, the expected daily balance is: reconciled entries + unreconciled entries + the **remaining** periodic budgets on that account, spread over what is left of each month. Past months count nothing: what was not spent is gone, or has moved on by the consumption mode.
-
-### Month-end lines of the unused budget
-
-For each periodic category, the journal adds a **month-end line** with what the month's budget did not use, in the account currency and on the budget's reference account (an income category's line is a forecast of income, an expense's a forecast of spending).
-
-- **Computed, not entered**: the line follows the budget and the entries, and cannot be edited. A month that used its whole budget, or went over it, has no line. Only a lapsing budget has a line every month; what a roll-over or an annual-pool budget leaves moves on to the next months, so it has one line, at the year's end, to avoid counting the same money again.
-- **Reconciling** is the only action: it lets the unused budget go and sets the line's amount to 0. It can be taken back.
-- **Past months**: a past month whose line is not reconciled is reported by a message above the journal, with a button to show those months. Such a line no longer counts in the projection: what was not spent is gone.
-- **Filters**: the line follows the journal's period, account, category and status filters, but not its text search.
-- **Budgets from before the reference account was required** have no line until one is chosen.
+For each account, in **the account's currency**, the expected daily balance is: the entries, reconciled or not, plus the budget lines that are not reconciled.
 
 ### Account chart
 
 A section at the bottom of the journal, which can be hidden, charts the balance of the accounts day by day. Only the **account filter** acts on it; the journal's period, category, status and search do not. By default it is the cash projection over 4 months from the start of the current month, for every bank account; the start and the length can be changed.
 
-- The balance counts reconciled and unreconciled entries, and the month-end lines of the months not yet over.
+- The balance counts reconciled and unreconciled entries, and the budget lines.
 - **Overdrafts are shown loudly**: the part of a line under zero is red over a red band, and a message gives, per account, the stretch of the overdraft and its lowest point.
 - Accounts in different currencies each get their own chart, since their amounts are not comparable.
 
@@ -254,8 +203,8 @@ A page for reading and analysing one year, replacing the yearly tabs of the shee
 - **Year**: a selector; the same page serves the current year, a past one and a year being budgeted.
 - **Columns**: the 12 months and the year's total. Summary columns (monthly average, budget, percentage of budget, previous year) come later.
 - **Rows**: the book's natures and balances in the order it set. A nature opens on its groups (which nest), categories and sub-categories, each level expandable and collapsible, with an expand-all and a collapse-all; a group that carries categories of several natures appears under each. A row is the sum of what it contains, shown with its nature's sign. A balance is one line, the sum of its natures as entered; it adds a nature wherever the nature sits in the list. A row with nothing in the selected year (no entry, no budget allocation) is hidden, and so is a group, a nature or a balance left empty. Transfers are left out, as in every total; control lines of the sheets are not rows.
-- **Cell**: for a scheduled category, the sum of the month's entries, reconciled or not; for a periodic category, what the month consumed up to the current month, and its allocation for later months. Future values are shown differently from past ones.
-- **Unused budget**: under an expanded periodic category, a line carries the allocation not yet consumed, so that its sub-categories and this line add up to the category.
+- **Cell**: the sum of the month's entries, reconciled or not, and of the category's budget line. Future values are shown differently from past ones.
+- **Budget**: under an expanded category, a line carries its budget lines, so that its sub-categories and this line add up to the category. The detail panel lists them with the entries.
 - **Account balances**: a block under the categories, with one line per bank account and a total, giving the balance at the end of each month. It is the sum of the entries' book amounts up to that date, adjustments included, and it is not revalued at today's rate. For future months it is the projected balance of the [cash projection](#cash-projection). Virtual accounts are left out.
 - **Detail panel**: a section at the bottom, resizable and hideable, lists the entries behind the selected cell: a row and a month, a row's year total, or an account's month. Its columns are the journal's, it is read-only, and each entry links to the journal.
 - **Access**: any member of the book, viewers included.
@@ -264,26 +213,26 @@ A page for reading and analysing one year, replacing the yearly tabs of the shee
 
 Functional decisions. Technical choices are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-| Topic                | Decision                                                                                                                                                           | Serves                             | Notes                                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Separation           | Books: fully separate data and reference data in one database                                                                                                      | O1–O3 per person and per household | Every table carries the book; the API checks membership on every request                                                               |
-| Between books        | Linked entries, entered once                                                                                                                                       | O2, O3                             | Contributions appear in both books' projections and reports without double entry                                                       |
-| Virtual accounts     | Non-bank accounts per book, out of the projection, for zero-sum compensations; usable in linked operations                                                         | O1, O3                             | Covers common spending paid from a private account, without a fake bank movement                                                       |
-| Roles                | Owner, editor, viewer per book; one super user                                                                                                                     | — (security)                       |                                                                                                                                        |
-| Budget type          | Each category is scheduled or periodic, kept per year; periodic by default                                                                                         | O1, O2, O3                         | One plan per entry, so nothing is counted twice                                                                                        |
-| Scheduled categories | Future entries in the journal with a fixed planned amount; unplanned entries have a planned amount of 0                                                            | O2, O1, O3                         | Variance = amount − planned amount, unplanned spending included                                                                        |
-| Reference data       | Empty in a new book, own level of detail per book, easy maintenance (move, merge, archive), imported from the sheets at initialization                             | O1, O3                             | Detail where the book needs it to plan and analyse                                                                                     |
-| Nature               | Set by the category, never by the sign                                                                                                                             | O1, O3                             | Negative income and positive spending are normal                                                                                       |
-| Entry                | Manual entry with helpers, and statement import that builds reusable rules                                                                                         | O2, O3                             | Both keep the journal complete and correct                                                                                             |
-| Currencies           | Book currency for budgets and reports, currency per account, fixed rate per entry, optional display currency, daily public rates                                   | O1, O2, O3                         | Projection per account in its own currency; analysis in one currency                                                                   |
-| Per-person spending  | Not a dimension inside a book: a member's own spending goes in their own book                                                                                      | O3                                 | Keeps books simple; linked entries cover contributions. A virtual common book is a possible [future improvement](#future-improvements) |
-| Periodic categories  | Category budgets outside the journal: annual amount, monthly profile, consumption mode, projection account                                                         | O1, O2, O3                         | Replace the special budget entries of the sheets                                                                                       |
-| Budget revisions     | One amount per category budget, revised freely; past years kept, no history of revisions; free-text assumptions per category and year                              | O1, O3                             | A household tool, not an accounting system                                                                                             |
-| Bank data            | File import first: CSV, OFX, QIF, matched against scheduled entries                                                                                                | O2, O3                             | Reconciled balances are the starting point of the projection; bank sync can come later                                                 |
-| Interface languages  | Clean i18n from the start: no text in the code, one message file per language, dates, numbers and currencies formatted by locale. English and French shipped first | — (users)                          | A new language is added by contributing a message file, without code changes; each user picks their language                           |
-| Book languages       | Each book lists the languages of its reference data, with a default one                                                                                            | — (users)                          | Members of a multilingual household each read the book's categories in their own language                                              |
-| Technical stack      | TypeScript monorepo, Hono + Drizzle on PostgreSQL, React + Mantine, Docker Compose, MIT license                                                                    | — (technical)                      | Details in [ARCHITECTURE.md](ARCHITECTURE.md)                                                                                          |
-| Devices              | Responsive web app for desktop and mobile, installable as a PWA, always online                                                                                     | O2, O3                             | Manual entry happens on the phone too                                                                                                  |
+| Topic               | Decision                                                                                                                                                           | Serves                             | Notes                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Separation          | Books: fully separate data and reference data in one database                                                                                                      | O1–O3 per person and per household | Every table carries the book; the API checks membership on every request                                                               |
+| Between books       | Linked entries, entered once                                                                                                                                       | O2, O3                             | Contributions appear in both books' projections and reports without double entry                                                       |
+| Virtual accounts    | Non-bank accounts per book, out of the projection, for zero-sum compensations; usable in linked operations                                                         | O1, O3                             | Covers common spending paid from a private account, without a fake bank movement                                                       |
+| Roles               | Owner, editor, viewer per book; one super user                                                                                                                     | — (security)                       |                                                                                                                                        |
+| Two ways to budget  | Planned entries and a monthly grid, which add up; only unplanned entries consume the grid                                                                          | O1, O2, O3                         | One plan per entry, so nothing is counted twice                                                                                        |
+| Planned entries     | Future entries in the journal with a planned amount; unplanned entries have a planned amount of 0                                                                  | O2, O1, O3                         | Variance = amount − planned amount, unplanned spending included                                                                        |
+| Reference data      | Empty in a new book, own level of detail per book, easy maintenance (move, merge, archive), imported from the sheets at initialization                             | O1, O3                             | Detail where the book needs it to plan and analyse                                                                                     |
+| Nature              | Set by the category, never by the sign                                                                                                                             | O1, O3                             | Negative income and positive spending are normal                                                                                       |
+| Entry               | Manual entry with helpers, and statement import that builds reusable rules                                                                                         | O2, O3                             | Both keep the journal complete and correct                                                                                             |
+| Currencies          | Book currency for budgets and reports, currency per account, fixed rate per entry, optional display currency, daily public rates                                   | O1, O2, O3                         | Projection per account in its own currency; analysis in one currency                                                                   |
+| Per-person spending | Not a dimension inside a book: a member's own spending goes in their own book                                                                                      | O3                                 | Keeps books simple; linked entries cover contributions. A virtual common book is a possible [future improvement](#future-improvements) |
+| Budget lines        | Virtual month-end entries holding what the grid still expects, reconciled to let it go                                                                             | O1, O2, O3                         | The journal and the projection show the budget without storing entries                                                                 |
+| Budget revisions    | One amount per category budget, revised freely; past years kept, no history of revisions; free-text assumptions per category and year                              | O1, O3                             | A household tool, not an accounting system                                                                                             |
+| Bank data           | File import first: CSV, OFX, QIF, matched against planned entries                                                                                                  | O2, O3                             | Reconciled balances are the starting point of the projection; bank sync can come later                                                 |
+| Interface languages | Clean i18n from the start: no text in the code, one message file per language, dates, numbers and currencies formatted by locale. English and French shipped first | — (users)                          | A new language is added by contributing a message file, without code changes; each user picks their language                           |
+| Book languages      | Each book lists the languages of its reference data, with a default one                                                                                            | — (users)                          | Members of a multilingual household each read the book's categories in their own language                                              |
+| Technical stack     | TypeScript monorepo, Hono + Drizzle on PostgreSQL, React + Mantine, Docker Compose, MIT license                                                                    | — (technical)                      | Details in [ARCHITECTURE.md](ARCHITECTURE.md)                                                                                          |
+| Devices             | Responsive web app for desktop and mobile, installable as a PWA, always online                                                                                     | O2, O3                             | Manual entry happens on the phone too                                                                                                  |
 
 ## Future improvements
 

@@ -6,7 +6,6 @@ import {
   orderedLines,
   type DashboardLines,
   monthEndBalances,
-  unusedBudget,
   type DashboardStructure,
 } from "./dashboard.js";
 
@@ -15,37 +14,6 @@ describe("currentMonthOf", () => {
     expect(currentMonthOf(2026, "2026-11-23")).toBe(11);
     expect(currentMonthOf(2025, "2026-11-23")).toBe(12);
     expect(currentMonthOf(2027, "2026-11-23")).toBe(0);
-  });
-});
-
-describe("unusedBudget", () => {
-  const allocated = Array<bigint>(12).fill(100n);
-
-  it("is the month's share not yet used, for the months after the current one", () => {
-    const consumed = Array<bigint>(12).fill(0n);
-    consumed[10] = 30n; // November, current
-    consumed[11] = 40n; // December, an entry already known
-    const unused = unusedBudget(allocated, consumed, 11);
-    expect(unused.slice(0, 11)).toEqual(Array(11).fill(0n));
-    expect(unused[11]).toBe(60n);
-  });
-
-  it("is 0 once the entries of a future month have used up its share", () => {
-    const consumed = Array<bigint>(12).fill(0n);
-    consumed[11] = 150n;
-    expect(unusedBudget(allocated, consumed, 11)[11]).toBe(0n);
-  });
-
-  it("is the whole share for every month of a year not begun, and nothing for a past year", () => {
-    const none = Array<bigint>(12).fill(0n);
-    expect(unusedBudget(allocated, none, 0)).toEqual(allocated);
-    expect(unusedBudget(allocated, none, 12)).toEqual(none);
-  });
-
-  it("keeps the sign of a negative allocation, a planned withdrawal", () => {
-    const withdrawal = Array<bigint>(12).fill(-100n);
-    const none = Array<bigint>(12).fill(0n);
-    expect(unusedBudget(withdrawal, none, 0)[0]).toBe(-100n);
   });
 });
 
@@ -112,7 +80,7 @@ describe("dashboardRows", () => {
     expect(rows.map((r) => r.id)).toContain("s-bread");
   });
 
-  it("adds the unused budget of a periodic category as a line that completes the category", () => {
+  it("adds a category's budget lines as a row that completes the category", () => {
     const unused = Array<bigint>(12).fill(0n);
     unused[10] = -100n;
     unused[11] = -100n;
@@ -125,7 +93,7 @@ describe("dashboardRows", () => {
       ["group", "g-daily"],
       ["category", "c-food"],
       ["sub", "s-bread"],
-      ["unused", "c-food"],
+      ["budget", "c-food"],
     ]);
     const category = rows[1]!;
     expect(category.months[10]).toBe(-130n);
@@ -140,7 +108,7 @@ describe("dashboardRows", () => {
     expect(rows.map((r) => [r.kind, r.id])).toEqual([
       ["group", "g-empty"],
       ["category", "c-unused"],
-      ["unused", "c-unused"],
+      ["budget", "c-unused"],
     ]);
     expect(rows[0]!.total).toBe(-600n);
   });

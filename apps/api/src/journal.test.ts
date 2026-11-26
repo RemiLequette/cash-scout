@@ -169,7 +169,23 @@ describe("journal entries", () => {
     expect(entry).toMatchObject({ amount: "-120.00", plannedAmount: "-120.00", variance: "0.00" });
   });
 
-  it("changes the amount but never the planned amount", async () => {
+  it("moves the planned amount with the amount when written in the budget's plan", async () => {
+    const b = await bookWithReference();
+    const entry = await b.add({ amount: "-120", planned: true });
+    await json(b.owner.request("PATCH", b.journal(`/${entry.id}`), { amount: "-135" }));
+    const replanned = await json<Entry>(
+      b.owner.request("PATCH", b.journal(`/${entry.id}`), { amount: "-100", planned: true }),
+    );
+    expect(replanned).toMatchObject({ amount: "-100.00", plannedAmount: "-100.00" });
+    await json(b.owner.request("PATCH", b.journal(`/${entry.id}`), { reconciled: true }));
+    const refused = await b.owner.request("PATCH", b.journal(`/${entry.id}`), {
+      amount: "-90",
+      planned: true,
+    });
+    expect(refused.status).toBe(400);
+  });
+
+  it("changes the amount but never the planned amount from the journal", async () => {
     const b = await bookWithReference();
     const entry = await b.add({ amount: "-120", planned: true });
     await json(b.owner.request("PATCH", b.journal(`/${entry.id}`), { amount: "-135" }));

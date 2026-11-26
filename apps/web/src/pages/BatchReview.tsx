@@ -36,6 +36,7 @@ import {
   type MatchedEntry,
   type Rule,
 } from "../statements";
+import { DataTable } from "../table";
 
 const PAGE = 50;
 const filters = ["review", "validated", "ignored", "imported", "all"] as const;
@@ -233,49 +234,47 @@ function Review({
           {t("statements.review.none")}
         </Text>
       ) : (
-        <Table.ScrollContainer minWidth={820}>
-          <Table highlightOnHover verticalSpacing="xs">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th w={36}>
-                  <Checkbox
-                    aria-label={t("statements.review.selectAll")}
-                    disabled={selectable.length === 0}
-                    checked={selectable.length > 0 && selectable.every((l) => selected.has(l.id))}
-                    onChange={(e) =>
-                      toggle(
-                        selectable.map((l) => l.id),
-                        e.currentTarget.checked,
-                      )
-                    }
-                  />
-                </Table.Th>
-                <Table.Th>{t("statements.date")}</Table.Th>
-                <Table.Th>{t("statements.label")}</Table.Th>
-                <Table.Th ta="right">{t("statements.amount")}</Table.Th>
-                <Table.Th w={340}>{t("statements.review.decision")}</Table.Th>
-                <Table.Th w={110} />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {visible.map((line) => (
-                <Line
-                  key={line.id}
-                  line={line}
-                  currency={batch.currency}
-                  options={options}
-                  forecasts={batch.forecasts}
-                  payments={payments}
-                  rule={ruleOf(line)}
-                  onCreateRule={() => setRuleFor(line)}
-                  selected={selected.has(line.id)}
-                  onSelect={(on) => toggle([line.id], on)}
-                  onChange={(change) => save([{ id: line.id, ...change }])}
+        <DataTable minWidth={820} highlightOnHover verticalSpacing="xs">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th w={36}>
+                <Checkbox
+                  aria-label={t("statements.review.selectAll")}
+                  disabled={selectable.length === 0}
+                  checked={selectable.length > 0 && selectable.every((l) => selected.has(l.id))}
+                  onChange={(e) =>
+                    toggle(
+                      selectable.map((l) => l.id),
+                      e.currentTarget.checked,
+                    )
+                  }
                 />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+              </Table.Th>
+              <Table.Th>{t("statements.date")}</Table.Th>
+              <Table.Th>{t("statements.label")}</Table.Th>
+              <Table.Th ta="right">{t("statements.amount")}</Table.Th>
+              <Table.Th w={340}>{t("statements.review.decision")}</Table.Th>
+              <Table.Th w={110} />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {visible.map((line) => (
+              <Line
+                key={line.id}
+                line={line}
+                currency={batch.currency}
+                options={options}
+                forecasts={batch.forecasts}
+                payments={payments}
+                rule={ruleOf(line)}
+                onCreateRule={() => setRuleFor(line)}
+                selected={selected.has(line.id)}
+                onSelect={(on) => toggle([line.id], on)}
+                onChange={(change) => save([{ id: line.id, ...change }])}
+              />
+            ))}
+          </Table.Tbody>
+        </DataTable>
       )}
       {pages > 1 && <Pagination total={pages} value={current} onChange={setPage} />}
 

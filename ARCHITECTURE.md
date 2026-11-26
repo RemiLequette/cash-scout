@@ -20,11 +20,11 @@ Two containers in Docker Compose: one Node container serving the API and the bui
 
 A pnpm workspace, TypeScript everywhere:
 
-| Package           | Content                                                                                                                                  |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`        | React front end                                                                                                                          |
-| `apps/api`        | HTTP API, authentication, database access, import                                                                                        |
-| `packages/domain` | Types, zod validation schemas, and pure calculations: budget allocation by profile, consumption by mode, cash projection, yearly balance |
+| Package           | Content                                                                                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`        | React front end                                                                                                         |
+| `apps/api`        | HTTP API, authentication, database access, import                                                                       |
+| `packages/domain` | Types, zod validation schemas, and pure calculations: what remains of a month's budget, cash projection, yearly balance |
 
 `packages/domain` has no dependency on the database or the browser. The API and the front end use the same schemas, so a form validates exactly as the server does, and the calculations are tested in isolation.
 
@@ -70,27 +70,28 @@ Linked entries between two books are written in one transaction, after checking 
 
 A book can be open in several windows at once, by one member or several.
 
-- **Versions**: books and every row edited by the app (reference items, journal entries, budgets and profiles) carry an integer `version`, raised by each update. A client sends back the `version` it read with its change; if the row has moved on or is gone, the API answers 409 and the client reloads. Without a `version` the change wins, which is what scripts and imports use.
+- **Versions**: books and every row edited by the app (reference items, journal entries, budgets) carry an integer `version`, raised by each update. A client sends back the `version` it read with its change; if the row has moved on or is gone, the API answers 409 and the client reloads. Without a `version` the change wins, which is what scripts and imports use.
 - **Events**: `GET /api/books/:bookId/events` is a stream of server-sent events, open to members. After each successful change under `/books/:bookId`, a middleware publishes its scope (`book`, `members`, `reference`, `journal`, `budgets`) and the windows reload the matching queries. Events carry no data, so nothing is read with another user's rights. A window that lost its connection reloads the whole book when the browser reconnects.
 - **Limit**: the event bus is in the memory of the API process. Running several API instances needs a relay between them, for example PostgreSQL `LISTEN` / `NOTIFY`.
 
 ### Reports and projection
 
 - Pivots, dashboards and history are computed in SQL (`GROUP BY` over the journal joined with reference data) and returned as rows (O3).
-- Budget allocation and consumption, and the cash projection, are computed on demand by `packages/domain` from the journal, schedules and budgets, so they are never stale (O1, O2).
+- What remains of the budgets, and the cash projection, are computed on demand by `packages/domain` from the journal, schedules and budgets, so they are never stale (O1, O2).
 - If volumes ever require it, aggregates can be cached per book and month; not needed at household scale.
 
 ### Import
 
 Reference data and journals are imported from CSV files by `pnpm import:reference` and `pnpm import:journal`, in one transaction and with the rights of an editor of the book ([format](docs/import.md)).
 
-For bank statements: CSV, OFX and QIF parsing, column mappings per account, classification rules, and matching against unreconciled scheduled entries live in the API. Import runs as a preview first: the user reviews, classifies unknown labels, creates rules, then confirms. A statement file read for an account is kept as an `import_batch` with its `import_line`s, visible to editors only, so that a review can span several sittings; a line already held by an earlier batch of the account is flagged by its fingerprint. In the review each line becomes a new entry (a sub-category) or an existing one (a proposal: same account and amount, a date within 5 days, one line per entry), or is ignored; importing a batch writes its validated lines in one transaction, as reconciled entries that keep the id of their batch (`journal_entry.import_batch_id`), and can set the account's opening balance from the statement's last balance; an import can be undone. The book's import rules (`import_rule`: conditions on the text, bank category, account, direction and amount; actions on the sub-category, description and ignoring) are pure functions of `packages/domain` (`rules.ts`) applied by the API to the lines of a batch; they propose, the user accepts.
+For bank statements: CSV, OFX and QIF parsing, column mappings per account, classification rules, and matching against unreconciled planned entries live in the API. Import runs as a preview first: the user reviews, classifies unknown labels, creates rules, then confirms. A statement file read for an account is kept as an `import_batch` with its `import_line`s, visible to editors only, so that a review can span several sittings; a line already held by an earlier batch of the account is flagged by its fingerprint. In the review each line becomes a new entry (a sub-category) or an existing one (a proposal: same account and amount, a date within 5 days, one line per entry), or is ignored; importing a batch writes its validated lines in one transaction, as reconciled entries that keep the id of their batch (`journal_entry.import_batch_id`), and can set the account's opening balance from the statement's last balance; an import can be undone. The book's import rules (`import_rule`: conditions on the text, bank category, account, direction and amount; actions on the sub-category, description and ignoring) are pure functions of `packages/domain` (`rules.ts`) applied by the API to the lines of a batch; they propose, the user accepts.
 
 ## Front end
 
 - **Vite**, **React**, **TanStack Router** (routes) and **TanStack Query** (server state).
 - **Mantine** for components: forms, date pickers, notifications, dark mode, locale support.
 - **TanStack Table** for the pivot view and the journal; **ECharts** for charts.
+- **Column titles never scroll away**: in every table of data, the row of column titles stays in view while the rows scroll. `DataTable` (`apps/web/src/table.tsx`) does it; use it for a new table.
 - **Responsive**, for desktop and mobile web, installable as a **PWA** on the phone. Always online: no offline entry.
 
 ### Internationalisation

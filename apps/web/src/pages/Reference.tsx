@@ -40,6 +40,7 @@ import {
   type Reference,
   type ReferenceKind,
 } from "../reference";
+import { DataTable } from "../table";
 
 // ---------------------------------------------------------------------------
 // Shared pieces
@@ -821,7 +822,7 @@ function AccountsTab({
       )}
       {accounts.length === 0 && <Text c="dimmed">{t("reference.emptyAccounts")}</Text>}
       {accounts.length > 0 && (
-        <Table>
+        <DataTable minWidth={700}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("reference.name")}</Table.Th>
@@ -875,7 +876,7 @@ function AccountsTab({
               </Table.Tr>
             ))}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       )}
       <Modal
         opened={openingOf !== null}

@@ -5,6 +5,7 @@ import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { helpTopics } from "../help";
+import { DataTable } from "../table";
 
 /** In-help links are relative file links (`04-journal.md`), so that they also work in Obsidian and on GitHub. */
 function HelpLink({ href, children }: { href?: string; children?: ReactNode }) {
@@ -55,11 +56,9 @@ const components: Components = {
   li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
   a: ({ href, children }) => <HelpLink href={href}>{children}</HelpLink>,
   table: ({ children }) => (
-    <Table.ScrollContainer minWidth={400} mb="sm">
-      <Table withTableBorder withColumnBorders verticalSpacing="xs">
-        {children}
-      </Table>
-    </Table.ScrollContainer>
+    <DataTable minWidth={400} withTableBorder withColumnBorders verticalSpacing="xs" mb="sm">
+      {children}
+    </DataTable>
   ),
   thead: ({ children }) => <Table.Thead>{children}</Table.Thead>,
   tbody: ({ children }) => <Table.Tbody>{children}</Table.Tbody>,

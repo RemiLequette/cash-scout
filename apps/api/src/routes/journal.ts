@@ -319,12 +319,12 @@ export function journalRoutes(db: Db) {
 
       // The daily balance of every account over a window, whatever the journal's
       // filters: the opening balance on its first day, then what changes it day
-      // by day. Entries count reconciled or not; the month-end lines of unused
-      // budgets count while their month has not passed, and settled ones are 0.
+      // by day. Entries count reconciled or not, and so do the budget lines, past
+      // months included; reconciled lines are 0.
       .get("/projection", zValidator("query", projectionQuerySchema), async (c) => {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
-        const { from, to, today } = c.req.valid("query");
+        const { from, to } = c.req.valid("query");
         const result = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "viewer");
           const bookCurrency = await bookCurrencyOf(tx, bookId);
@@ -385,7 +385,6 @@ export function journalRoutes(db: Db) {
           for (const day of days) addChange(day.accountId, day.date, BigInt(day.total));
           for (const line of lines.flat()) {
             if (line.date < from || line.date > to) continue;
-            if (line.date.slice(0, 7) < today.slice(0, 7)) continue;
             addChange(
               line.accountId,
               line.date,
@@ -482,6 +481,11 @@ export function journalRoutes(db: Db) {
               message: "This entry is one side of a transfer: change the transfer",
             });
           }
+          if (input.planned && current.reconciled) {
+            throw new HTTPException(400, {
+              message: "The plan of a reconciled entry does not change",
+            });
+          }
           // Items the entry already uses stay allowed even once archived.
           if (input.accountId && input.accountId !== current.accountId) {
             const account = await usable(accountOf(tx, bookId, input.accountId), "account");
@@ -515,6 +519,8 @@ export function journalRoutes(db: Db) {
               paymentTypeId: input.paymentTypeId,
               reconciled: input.reconciled,
               amount: amount.minor,
+              // Written in the budget's plan: the plan and the expected amount move together.
+              plannedAmount: input.planned ? amount.minor : undefined,
               exchangeRate: rate,
               bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
               ...(input.originalAmount !== undefined || input.originalCurrency !== undefined

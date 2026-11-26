@@ -1,34 +1,35 @@
 # Budget
 
-La page **Budget** planifie une année, catégorie par catégorie. Choisissez l'année avec les flèches.
+La page **Budget** montre une année, catégorie par catégorie. Choisissez l'année avec les flèches, puis **Planifier** sur une catégorie.
 
-## Deux types de plan
+## Deux façons de budgéter, qui s'ajoutent
 
-| Type           | Le plan                                                         | Catégories typiques                          |
-| -------------- | --------------------------------------------------------------- | -------------------------------------------- |
-| **Planifié**   | Des écritures futures du journal, chacune avec un montant prévu | Revenus, impôts, loyer, charges, abonnements |
-| **Périodique** | Un montant annuel, réparti sur les mois par un profil           | Alimentation, sorties, vacances, achats      |
+- La **grille** : un montant par mois, sans dire quelles écritures le dépenseront.
+- Les **écritures planifiées** : des écritures futures du journal, chacune avec un montant prévu.
 
-Le type se fixe par catégorie et se conserve par année. Une nouvelle catégorie est périodique par défaut.
+Le budget d'un mois est la grille **plus** les montants prévus de ses écritures.
 
-## Catégories périodiques
+## La grille
 
-- **Montant annuel**, dans la devise du livre.
-- **Profil** : la répartition du montant sur 12 mois (des poids dont la somme fait 100 %). Créez peu de profils : _Régulier_, _Été_…
-- **Budget non utilisé** décide du sort du reste d'un mois : il est **perdu**, il est **reporté** au mois suivant, ou l'année entière est une **enveloppe annuelle**.
-- **Compte** : le compte de référence, où le budget restant devrait être dépensé. Il est obligatoire et pilote la projection.
+Les montants se lisent dans le sens de la nature : une dépense est positive. Le budget et le réel de l'année précédente sont affichés au-dessus, pour vous aider.
+
+- **Compte** : le compte d'où ce budget devrait être dépensé. Il est obligatoire et pilote la projection.
 - **Taux de change** quand ce compte n'est pas dans la devise du livre.
 - **Hypothèses** : texte libre sur ce sur quoi repose le plan.
 
-Le bouton **Partir de** remplit les catégories sans budget à partir du budget de l'année précédente, ou de ses dépenses réelles.
+La grille s'enregistre avec **Enregistrer**. Les écritures planifiées s'enregistrent une par une.
 
-## Catégories planifiées
+## La ligne Budget
 
-Le plan est une liste d'**écritures planifiées**. Chacune est prévue à son montant. Ensuite le montant évolue quand on en sait plus, puis devient celui de la banque, mais le **montant prévu ne change jamais** : la différence est l'**écart**.
+Chaque mois dont la grille n'est pas à zéro a une ligne **Budget** à son dernier jour, dans le journal. Son montant est la grille moins les écritures **non prévues** du mois, jamais au-delà de zéro. Un remboursement l'augmente.
 
-Une écriture saisie directement dans le journal n'a pas de montant prévu, donc pas d'écart.
+Les écritures planifiées ne consomment pas la grille : leur différence avec le prévu est leur **écart**.
 
-Pour préparer une nouvelle année, la proposition replanifie les écritures de l'an dernier, un an plus tard, au montant où elles ont fini.
+**Rapprocher** la ligne abandonne le reste et verrouille la case du mois. Tant qu'elle n'est pas rapprochée, le reste est attendu, même pour un mois passé. Rien n'est reporté d'un mois à l'autre.
+
+## Virements
+
+Les catégories de virement n'ont pas de grille, seulement des virements planifiés.
 
 ## Variation des comptes
 

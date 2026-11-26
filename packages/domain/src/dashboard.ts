@@ -20,26 +20,6 @@ export function currentMonthOf(year: number, today: string): number {
   return Number(today.slice(5, 7));
 }
 
-/**
- * What a periodic category's budget leaves for each month after the current
- * one: the month's own share not yet used by entries dated in it. It keeps
- * the sign of the allocation (a negative saving budget is a planned
- * withdrawal) and is 0 when the month's entries have used it up or gone past.
- * Months up to the current one show what was consumed, so they have none.
- */
-export function unusedBudget(
-  allocated: readonly bigint[],
-  consumed: readonly bigint[],
-  current: number,
-): bigint[] {
-  return allocated.map((share, index) => {
-    if (index + 1 <= current) return 0n;
-    const left = share - consumed[index]!;
-    if (share >= 0n) return left > 0n ? left : 0n;
-    return left < 0n ? left : 0n;
-  });
-}
-
 /** The balance at the end of each month, from the opening balance and each month's change. */
 export function monthEndBalances(opening: bigint, changes: readonly bigint[]): bigint[] {
   let balance = opening;
@@ -71,17 +51,17 @@ export interface DashboardCell {
   total: bigint;
 }
 
-/** A periodic budget's unused budget per month, signed like the entries. */
-export interface DashboardUnused {
+/** A category's budget lines per month, signed like the entries. */
+export interface DashboardBudget {
   categoryId: string;
   months: readonly bigint[];
 }
 
-export type DashboardRowKind = "nature" | "balance" | "group" | "category" | "sub" | "unused";
+export type DashboardRowKind = "nature" | "balance" | "group" | "category" | "sub" | "budget";
 
 /**
  * A line of the grid. `id` is the id of the group, category or sub-category;
- * the "unused" line of a category carries the category's id. `parentId` is the
+ * the "budget" line of a category carries the category's id. `parentId` is the
  * id of the enclosing group or category, and `parentKind` which of the two it
  * is, so a page can fold the tree.
  */
@@ -127,23 +107,23 @@ const totalOf = (months: readonly bigint[]) => months.reduce((a, b) => a + b, 0n
 
 /**
  * The rows of the year dashboard, in display order: a group, then its own
- * categories, each followed by its sub-categories and, for a periodic
- * category, the line of its unused budget, then the groups nested in it, to
+ * categories, each followed by its sub-categories and, when it has a
+ * budget, its Budget line, then the groups nested in it, to
  * any depth. A row is the sum of what it contains. What has nothing in the
  * year (no entry, no budget) is left out, and so is a group left empty.
  */
 export function dashboardRows(
   structure: DashboardStructure,
   cells: readonly DashboardCell[],
-  unused: readonly DashboardUnused[],
+  budgets: readonly DashboardBudget[],
 ): DashboardRow[] {
-  return withKeys(bareRows(structure, cells, unused), null);
+  return withKeys(bareRows(structure, cells, budgets), null);
 }
 
 function bareRows(
   structure: DashboardStructure,
   cells: readonly DashboardCell[],
-  unused: readonly DashboardUnused[],
+  budgets: readonly DashboardBudget[],
 ): BareRow[] {
   const bySub = new Map<string, bigint[]>();
   for (const cell of cells) {
@@ -151,7 +131,7 @@ function bareRows(
     months[cell.month - 1] = months[cell.month - 1]! + cell.total;
     bySub.set(cell.subCategoryId, months);
   }
-  const unusedOf = new Map(unused.map((u) => [u.categoryId, u.months]));
+  const budgetOf = new Map(budgets.map((b) => [b.categoryId, b.months]));
   const known = new Set(structure.groups.map((g) => g.id));
   // A group whose parent is unknown is shown at the top.
   const isTop = (group: { parentId?: string | null }) =>
@@ -188,12 +168,12 @@ function bareRows(
           total: totalOf(months),
         });
       }
-      const budget = unusedOf.get(category.id);
+      const budget = budgetOf.get(category.id);
       if (inCategory.length === 0 && !budget) continue;
       if (budget) {
         addInto(categoryMonths, budget);
         inCategory.push({
-          kind: "unused",
+          kind: "budget",
           id: category.id,
           parentId: category.id,
           parentKind: "category",
@@ -279,7 +259,7 @@ export function dashboardLines(
   structure: DashboardStructure,
   lines: DashboardLines,
   cells: readonly DashboardCell[],
-  unused: readonly DashboardUnused[],
+  budgets: readonly DashboardBudget[],
 ): DashboardRow[] {
   const shown = new Map<string, { rows: DashboardRow[]; raw: bigint[] }>();
   for (const nature of lines.natures) {
@@ -287,7 +267,7 @@ export function dashboardLines(
     const rows = bareRows(
       { ...structure, categories: structure.categories.filter((c) => c.natureId === nature.id) },
       cells,
-      unused,
+      budgets,
     );
     if (rows.length === 0) continue;
     const raw = zeros();

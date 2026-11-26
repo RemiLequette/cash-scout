@@ -1,18 +1,15 @@
 import {
-  allocate,
-  budgetMonths,
+  convert,
   MONTHS,
   money,
-  settlementMonths,
+  remainingBudget,
   toDecimalString,
   unconvert,
-  type BudgetMonth,
 } from "@cash-scout/domain";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { Tx } from "../db/client.js";
 import {
   bookAccount,
-  budgetProfile,
   budgetSettlement,
   category,
   categoryBudget,
@@ -28,21 +25,34 @@ export const budgetColumns = {
   id: categoryBudget.id,
   categoryId: categoryBudget.categoryId,
   year: categoryBudget.year,
-  type: categoryBudget.type,
   assumptions: categoryBudget.assumptions,
-  amount: categoryBudget.amount,
-  profileId: categoryBudget.profileId,
-  consumption: categoryBudget.consumption,
+  months: categoryBudget.months,
   accountId: categoryBudget.accountId,
   exchangeRate: categoryBudget.exchangeRate,
 };
 
-/** What the journal consumed, per category and month of a year, in the book currency. */
-export type Consumption = Awaited<ReturnType<typeof loadYear>>["consumption"];
+/** What the journal holds for a category in each month, in minor units of the book currency. */
+export interface CategoryJournal {
+  /** Every entry. */
+  actual: bigint[];
+  /** The unplanned entries (planned amount 0): what consumes the grid. */
+  unplanned: bigint[];
+  /** The planned amounts of the entries, budgeted on top of the grid. */
+  planned: bigint[];
+}
 
-/** The budgets of a year, the profiles' weights and what the journal consumed. */
-export async function loadYear(tx: Tx, bookId: string, year: number) {
-  const [rows, profiles, consumption] = await Promise.all([
+const zeros = () => Array<bigint>(MONTHS).fill(0n);
+
+/**
+ * The budgets of a year and what the journal holds for every category with
+ * entries, all read with the sign of the category's nature.
+ */
+export async function loadYear(tx: Tx, bookId: string, bookCurrency: string, year: number) {
+  const inYear = and(
+    eq(journalEntry.bookId, bookId),
+    sql`extract(year from ${journalEntry.date}) = ${year}`,
+  );
+  const [rows, totals, plannedEntries] = await Promise.all([
     tx
       .select({ ...budgetColumns, code: category.code, sign: nature.sign })
       .from(categoryBudget)
@@ -51,66 +61,67 @@ export async function loadYear(tx: Tx, bookId: string, year: number) {
       .where(and(eq(categoryBudget.bookId, bookId), eq(categoryBudget.year, year)))
       .orderBy(asc(category.code)),
     tx
-      .select({ id: budgetProfile.id, weights: budgetProfile.weights })
-      .from(budgetProfile)
-      .where(eq(budgetProfile.bookId, bookId)),
-    tx
       .select({
         categoryId: subCategory.categoryId,
         sign: nature.sign,
         month: MONTH,
-        total: sql<string>`sum(${journalEntry.bookAmount})`,
+        actual: sql<string>`sum(${journalEntry.bookAmount})`,
+        unplanned: sql<string>`coalesce(sum(${journalEntry.bookAmount}) filter (where ${journalEntry.plannedAmount} = 0), 0)`,
       })
       .from(journalEntry)
       .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
       .innerJoin(category, eq(category.id, subCategory.categoryId))
       .innerJoin(nature, eq(nature.id, category.natureId))
-      .where(
-        and(
-          eq(journalEntry.bookId, bookId),
-          sql`extract(year from ${journalEntry.date}) = ${year}`,
-        ),
-      )
+      .where(inYear)
       .groupBy(subCategory.categoryId, nature.sign, MONTH),
+    // One by one: each planned amount is converted at its own entry's rate.
+    tx
+      .select({
+        categoryId: subCategory.categoryId,
+        sign: nature.sign,
+        month: MONTH,
+        plannedAmount: journalEntry.plannedAmount,
+        exchangeRate: journalEntry.exchangeRate,
+        currency: bookAccount.currency,
+      })
+      .from(journalEntry)
+      .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
+      .innerJoin(category, eq(category.id, subCategory.categoryId))
+      .innerJoin(nature, eq(nature.id, category.natureId))
+      .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
+      .where(and(inYear, ne(journalEntry.plannedAmount, 0n))),
   ]);
-  return {
-    rows,
-    profiles,
-    consumption: consumption.map((c) => ({ ...c, total: BigInt(c.total) })),
+
+  const journal = new Map<string, CategoryJournal>();
+  const of = (categoryId: string) => {
+    const found = journal.get(categoryId) ?? {
+      actual: zeros(),
+      unplanned: zeros(),
+      planned: zeros(),
+    };
+    journal.set(categoryId, found);
+    return found;
   };
-}
-
-/** The sign that makes a category's consumption read positive: its nature's sign. */
-export const consumptionSign = (sign: number) => BigInt(sign);
-
-/** The 12 months of a periodic budget, in minor units of the book currency. */
-export function monthsOf(
-  row: {
-    categoryId: string;
-    amount: bigint | null;
-    profileId: string | null;
-    consumption: string | null;
-  },
-  sign: number,
-  weightsOf: Map<string, number[]>,
-  consumption: Consumption,
-): BudgetMonth[] {
-  const factor = consumptionSign(sign);
-  const used = Array<bigint>(MONTHS).fill(0n);
-  for (const entry of consumption) {
-    if (entry.categoryId === row.categoryId) used[entry.month - 1] = factor * entry.total;
+  for (const row of totals) {
+    const sign = BigInt(row.sign);
+    const category = of(row.categoryId);
+    category.actual[row.month - 1] = sign * BigInt(row.actual);
+    category.unplanned[row.month - 1] = sign * BigInt(row.unplanned);
   }
-  return budgetMonths(
-    allocate(row.amount!, weightsOf.get(row.profileId!)!),
-    used,
-    row.consumption as "lapse" | "roll_over" | "annual_pool",
-  );
+  for (const row of plannedEntries) {
+    const own = money(row.plannedAmount, row.currency);
+    const inBook =
+      row.currency === bookCurrency ? own : convert(own, row.exchangeRate, bookCurrency);
+    const months = of(row.categoryId).planned;
+    months[row.month - 1] = months[row.month - 1]! + BigInt(row.sign) * inBook.minor;
+  }
+  return { rows, journal };
 }
 
 /**
- * A month-end line of the journal: what a periodic category's budget did not use
- * in a month, as a forecast entry on the category's reference account, dated the
- * month's last day. Settling it ("reconciling") sets it to 0.
+ * A budget line: the virtual entry that, at the end of a month, holds what the
+ * month's grid amount still expects, on the budget's account. Reconciling it
+ * lets that go and sets it to 0.
  */
 export interface MonthEnd {
   budgetId: string;
@@ -122,11 +133,15 @@ export interface MonthEnd {
   date: string;
   /** Currency of the account. */
   currency: string;
-  /** Signed, in the account currency: 0 once settled. */
+  /** Signed like an entry, in the account currency: 0 once reconciled. */
   amount: string;
   /** The same in the book currency. */
   bookAmount: string;
-  /** The unused budget before settling, positive, in the book currency. */
+  /** The grid amount, signed like an entry, in the account currency. */
+  plannedAmount: string;
+  /** The same in the book currency. */
+  plannedBookAmount: string;
+  /** What remained before reconciling, in the book currency, with the nature's sign. */
   unused: string;
   reconciled: boolean;
 }
@@ -135,9 +150,8 @@ const lastDay = (year: number, month: number) =>
   new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 
 /**
- * The month-end lines of a year. A budget that has no account yet (budgets
- * from before the account became required) has none. A month with nothing
- * unused, or overspent, has none either, unless it was settled.
+ * The budget lines of a year: one for every month whose grid amount is not
+ * zero, even used up or reconciled. A budget without an account has none.
  */
 export async function monthEnds(
   tx: Tx,
@@ -145,8 +159,8 @@ export async function monthEnds(
   bookCurrency: string,
   year: number,
 ): Promise<MonthEnd[]> {
-  const [{ rows, profiles, consumption }, settled, accounts] = await Promise.all([
-    loadYear(tx, bookId, year),
+  const [{ rows, journal }, settled, accounts] = await Promise.all([
+    loadYear(tx, bookId, bookCurrency, year),
     tx
       .select({ categoryId: budgetSettlement.categoryId, month: budgetSettlement.month })
       .from(budgetSettlement)
@@ -156,36 +170,39 @@ export async function monthEnds(
       .from(bookAccount)
       .where(eq(bookAccount.bookId, bookId)),
   ]);
-  const weightsOf = new Map(profiles.map((p) => [p.id, p.weights]));
   const currencyOf = new Map(accounts.map((a) => [a.id, a.currency]));
   const isSettled = new Set(settled.map((s) => `${s.categoryId}:${s.month}`));
   const lines: MonthEnd[] = [];
   for (const row of rows) {
-    if (row.type !== "periodic" || !row.accountId) continue;
+    if (!row.accountId) continue;
     const currency = currencyOf.get(row.accountId);
     if (!currency) continue;
-    const months = monthsOf(row, row.sign, weightsOf, consumption);
-    for (const month of settlementMonths(row.consumption!)) {
-      const unused = months[month - 1]!.remaining;
+    const used = journal.get(row.categoryId)?.unplanned ?? zeros();
+    const sign = BigInt(row.sign);
+    row.months.forEach((budget, index) => {
+      if (budget === 0n) return;
+      const month = index + 1;
+      const remaining = remainingBudget(budget, used[index]!);
       const reconciled = isSettled.has(`${row.categoryId}:${month}`);
-      if (unused <= 0n && !reconciled) continue;
-      const bookMinor = reconciled ? 0n : consumptionSign(row.sign) * unused;
-      const book = money(bookMinor, bookCurrency);
-      const own = unconvert(book, row.exchangeRate ?? "1", currency);
+      const inBook = money(reconciled ? 0n : sign * remaining, bookCurrency);
+      const planned = money(sign * budget, bookCurrency);
+      const own = (value: typeof inBook) => unconvert(value, row.exchangeRate ?? "1", currency);
       lines.push({
         budgetId: row.id,
         categoryId: row.categoryId,
-        accountId: row.accountId,
+        accountId: row.accountId!,
         year,
         month,
         date: lastDay(year, month),
         currency,
-        amount: toDecimalString(own),
-        bookAmount: toDecimalString(book),
-        unused: toDecimalString(money(unused > 0n ? unused : 0n, bookCurrency)),
+        amount: toDecimalString(own(inBook)),
+        bookAmount: toDecimalString(inBook),
+        plannedAmount: toDecimalString(own(planned)),
+        plannedBookAmount: toDecimalString(planned),
+        unused: toDecimalString(money(remaining, bookCurrency)),
         reconciled,
       });
-    }
+    });
   }
   return lines;
 }

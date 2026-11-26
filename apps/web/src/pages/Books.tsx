@@ -18,6 +18,7 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap } from "../api";
 import { currencyOptions, languageOptions } from "../options";
+import { DataTable } from "../table";
 
 export function useBooks() {
   return useQuery({ queryKey: ["books"], queryFn: () => unwrap(api.books.$get()) });
@@ -108,7 +109,7 @@ export function Books() {
       )}
       {books.data?.length === 0 && <Text c="dimmed">{t("books.empty")}</Text>}
       {books.data && books.data.length > 0 && (
-        <Table highlightOnHover>
+        <DataTable minWidth={400} highlightOnHover>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("books.name")}</Table.Th>
@@ -131,7 +132,7 @@ export function Books() {
               </Table.Tr>
             ))}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       )}
       <Modal opened={opened} onClose={close} title={t("books.create")}>
         <CreateBook onClose={close} />

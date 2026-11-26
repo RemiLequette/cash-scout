@@ -7,7 +7,6 @@ import {
   monthEndBalances,
   parseAmount,
   toDecimalString,
-  unusedBudget,
 } from "@cash-scout/domain";
 import { and, count, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -16,7 +15,7 @@ import { withUser, type Db } from "../db/client.js";
 import { book, bookAccount, category, journalEntry, nature, subCategory } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, requireRole } from "./access.js";
-import { consumptionSign, loadYear, monthEnds, monthsOf } from "./budget-months.js";
+import { monthEnds } from "./budget-months.js";
 
 const MONTH = sql<number>`extract(month from ${journalEntry.date})::int`;
 
@@ -25,8 +24,8 @@ const MONTH = sql<number>`extract(month from ${journalEntry.date})::int`;
  * the grid of the page is made of, all in the book currency. Members read.
  *
  * - `cells`: what the entries hold per sub-category and month, transfers left out.
- * - `unused`: for each periodic budget of the year, what it leaves for the months
- *   after the current one, signed like the entries.
+ * - `budgetLines`: the budget lines of the year per category and month, signed
+ *   like the entries; 0 when used up or reconciled.
  * - `balances`: the balance of each bank account at the end of each month.
  */
 export function dashboardRoutes(db: Db) {
@@ -48,7 +47,7 @@ export function dashboardRoutes(db: Db) {
       const current = currentMonthOf(year, today);
       const thisYear = sql`extract(year from ${journalEntry.date}) = ${year}`;
 
-      const [cells, budgets, accounts, opening, changes, lines] = await Promise.all([
+      const [cells, accounts, opening, changes, lines] = await Promise.all([
         tx
           .select({
             subCategoryId: journalEntry.subCategoryId,
@@ -62,7 +61,6 @@ export function dashboardRoutes(db: Db) {
           .innerJoin(nature, eq(nature.id, category.natureId))
           .where(and(eq(journalEntry.bookId, bookId), thisYear, eq(nature.transfer, false)))
           .groupBy(journalEntry.subCategoryId, MONTH),
-        loadYear(tx, bookId, year),
         tx
           .select({
             id: bookAccount.id,
@@ -93,23 +91,15 @@ export function dashboardRoutes(db: Db) {
         monthEnds(tx, bookId, bookCurrency, year),
       ]);
 
-      // Unused budget of the periodic categories: each month's own share that
-      // the month's entries have not used, for the months still ahead.
-      const weightsOf = new Map(budgets.profiles.map((p) => [p.id, p.weights]));
-      const unused = budgets.rows.flatMap((row) => {
-        if (row.type !== "periodic" || !row.amount) return [];
-        const months = monthsOf(row, row.sign, weightsOf, budgets.consumption);
-        const left = unusedBudget(
-          months.map((m) => m.allocated),
-          months.map((m) => m.consumed),
-          current,
-        );
-        const sign = consumptionSign(row.sign);
-        return [{ categoryId: row.categoryId, months: left.map((amount) => text(sign * amount)) }];
-      });
+      const budgetLines = new Map<string, bigint[]>();
+      for (const line of lines) {
+        const months = budgetLines.get(line.categoryId) ?? Array<bigint>(MONTHS).fill(0n);
+        months[line.month - 1] = parseAmount(line.bookAmount, bookCurrency).minor;
+        budgetLines.set(line.categoryId, months);
+      }
 
-      // Balances: the entries' book amounts, then the unused-budget lines of the
-      // months not yet past, as the cash projection counts them.
+      // Balances: the entries' book amounts, then the budget lines, past months
+      // included, as the cash projection counts them.
       // The account's own opening balance, then the entries before the year.
       const openingOf = new Map(
         accounts.map((a) => [a.id, a.openingBookAmount] as [string, bigint]),
@@ -128,7 +118,6 @@ export function dashboardRoutes(db: Db) {
         months[row.month - 1] = months[row.month - 1]! + BigInt(row.total);
       }
       for (const line of lines) {
-        if (line.date.slice(0, 7) < today.slice(0, 7)) continue;
         const months = changeOf(line.accountId);
         months[line.month - 1] =
           months[line.month - 1]! + parseAmount(line.bookAmount, bookCurrency).minor;
@@ -153,7 +142,10 @@ export function dashboardRoutes(db: Db) {
           total: text(BigInt(cell.total)),
           entries: cell.entries,
         })),
-        unused,
+        budgetLines: [...budgetLines].map(([categoryId, months]) => ({
+          categoryId,
+          months: months.map(text),
+        })),
         balances,
       };
     });

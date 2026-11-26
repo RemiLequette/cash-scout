@@ -32,9 +32,11 @@ Filtrez par période (année, mois), compte, catégorie, sous-catégorie, statut
 
 Saisissez ce que vous savez à venir (loyer, facture) en prévision. Quand la banque le montre, mettez le montant de la banque et cochez **Rapproché**. Les prévisions alimentent la projection de trésorerie.
 
-## Lignes de budget non utilisé
+## Lignes Budget
 
-À la fin de chaque mois, le budget non utilisé d'une catégorie **périodique** apparaît comme une ligne calculée, sur le compte de référence du budget. Elle ne se modifie pas. La rapprocher abandonne le budget non utilisé. Un message au-dessus du journal signale les mois passés dont la ligne n'est pas rapprochée.
+À la fin de chaque mois budgété dans la grille d'une catégorie, une ligne **Budget** calculée montre ce qui reste attendu, sur le compte du budget (voir [Budget](06-budget.md)). Elle ne se modifie pas ; la rapprocher abandonne le reste.
+
+Un message au-dessus du journal signale les écritures passées non rapprochées, lignes Budget comprises.
 
 ## Graphique des comptes
 

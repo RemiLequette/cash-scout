@@ -58,7 +58,10 @@ export const entryInputSchema = z
   });
 export type EntryInput = z.input<typeof entryInputSchema>;
 
-/** Any field of an entry except its planned amount, which never changes. */
+/**
+ * Any field of an entry. Its planned amount only changes from the budget's plan,
+ * with `planned`: it then becomes the amount.
+ */
 export const entryUpdateSchema = z
   .object({
     date: entryDateSchema,
@@ -71,6 +74,7 @@ export const entryUpdateSchema = z
     originalAmount: amountTextSchema.nullable(),
     originalCurrency: currencySchema.nullable(),
     reconciled: z.boolean(),
+    planned: z.boolean(),
     version: versionSchema,
   })
   .partial()

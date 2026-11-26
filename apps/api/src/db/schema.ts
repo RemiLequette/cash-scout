@@ -161,8 +161,6 @@ export const bookLanguage = pgTable(
 // ---------------------------------------------------------------------------
 
 export const accountKind = pgEnum("account_kind", ["bank", "virtual"]);
-export const budgetType = pgEnum("budget_type", ["scheduled", "periodic"]);
-export const consumptionMode = pgEnum("consumption_mode", ["lapse", "roll_over", "annual_pool"]);
 
 const bookId = () =>
   uuid("book_id")
@@ -266,8 +264,6 @@ export const category = pgTable(
     /** Short code setting the sort order, unique in the book. */
     code: text("code").notNull(),
     natureId: uuid("nature_id").notNull(),
-    /** Budget type given to the category in a year not yet budgeted. */
-    defaultBudgetType: budgetType("default_budget_type").notNull().default("periodic"),
     names: names(),
     archivedAt: archivedAt(),
     version: version(),
@@ -583,37 +579,10 @@ export const importLine = pgTable(
 // Budgets (see README, Budgets and cash projection).
 // ---------------------------------------------------------------------------
 
-/** 12 monthly weights in basis points (10 000 = 100 %), shared by the book's categories. */
-export const budgetProfile = pgTable(
-  "budget_profile",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    bookId: bookId(),
-    names: names(),
-    weights: integer("weights").array().notNull(),
-    archivedAt: archivedAt(),
-    version: version(),
-  },
-  (t) => [
-    unique().on(t.id, t.bookId),
-    index("budget_profile_book_idx").on(t.bookId),
-    check(
-      "budget_profile_weights_check",
-      sql`cardinality(${t.weights}) = 12
-        AND array_position(${t.weights}, NULL) IS NULL
-        AND 0 <= ALL(${t.weights})
-        AND ${t.weights}[1] + ${t.weights}[2] + ${t.weights}[3] + ${t.weights}[4]
-          + ${t.weights}[5] + ${t.weights}[6] + ${t.weights}[7] + ${t.weights}[8]
-          + ${t.weights}[9] + ${t.weights}[10] + ${t.weights}[11] + ${t.weights}[12] = 10000`,
-    ),
-  ],
-);
-
 /**
- * The plan of one category for one year. A scheduled budget only holds the
- * type and the assumptions (its plan is future journal entries); a periodic one
- * also holds the annual amount, how it is spread and consumed, and where it
- * is expected to be spent.
+ * The grid of one category for one year: what is budgeted month by month
+ * without saying which entries will spend it, and the account it is expected
+ * to be spent from. Planned entries are budgeted on top, in the journal.
  */
 export const categoryBudget = pgTable(
   "category_budget",
@@ -622,13 +591,16 @@ export const categoryBudget = pgTable(
     bookId: bookId(),
     categoryId: uuid("category_id").notNull(),
     year: integer("year").notNull(),
-    type: budgetType("type").notNull(),
     assumptions: text("assumptions").notNull().default(""),
-    /** Annual amount in minor units of the book currency, positive (periodic). */
-    amount: bigint("amount", { mode: "bigint" }),
-    profileId: uuid("profile_id"),
-    consumption: consumptionMode("consumption"),
-    /** Account where the remaining budget is expected to be spent (periodic). */
+    /**
+     * The grid: 12 monthly amounts in minor units of the book currency, read
+     * with the sign of the category's nature.
+     */
+    months: bigint("months", { mode: "bigint" })
+      .array()
+      .notNull()
+      .default(sql`array_fill(0::bigint, ARRAY[12])`),
+    /** Account of the budget lines; the API requires it when a month is not zero. */
     accountId: uuid("account_id"),
     /** 1 unit of the account currency = rate units of the book currency, as for entries. */
     exchangeRate: numeric("exchange_rate"),
@@ -642,21 +614,11 @@ export const categoryBudget = pgTable(
       foreignColumns: [category.id, category.bookId],
     }),
     foreignKey({
-      columns: [t.profileId, t.bookId],
-      foreignColumns: [budgetProfile.id, budgetProfile.bookId],
-    }),
-    foreignKey({
       columns: [t.accountId, t.bookId],
       foreignColumns: [bookAccount.id, bookAccount.bookId],
     }),
     index("category_budget_book_year_idx").on(t.bookId, t.year),
-    check(
-      "category_budget_type_check",
-      sql`(${t.type} = 'periodic' AND ${t.amount} IS NOT NULL AND ${t.profileId} IS NOT NULL
-          AND ${t.consumption} IS NOT NULL)
-        OR (${t.type} = 'scheduled' AND ${t.amount} IS NULL AND ${t.profileId} IS NULL
-          AND ${t.consumption} IS NULL AND ${t.accountId} IS NULL)`,
-    ),
+    check("category_budget_months_check", sql`cardinality(${t.months}) = 12`),
     check(
       "category_budget_rate_check",
       sql`(${t.accountId} IS NULL) = (${t.exchangeRate} IS NULL) AND (${t.exchangeRate} IS NULL OR ${t.exchangeRate} > 0)`,
@@ -665,10 +627,9 @@ export const categoryBudget = pgTable(
 );
 
 /**
- * A month's unused budget of a periodic category, settled ("reconciled") by the
- * user: its month-end line in the journal then goes to 0. The line itself is
- * never stored: it is computed from the budget and the journal, so only the
- * settling is.
+ * A reconciled month of a category's budget: its budget line then goes to 0.
+ * The line itself is never stored: it is computed from the grid and the
+ * journal, so only the reconciling is.
  */
 export const budgetSettlement = pgTable(
   "budget_settlement",

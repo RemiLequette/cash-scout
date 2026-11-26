@@ -224,7 +224,6 @@ const categoryColumns = {
   groupId: category.groupId,
   code: category.code,
   natureId: category.natureId,
-  defaultBudgetType: category.defaultBudgetType,
   names: category.names,
   archivedAt: category.archivedAt,
 };

@@ -139,7 +139,10 @@ export async function importJournal(
     const payment = row.payment_type ? find(paymentTypes, "payment_type", "payment type") : null;
 
     const amount = amountOf("amount", account.currency);
-    const planned = row.planned_amount ? amountOf("planned_amount", account.currency) : amount;
+    // No planned amount: the entry was not planned, and consumes its category's budget.
+    const planned = row.planned_amount
+      ? amountOf("planned_amount", account.currency)
+      : { minor: 0n };
 
     let rate = "1";
     let inBook = amount;

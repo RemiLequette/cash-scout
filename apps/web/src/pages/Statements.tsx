@@ -19,6 +19,7 @@ import { useNameOf, useReference } from "../reference";
 import { useBatches, useDeleteBatch, useKeepBatch, usePresets, usePreview } from "../statements";
 import { BatchReview } from "./BatchReview";
 import { RulesPanel } from "./Rules";
+import { DataTable } from "../table";
 
 type Money = (amount: string, currency: string) => string;
 
@@ -215,7 +216,7 @@ function SavedBatches({ bookId }: { bookId: string }) {
     <Stack>
       <Title order={4}>{t("statements.saved")}</Title>
       <ErrorAlert error={batches.error ?? remove.error} />
-      <Table highlightOnHover>
+      <DataTable minWidth={700} highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{t("statements.file")}</Table.Th>
@@ -278,7 +279,7 @@ function SavedBatches({ bookId }: { bookId: string }) {
             </Table.Tr>
           ))}
         </Table.Tbody>
-      </Table>
+      </DataTable>
       {openId && <BatchReview key={openId} bookId={bookId} batchId={openId} />}
     </Stack>
   );

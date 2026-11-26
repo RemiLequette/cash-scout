@@ -31,11 +31,6 @@ export function checkNames(
   return undefined;
 }
 
-/** Scheduled: the plan is future journal entries. Periodic: an annual amount spread over months. */
-export const budgetTypes = ["scheduled", "periodic"] as const;
-export const budgetTypeSchema = z.enum(budgetTypes);
-export type BudgetType = z.infer<typeof budgetTypeSchema>;
-
 export const accountKinds = ["bank", "virtual"] as const;
 export const accountKindSchema = z.enum(accountKinds);
 export type AccountKind = z.infer<typeof accountKindSchema>;
@@ -176,8 +171,6 @@ export const categoryInputSchema = z.object({
   groupId: z.uuid(),
   code: categoryCodeSchema,
   natureId: z.uuid(),
-  /** Budget type of a year not yet budgeted; periodic when omitted. */
-  defaultBudgetType: budgetTypeSchema.optional(),
   names: namesSchema,
 });
 export const categoryUpdateSchema = categoryInputSchema
