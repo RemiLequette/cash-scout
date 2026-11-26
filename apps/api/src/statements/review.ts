@@ -551,7 +551,6 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
     if (line.status !== "review" || line.entryId) continue;
     if (!line.ruleId && (line.subCategoryId || line.description || line.paymentTypeId)) continue;
     const rule = firstRule(rules, {
-      accountId: batch.accountId,
       currency: batch.account.currency,
       amount: line.amount,
       counterparty: line.counterparty,

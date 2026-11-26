@@ -1,4 +1,10 @@
-import { formatMoney, parseAmount, type ReviewChanges } from "@cash-scout/domain";
+import {
+  formatMoney,
+  parseAmount,
+  ruleInputSchema,
+  ruleMatches,
+  type ReviewChanges,
+} from "@cash-scout/domain";
 import {
   ActionIcon,
   Alert,
@@ -18,11 +24,13 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  useNameOf,
   usePaymentTypeOptions,
   useReference,
   useSubCategoryOptions,
   type Reference,
 } from "../reference";
+import { QuickCreate, WithCreate, type Creatable } from "./QuickCreate";
 import { draftOf, RuleForm } from "./Rules";
 import {
   useApplyRules,
@@ -80,6 +88,14 @@ function Review({
   const rules = useRules(bookId);
   const apply = useApplyRules(bookId, batch.id);
   const [ruleFor, setRuleFor] = useState<BatchLine | null>(null);
+  // The line just classified by hand, for which a rule is proposed.
+  const [suggested, setSuggested] = useState<string | null>(null);
+  // What is being created, and what to do with it once made.
+  const [creating, setCreating] = useState<{
+    kind: Creatable;
+    initialName?: string;
+    use: (id: string) => void;
+  } | null>(null);
   // The rules can be tried again on the lines still to review.
   const open = batch.lines.filter((l) => l.status === "review" && !l.entry).length;
   const ruleOf = (line: BatchLine) => rules.data?.find((r) => r.id === line.ruleId);
@@ -116,6 +132,15 @@ function Review({
   );
 
   const save = (changes: Change[]) => review.mutate(changes);
+  /** A change to one line; classifying it by hand is the moment to offer a rule. */
+  const saveLine = (line: BatchLine, change: Omit<Change, "id">) =>
+    review.mutate([{ id: line.id, ...change }], {
+      onSuccess: () => {
+        if (change.subCategoryId && !line.ruleId && (line.counterparty || line.label)) {
+          setSuggested(line.id);
+        }
+      },
+    });
   const saveChosen = (change: Omit<Change, "id">) => {
     save(chosen.map((l) => ({ id: l.id, ...change })));
     setSelected(new Set());
@@ -200,15 +225,31 @@ function Review({
         <Paper withBorder p="xs">
           <Group>
             <Text size="sm">{t("statements.review.selected", { count: chosen.length })}</Text>
-            <Select
-              aria-label={t("statements.review.forSelected")}
-              placeholder={t("statements.review.forSelected")}
-              searchable
-              data={options}
-              value={null}
-              onChange={(value) => value && saveChosen({ subCategoryId: value })}
-              w={280}
-            />
+            <Group gap={4} wrap="nowrap">
+              <Select
+                aria-label={t("statements.review.forSelected")}
+                placeholder={t("statements.review.forSelected")}
+                searchable
+                data={options}
+                value={null}
+                onChange={(value) => value && saveChosen({ subCategoryId: value })}
+                w={280}
+              />
+              <ActionIcon
+                variant="default"
+                size="input-sm"
+                aria-label={t("reference.newSubCategory")}
+                title={t("reference.newSubCategory")}
+                onClick={() =>
+                  setCreating({
+                    kind: "subCategory",
+                    use: (id) => saveChosen({ subCategoryId: id }),
+                  })
+                }
+              >
+                +
+              </ActionIcon>
+            </Group>
             <Button
               variant="default"
               size="compact-md"
@@ -268,9 +309,24 @@ function Review({
                 payments={payments}
                 rule={ruleOf(line)}
                 onCreateRule={() => setRuleFor(line)}
+                onCreate={(kind) =>
+                  setCreating({
+                    kind,
+                    // The bank's category is often the name wanted; "to categorise" is not.
+                    initialName:
+                      kind === "subCategory" && !/categori/i.test(line.bankCategory)
+                        ? line.bankCategory
+                        : undefined,
+                    use: (id) =>
+                      saveLine(
+                        line,
+                        kind === "subCategory" ? { subCategoryId: id } : { paymentTypeId: id },
+                      ),
+                  })
+                }
                 selected={selected.has(line.id)}
                 onSelect={(on) => toggle([line.id], on)}
-                onChange={(change) => save([{ id: line.id, ...change }])}
+                onChange={(change) => saveLine(line, change)}
               />
             ))}
           </Table.Tbody>
@@ -279,6 +335,15 @@ function Review({
       {pages > 1 && <Pagination total={pages} value={current} onChange={setPage} />}
 
       <ImportPanel bookId={bookId} batch={batch} saving={review.isPending} />
+      {creating && (
+        <QuickCreate
+          kind={creating.kind}
+          bookId={bookId}
+          initialName={creating.initialName}
+          onClose={() => setCreating(null)}
+          onCreated={creating.use}
+        />
+      )}
       {ruleFor && (
         <RuleForm
           bookId={bookId}
@@ -289,14 +354,27 @@ function Review({
             description: ruleFor.description,
           })}
           sample={{
-            accountId: batch.accountId,
             currency: batch.currency,
+            suggestedName: ruleFor.bankCategory,
             lines: batch.lines.filter((l) => l.status === "review"),
           }}
           onClose={() => setRuleFor(null)}
-          onSaved={() => apply.mutate()}
+          onSaved={() => {
+            setSuggested(null);
+            apply.mutate();
+          }}
         />
       )}
+      <RuleSuggestion
+        batch={batch}
+        reference={reference}
+        lineId={suggested}
+        onAccept={(line) => {
+          setSuggested(null);
+          setRuleFor(line);
+        }}
+        onDismiss={() => setSuggested(null)}
+      />
     </Stack>
   );
 }
@@ -309,6 +387,7 @@ function Line({
   payments,
   rule,
   onCreateRule,
+  onCreate,
   selected,
   onSelect,
   onChange,
@@ -320,6 +399,7 @@ function Line({
   payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
   onCreateRule: () => void;
+  onCreate: (kind: Creatable) => void;
   selected: boolean;
   onSelect: (on: boolean) => void;
   onChange: (change: Omit<Change, "id">) => void;
@@ -374,6 +454,7 @@ function Line({
           payments={payments}
           rule={rule}
           onCreateRule={onCreateRule}
+          onCreate={onCreate}
           onChange={onChange}
         />
       </Table.Td>
@@ -402,6 +483,7 @@ function Decision({
   payments,
   rule,
   onCreateRule,
+  onCreate,
   onChange,
 }: {
   line: BatchLine;
@@ -411,6 +493,7 @@ function Decision({
   payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
   onCreateRule: () => void;
+  onCreate: (kind: Creatable) => void;
   onChange: (change: Omit<Change, "id">) => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -490,16 +573,18 @@ function Decision({
           onChange={(value) => value && onChange({ entryId: value })}
         />
       )}
-      <Select
-        size="xs"
-        aria-label={t("statements.review.subCategory")}
-        placeholder={t("statements.review.subCategory")}
-        searchable
-        clearable
-        data={options}
-        value={line.subCategoryId}
-        onChange={(value) => onChange({ subCategoryId: value })}
-      />
+      <WithCreate label={t("reference.newSubCategory")} onCreate={() => onCreate("subCategory")}>
+        <Select
+          size="xs"
+          aria-label={t("statements.review.subCategory")}
+          placeholder={t("statements.review.subCategory")}
+          searchable
+          clearable
+          data={options}
+          value={line.subCategoryId}
+          onChange={(value) => onChange({ subCategoryId: value })}
+        />
+      </WithCreate>
       {rule && (
         <Text size="xs" c="grape">
           {rule.ignore
@@ -508,16 +593,18 @@ function Decision({
         </Text>
       )}
       {(line.subCategoryId || line.paymentTypeId) && (
-        <Select
-          size="xs"
-          aria-label={t("statements.review.paymentType")}
-          placeholder={t("statements.review.paymentType")}
-          searchable
-          clearable
-          data={payments}
-          value={line.paymentTypeId}
-          onChange={(value) => onChange({ paymentTypeId: value })}
-        />
+        <WithCreate label={t("reference.newPaymentType")} onCreate={() => onCreate("paymentType")}>
+          <Select
+            size="xs"
+            aria-label={t("statements.review.paymentType")}
+            placeholder={t("statements.review.paymentType")}
+            searchable
+            clearable
+            data={payments}
+            value={line.paymentTypeId}
+            onChange={(value) => onChange({ paymentTypeId: value })}
+          />
+        </WithCreate>
       )}
       {line.subCategoryId && (
         <TextInput
@@ -659,5 +746,78 @@ function ImportPanel({
         </Paper>
       )}
     </Stack>
+  );
+}
+
+/**
+ * Offered once a line has been classified by hand: a rule would do the same for the
+ * next statements. Says how many other lines to review of this statement it would reach.
+ */
+function RuleSuggestion({
+  batch,
+  reference,
+  lineId,
+  onAccept,
+  onDismiss,
+}: {
+  batch: BatchDetail;
+  reference: Reference;
+  lineId: string | null;
+  onAccept: (line: BatchLine) => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const nameOf = useNameOf(reference.defaultLanguage);
+  const line = batch.lines.find((l) => l.id === lineId);
+  // Gone once the line is imported, or a rule took it over.
+  if (!line || !line.subCategoryId || line.ruleId || line.status === "imported") return null;
+
+  const text = line.counterparty || line.label;
+  const rule = ruleInputSchema.safeParse({ name: text, text, subCategoryId: line.subCategoryId });
+  const others = rule.success
+    ? batch.lines.filter(
+        (l) =>
+          l.id !== line.id &&
+          l.status === "review" &&
+          !l.entry &&
+          ruleMatches(rule.data, {
+            currency: batch.currency,
+            amount: parseAmount(l.amount, batch.currency).minor,
+            counterparty: l.counterparty,
+            label: l.label,
+            memo: l.memo,
+            bankCategory: l.bankCategory,
+          }),
+      ).length
+    : 0;
+  const sub = reference.subCategories.find((s) => s.id === line.subCategoryId);
+
+  return (
+    <Paper
+      withBorder
+      shadow="md"
+      p="sm"
+      // Above the page, wherever it is scrolled to; under the dialogs.
+      style={{ position: "fixed", right: 16, bottom: 16, zIndex: 150, maxWidth: 420 }}
+    >
+      <Stack gap={6}>
+        <Text size="sm">
+          {t("statements.review.suggestRule", { text, subCategory: sub ? nameOf(sub.names) : "" })}
+        </Text>
+        {others > 0 && (
+          <Text size="xs" c="dimmed">
+            {t("statements.review.suggestOthers", { count: others })}
+          </Text>
+        )}
+        <Group gap="xs" justify="flex-end">
+          <Button variant="default" size="compact-sm" onClick={onDismiss}>
+            {t("statements.review.suggestNo")}
+          </Button>
+          <Button size="compact-sm" onClick={() => onAccept(line)}>
+            {t("statements.review.createRule")}
+          </Button>
+        </Group>
+      </Stack>
+    </Paper>
   );
 }

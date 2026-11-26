@@ -36,10 +36,6 @@ export const ruleInputSchema = z
     text: optionalText(100),
     /** The bank's own category contains this text. */
     bankCategory: optionalText(100),
-    accountId: z
-      .uuid()
-      .nullish()
-      .transform((value) => value ?? null),
     /** `in` is money received, `out` money spent. */
     direction: z.enum(ruleDirections).default("any"),
     /** Bounds on the size of the amount, sign ignored, in the account's currency. */
@@ -64,7 +60,6 @@ export const ruleInputSchema = z
     (r) =>
       r.text !== null ||
       r.bankCategory !== null ||
-      r.accountId !== null ||
       r.direction !== "any" ||
       r.minAmount !== null ||
       r.maxAmount !== null,
@@ -96,7 +91,6 @@ export const ruleOrderSchema = z.object({ ids: z.array(z.uuid()).min(1).max(1000
 
 /** What a rule looks at in a statement line. */
 export interface RuleTarget {
-  accountId: string;
   currency: string;
   /** Signed, in minor units. */
   amount: bigint;
@@ -108,7 +102,6 @@ export interface RuleTarget {
 
 /** Does the line fit all the conditions of the rule? */
 export function ruleMatches(rule: RuleFields, line: RuleTarget): boolean {
-  if (rule.accountId !== null && rule.accountId !== line.accountId) return false;
   if (rule.direction === "in" && line.amount <= 0n) return false;
   if (rule.direction === "out" && line.amount >= 0n) return false;
   const size = line.amount < 0n ? -line.amount : line.amount;

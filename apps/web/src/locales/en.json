@@ -158,7 +158,10 @@
     "openingRateHint": "1 {from} = how many {to}. Required unless the account already has entries: its latest rate is used.",
     "openingNow": "Current opening balance: {amount}",
     "openingAfter": "New opening balance: {amount}",
-    "emptyPaymentTypes": "No payment types yet."
+    "emptyPaymentTypes": "No payment types yet.",
+    "itemName": "Name",
+    "categoryName": "Category name",
+    "groupName": "Group name"
   },
   "statements": {
     "keep": "Keep for review",
@@ -236,7 +239,10 @@
       "pickForecast": "Choose a forecast",
       "unmatched": "{count, plural, one {# forecast of the period with no line} other {# forecasts of the period with no line}}",
       "unmatchedHint": "If a line of the statement is one of them, choose it on the line: otherwise the entry will be written twice.",
-      "paymentType": "Payment type"
+      "paymentType": "Payment type",
+      "suggestRule": "\"{text}\" is filed under {subCategory}. A rule would do the same for the next statements.",
+      "suggestOthers": "{count, plural, one {# other line to review of this statement fits} other {# other lines to review of this statement fit}}",
+      "suggestNo": "No thanks"
     },
     "rules": {
       "title": "Rules",
@@ -247,7 +253,6 @@
       "conditions": "Conditions",
       "actions": "Actions",
       "text": "The label contains",
-      "textHint": "Counterparty, label or memo, ignoring case and accents",
       "bankCategory": "The bank's category contains",
       "direction": "Direction",
       "any": "Any",
@@ -256,7 +261,6 @@
       "min": "Amount at least",
       "max": "Amount at most",
       "ignore": "Ignore these lines",
-      "descriptionHint": "Replaces the bank's counterparty in the entry",
       "touches": "{count, plural, =0 {No line to review of this statement fits} one {# line to review of this statement fits} other {# lines to review of this statement fit}}",
       "contains": "contains \"{text}\"",
       "bankIs": "bank category: {text}",
