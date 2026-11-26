@@ -25,10 +25,9 @@ import { useDashboard, type DashboardData } from "../dashboard";
 import { formatDate, useJournal, useMonthEnds, type JournalFilters } from "../journal";
 import { useMonthNames } from "../options";
 import { useNameOf, useReference } from "../reference";
+import classes from "./Dashboard.module.css";
 
 const PAGE_SIZE = 500;
-const LABEL_WIDTH = 240;
-const MONTH_WIDTH = 84;
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -247,27 +246,12 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
 // The grid: categories, then the balances of the accounts
 // ---------------------------------------------------------------------------
 
-const stickyLabel: CSSProperties = {
-  position: "sticky",
-  left: 0,
-  zIndex: 1,
-  background: "var(--mantine-color-body)",
-  minWidth: LABEL_WIDTH,
-  maxWidth: LABEL_WIDTH,
-};
-const numberCell: CSSProperties = {
-  textAlign: "right",
-  whiteSpace: "nowrap",
-  fontVariantNumeric: "tabular-nums",
-  minWidth: MONTH_WIDTH,
-  cursor: "pointer",
-};
-const selectedCell: CSSProperties = { background: "var(--mantine-primary-color-light)" };
+const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(" ");
 /** Negative amounts read in red, the text only. */
-const negative = (minor: bigint): CSSProperties =>
-  minor < 0n ? { color: "var(--mantine-color-red-6)" } : {};
+const negative = (minor: bigint) => minor < 0n && classes.negative;
+/** A twelfth of a year's amount, half away from zero. */
+const perMonth = (total: bigint) => (total * 2n + (total < 0n ? -12n : 12n)) / 24n;
 
-/** Month names in the interface language, "janv." to "déc.". */
 /**
  * A grid amount without its currency (the page says it once): a dash for zero.
  * Rounded, it shows whole units, half away from zero.
@@ -347,9 +331,13 @@ function Grid(props: {
       rows.some((r) => r.parentKey === row.key && (r.kind === "sub" || r.kind === "budget")));
 
   // Months ahead show what is planned: they read differently from the past ones.
-  const ahead = (month: number) => month > data.currentMonth;
-  const monthStyle = (month: number): CSSProperties =>
-    ahead(month) ? { fontStyle: "italic", color: "var(--mantine-color-dimmed)" } : {};
+  // The month under way is shaded.
+  const thisYear = data.year === new Date().getFullYear();
+  const monthClass = (month: number) =>
+    cx(
+      month > data.currentMonth && classes.ahead,
+      thisYear && month === data.currentMonth && classes.current,
+    );
 
   function label(row: DashboardRow): string {
     switch (row.kind) {
@@ -373,141 +361,141 @@ function Grid(props: {
   );
 
   return (
-    <Table stickyHeader withColumnBorders={false} verticalSpacing={4} horizontalSpacing="xs">
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th style={{ ...stickyLabel, zIndex: 3 }}>{t("dashboard.row")}</Table.Th>
+    <table className={classes.sheet}>
+      <thead>
+        <tr>
+          <th className={classes.label}>{t("dashboard.row")}</th>
           {MONTHS.map((m) => (
-            <Table.Th key={m} style={{ ...numberCell, cursor: "default", ...monthStyle(m) }}>
+            <th key={m} className={cx(classes.number, monthClass(m))}>
               {monthNames[m - 1]}
-            </Table.Th>
+            </th>
           ))}
-          <Table.Th style={{ ...numberCell, cursor: "default" }}>{t("dashboard.total")}</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
+          <th className={cx(classes.number, classes.total)}>{t("dashboard.total")}</th>
+          <th className={cx(classes.number, classes.total)}>{t("dashboard.perMonth")}</th>
+        </tr>
+      </thead>
+      <tbody>
         {visible.length === 0 && (
-          <Table.Tr>
-            <Table.Td colSpan={14}>
-              <Text c="dimmed" size="sm">
+          <tr>
+            <td colSpan={15} className={classes.fixed}>
+              <Text c="dimmed" size="xs">
                 {t("dashboard.empty")}
               </Text>
-            </Table.Td>
-          </Table.Tr>
+            </td>
+          </tr>
         )}
         {visible.map((row) => {
           const key = rowKey(row);
           const top = row.kind === "nature" || row.kind === "balance";
           // Natures, balances and groups are bold; categories and below are not.
           const bold = top || row.kind === "group";
-          const rowStyle: CSSProperties = { fontWeight: bold ? 700 : 400 };
           const color = colorOf(row);
-          // A group's line is tinted: over the page's own colour, so that the sticky
+          // A group's line is tinted: over the page's own colour, so that the frozen
           // label stays opaque while the months scroll under it.
           const tint =
             row.kind === "balance"
               ? "light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3))"
-              : top
-                ? "linear-gradient(var(--mantine-color-gray-light), var(--mantine-color-gray-light)), var(--mantine-color-body)"
-                : color
-                  ? `linear-gradient(var(--mantine-color-${color}-light), var(--mantine-color-${color}-light)), var(--mantine-color-body)`
-                  : "var(--mantine-color-default-hover)";
-          const tinted = top || row.kind === "group";
+              : row.kind === "nature"
+                ? "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4))"
+                : row.kind === "group"
+                  ? color
+                    ? `color-mix(in srgb, var(--mantine-color-${color}-6) 14%, var(--mantine-color-body))`
+                    : "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))"
+                  : null;
           return (
-            <Table.Tr
+            <tr
               key={key}
               style={{
-                ...(tinted ? { background: tint } : {}),
-                // A balance closes the section above it.
-                ...(row.kind === "balance"
-                  ? { borderTop: "2px solid var(--mantine-color-default-border)" }
-                  : {}),
+                fontWeight: bold ? 700 : 400,
+                ...(tint ? ({ "--row": tint } as CSSProperties) : {}),
               }}
             >
-              <Table.Td
-                style={{
-                  ...stickyLabel,
-                  ...rowStyle,
-                  paddingLeft: 8 + row.depth * 16,
-                  ...(color ? { borderLeft: `4px solid var(--mantine-color-${color}-6)` } : {}),
-                  ...(tinted ? { background: tint } : {}),
-                  ...(isSelected(selection, key, null) ? selectedCell : {}),
-                }}
+              <td
+                className={cx(classes.label, isSelected(selection, key, null) && classes.selected)}
+                style={{ paddingLeft: 4 + row.depth * 14 }}
               >
-                <Group gap={4} wrap="nowrap">
+                {color && (
+                  <span
+                    className={classes.mark}
+                    style={{ background: `var(--mantine-color-${color}-6)` }}
+                  />
+                )}
+                <div className={classes.labelContent}>
                   {hasChildren(row) ? (
-                    <ActionIcon
-                      size="xs"
-                      variant="subtle"
-                      color="gray"
+                    <button
+                      type="button"
+                      className={classes.toggle}
                       aria-label={t(isExpanded(key) ? "dashboard.collapse" : "dashboard.expand")}
                       aria-expanded={isExpanded(key)}
                       onClick={() => toggle(key)}
                     >
                       {isExpanded(key) ? "▾" : "▸"}
-                    </ActionIcon>
+                    </button>
                   ) : (
-                    <span style={{ width: 18, flexShrink: 0 }} />
+                    <span className={classes.toggle} />
                   )}
-                  <Text
-                    size="sm"
-                    fw="inherit"
-                    fs={row.kind === "budget" ? "italic" : undefined}
-                    c={row.kind === "budget" ? "dimmed" : undefined}
-                    truncate
-                    style={{ cursor: "pointer" }}
+                  <span
+                    className={cx(classes.labelText, row.kind === "budget" && classes.ahead)}
                     onClick={() => select({ kind: "row", key, month: null })}
                   >
                     {label(row)}
-                  </Text>
-                </Group>
-              </Table.Td>
+                  </span>
+                </div>
+              </td>
               {row.months.map((minor, i) => (
-                <Table.Td
+                <td
                   key={i}
-                  style={{
-                    ...numberCell,
-                    ...rowStyle,
-                    ...monthStyle(i + 1),
-                    ...negative(minor),
-                    ...(isSelected(selection, key, i + 1) ? selectedCell : {}),
-                  }}
+                  className={cx(
+                    classes.number,
+                    monthClass(i + 1),
+                    negative(minor),
+                    isSelected(selection, key, i + 1) && classes.selected,
+                  )}
                   onClick={() => select({ kind: "row", key, month: i + 1 })}
                 >
                   {amount(minor)}
-                </Table.Td>
+                </td>
               ))}
-              <Table.Td
-                style={{
-                  ...numberCell,
-                  fontWeight: bold ? 700 : 400,
-                  ...negative(row.total),
-                  ...(isSelected(selection, key, null) ? selectedCell : {}),
-                }}
+              <td
+                className={cx(
+                  classes.number,
+                  classes.total,
+                  negative(row.total),
+                  isSelected(selection, key, null) && classes.selected,
+                )}
                 onClick={() => select({ kind: "row", key, month: null })}
               >
                 {amount(row.total)}
-              </Table.Td>
-            </Table.Tr>
+              </td>
+              <td
+                className={cx(
+                  classes.number,
+                  classes.total,
+                  negative(row.total),
+                  isSelected(selection, key, null) && classes.selected,
+                )}
+                onClick={() => select({ kind: "row", key, month: null })}
+              >
+                {amount(perMonth(row.total))}
+              </td>
+            </tr>
           );
         })}
 
         {data.balances.length > 0 && (
           <>
-            <Table.Tr>
-              <Table.Td colSpan={14} style={{ paddingTop: 20, background: "transparent" }}>
-                <Text size="sm" fw={700}>
-                  {t("dashboard.balances")}
-                </Text>
-              </Table.Td>
-            </Table.Tr>
+            <tr>
+              <td colSpan={15} className={cx(classes.section, classes.fixed)}>
+                <span className={classes.sectionText}>{t("dashboard.balances")}</span>
+              </td>
+            </tr>
             {data.balances.map((account) => (
-              <Table.Tr key={account.accountId}>
-                <Table.Td style={{ ...stickyLabel, paddingLeft: 24 }}>
-                  <Text size="sm" truncate>
+              <tr key={account.accountId}>
+                <td className={cx(classes.label, classes.account, classes.fixed)}>
+                  <div className={classes.labelText}>
                     {nameOf(accounts.get(account.accountId)?.names ?? {})}
-                  </Text>
-                </Table.Td>
+                  </div>
+                </td>
                 {account.ends.map((end, i) => {
                   const minor = parseAmount(end, bookCurrency).minor;
                   const picked =
@@ -515,50 +503,45 @@ function Grid(props: {
                     selection.accountId === account.accountId &&
                     selection.month === i + 1;
                   return (
-                    <Table.Td
+                    <td
                       key={i}
-                      style={{
-                        ...numberCell,
-                        ...monthStyle(i + 1),
-                        ...negative(minor),
-                        ...(picked ? selectedCell : {}),
-                      }}
+                      className={cx(
+                        classes.number,
+                        monthClass(i + 1),
+                        negative(minor),
+                        picked && classes.selected,
+                      )}
                       onClick={() =>
                         select({ kind: "account", accountId: account.accountId, month: i + 1 })
                       }
                     >
                       {amount(minor)}
-                    </Table.Td>
+                    </td>
                   );
                 })}
-                <Table.Td />
-              </Table.Tr>
+                <td className={cx(classes.total, classes.fixed)} />
+                <td className={cx(classes.total, classes.fixed)} />
+              </tr>
             ))}
-            <Table.Tr style={{ fontWeight: 700 }}>
-              <Table.Td style={{ ...stickyLabel, paddingLeft: 24 }}>
-                <Text size="sm" fw={700}>
-                  {t("dashboard.balanceTotal")}
-                </Text>
-              </Table.Td>
+            <tr className={classes.sum}>
+              <td className={cx(classes.label, classes.account, classes.fixed)}>
+                {t("dashboard.balanceTotal")}
+              </td>
               {balanceTotals.map((minor, i) => (
-                <Table.Td
+                <td
                   key={i}
-                  style={{
-                    ...numberCell,
-                    cursor: "default",
-                    ...monthStyle(i + 1),
-                    ...negative(minor),
-                  }}
+                  className={cx(classes.number, classes.fixed, monthClass(i + 1), negative(minor))}
                 >
                   {amount(minor)}
-                </Table.Td>
+                </td>
               ))}
-              <Table.Td />
-            </Table.Tr>
+              <td className={cx(classes.total, classes.fixed)} />
+              <td className={cx(classes.total, classes.fixed)} />
+            </tr>
           </>
         )}
-      </Table.Tbody>
-    </Table>
+      </tbody>
+    </table>
   );
 }
 
@@ -755,7 +738,14 @@ function DetailPanel({
               {filters && journal.isPending ? <Loader size="xs" /> : t("journal.empty")}
             </Text>
           ) : (
-            <Table stickyHeader verticalSpacing={3} horizontalSpacing="xs">
+            <Table
+              stickyHeader
+              withColumnBorders
+              highlightOnHover
+              verticalSpacing={1}
+              horizontalSpacing={6}
+              fz="xs"
+            >
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>{t("journal.date")}</Table.Th>
@@ -784,7 +774,7 @@ function DetailPanel({
                       </Text>
                     </Table.Td>
                     <Table.Td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <Text size="sm" fw={600}>
+                      <Text size="xs" fw={600}>
                         {format(line.amount, line.currency)}
                       </Text>
                     </Table.Td>
@@ -811,7 +801,7 @@ function DetailPanel({
                       </Table.Td>
                       <Table.Td>{entry.description}</Table.Td>
                       <Table.Td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        <Text size="sm" fw={600}>
+                        <Text size="xs" fw={600}>
                           {format(entry.amount, entry.currency)}
                         </Text>
                         {entry.currency !== bookCurrency && (

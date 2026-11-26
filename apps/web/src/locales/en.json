@@ -290,6 +290,7 @@
   "dashboard": {
     "row": "Category",
     "total": "Total",
+    "perMonth": "Per month",
     "previousYear": "Previous year",
     "nextYear": "Next year",
     "currency": "Amounts in {currency}",
