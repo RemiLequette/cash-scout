@@ -47,6 +47,7 @@ import { useTranslation } from "react-i18next";
 import {
   decimalInput,
   formatDate,
+  formatDay,
   today,
   useBalances,
   useJournal,
@@ -467,15 +468,6 @@ function formatMonth(yearMonth: string, locale: string): string {
     timeZone: "UTC",
   }).format(new Date(`${yearMonth}-01T00:00:00Z`));
   return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
-}
-
-/** "22 Nov" from "2026-11-22": the month header gives the year. */
-function formatDay(date: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T00:00:00Z`));
 }
 
 /** "Sept." or "Sept. 2026" from "2026-09", capitalized. */

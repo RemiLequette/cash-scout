@@ -341,7 +341,11 @@ describe("a line imported as a transfer", () => {
     const id = await b.keep();
     const line = (await b.read(id)).lines.find((l) => l.amount === "-7.20")!;
     const sides = async () =>
-      (await b.entries()) as (Entry & { accountId: string; transferId: string | null })[];
+      (await b.entries()) as (Entry & {
+        accountId: string;
+        transferId: string | null;
+        version: number;
+      })[];
     return { ...b, savings, transferSub, id, line, sides };
   }
 
@@ -398,9 +402,8 @@ describe("a line imported as a transfer", () => {
     await b.run(b.id);
     const other = (await b.sides()).find((e) => e.accountId === b.savings)!;
     const journal = `/books/${b.bookId}/journal`;
-    const full = (await b.sides()).find((e) => e.id === other.id) as Entry & { version: number };
     const res = await b.owner.request("PATCH", `${journal}/${other.id}`, {
-      version: full.version,
+      version: other.version,
       reconciled: true,
     });
     expect(res.status).toBe(200);
