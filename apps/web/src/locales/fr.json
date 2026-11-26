@@ -326,7 +326,9 @@
     "plannedTransfers": "Virements planifiés {year}",
     "plannedEntriesHint": "Elles s'ajoutent à la grille. Chacune est prévue à son montant ; le changer ensuite dans le journal apparaît comme un écart.",
     "plannedTransfersHint": "Les virements entre comptes n'ont pas de grille.",
-    "noPlannedEntries": "Aucune écriture cette année."
+    "noPlannedEntries": "Aucune écriture cette année.",
+    "searchCategory": "Chercher une catégorie",
+    "noCategory": "Aucune catégorie"
   },
   "accountKinds": {
     "bank": "Bancaire",

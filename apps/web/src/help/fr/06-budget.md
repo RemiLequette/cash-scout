@@ -1,6 +1,6 @@
 # Budget
 
-La page **Budget** montre une année, catégorie par catégorie. Choisissez l'année avec les flèches, puis **Planifier** sur une catégorie.
+La page **Budget** montre une année, catégorie par catégorie. Choisissez l'année avec les flèches, puis **Planifier** sur une catégorie. Une fois dedans, passez à une autre avec **Précédente**, **Suivante** ou la recherche par code ou nom.
 
 ## Deux façons de budgéter, qui s'ajoutent
 

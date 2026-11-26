@@ -178,6 +178,29 @@ export function BudgetPage({
           <Button size="xs" variant="default" onClick={() => go(1)}>
             {t("budget.nextCategory")}
           </Button>
+          <Select
+            size="xs"
+            w={240}
+            searchable
+            allowDeselect={false}
+            aria-label={t("budget.searchCategory")}
+            placeholder={t("budget.searchCategory")}
+            nothingFoundMessage={t("budget.noCategory")}
+            // By code or by name, within the book's groups.
+            data={groups
+              .map((group) => ({
+                group: nameOf(group.names),
+                items: categories
+                  .filter((c) => c.groupId === group.id)
+                  .map((c) => ({ value: c.id, label: `${c.code} ${nameOf(c.names)}` })),
+              }))
+              .filter((group) => group.items.length > 0)}
+            value={category.id}
+            // The current name is selected, so that typing starts a search.
+            onFocus={(event) => event.currentTarget.select()}
+            onClick={(event) => event.currentTarget.select()}
+            onChange={(id) => id && id !== category.id && leave(() => setPlanning(id))}
+          />
           <Badge variant="light">{category.code}</Badge>
           <Title order={4}>{nameOf(category.names)}</Title>
         </Group>

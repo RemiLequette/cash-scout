@@ -1,6 +1,6 @@
 # Budget
 
-The **Budget** page shows a year, category by category. Choose the year with the arrows, then **Plan** on a category.
+The **Budget** page shows a year, category by category. Choose the year with the arrows, then **Plan** on a category. From there, move to another with **Previous**, **Next** or the search by code or name.
 
 ## Two ways to budget, which add up
 

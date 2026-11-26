@@ -326,7 +326,9 @@
     "plannedTransfers": "Planned transfers {year}",
     "plannedEntriesHint": "They add to the grid. Each is planned at its amount; changing it later in the journal shows as a variance.",
     "plannedTransfersHint": "Transfers between accounts have no grid.",
-    "noPlannedEntries": "No entry this year."
+    "noPlannedEntries": "No entry this year.",
+    "searchCategory": "Search a category",
+    "noCategory": "No category"
   },
   "accountKinds": {
     "bank": "Bank",
