@@ -20,7 +20,7 @@ The category decides whether an amount is income or spending, never its sign.
 
 ## Entering fast
 
-- **New entry** opens the form. **Start from a frequent entry** proposes the ones you use most in the last 12 months, dated today.
+- **New entry** opens the form. **Start from a frequent entry** proposes the ones you use most in the last 12 months, dated today. A new entry is ticked **Reconciled**: untick it to enter a forecast.
 - **Duplicate** copies an existing entry.
 - **Mark reconciled** and **Mark as forecast** change the status of an entry from the list.
 
@@ -32,9 +32,11 @@ Filter by period (year, months), account, category, sub-category, status and fre
 
 Enter what you know is coming (rent, a bill) as a forecast. When the bank shows it, set the amount to the bank's and tick **Reconciled**. Forecasts feed the cash projection.
 
-## Unused budget lines
+## Budget lines
 
-At the end of each month, a **periodic** category's unused budget appears as a computed line, on the budget's reference account. It cannot be edited. Reconciling it lets the unused budget go. A message above the journal reports past months whose line is not reconciled.
+At the end of each month budgeted in a category's grid, a computed **Budget** line shows what is still expected, on the budget's account (see [Budget](06-budget.md)). It cannot be edited; reconciling it lets the rest go.
+
+A message above the journal reports the past entries that are not reconciled, Budget lines included.
 
 ## Account chart
 

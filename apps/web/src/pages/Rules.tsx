@@ -30,6 +30,7 @@ import {
   type Reference,
 } from "../reference";
 import { useDeleteRule, useOrderRules, useRules, useSaveRule, type Rule } from "../statements";
+import { DataTable } from "../table";
 
 function ErrorAlert({ error }: { error: Error | null }) {
   const { t } = useTranslation();
@@ -354,79 +355,77 @@ export function RulesPanel({ bookId }: { bookId: string }) {
       </Text>
       <ErrorAlert error={rules.error ?? remove.error ?? order.error} />
       {list.length > 0 && (
-        <Table.ScrollContainer minWidth={620}>
-          <Table highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th w={70} />
-                <Table.Th>{t("statements.rules.name")}</Table.Th>
-                <Table.Th>{t("statements.rules.conditions")}</Table.Th>
-                <Table.Th>{t("statements.rules.actions")}</Table.Th>
-                <Table.Th />
+        <DataTable minWidth={620} highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th w={70} />
+              <Table.Th>{t("statements.rules.name")}</Table.Th>
+              <Table.Th>{t("statements.rules.conditions")}</Table.Th>
+              <Table.Th>{t("statements.rules.actions")}</Table.Th>
+              <Table.Th />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {list.map((rule, index) => (
+              <Table.Tr key={rule.id}>
+                <Table.Td>
+                  <Group gap={2} wrap="nowrap">
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      disabled={index === 0 || order.isPending}
+                      aria-label={t("statements.rules.up")}
+                      onClick={() => move(index, -1)}
+                    >
+                      ↑
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      disabled={index === list.length - 1 || order.isPending}
+                      aria-label={t("statements.rules.down")}
+                      onClick={() => move(index, 1)}
+                    >
+                      ↓
+                    </ActionIcon>
+                  </Group>
+                </Table.Td>
+                <Table.Td>{rule.name}</Table.Td>
+                <Table.Td>
+                  <Text size="sm">{conditions(rule)}</Text>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm">{actions(rule)}</Text>
+                </Table.Td>
+                <Table.Td>
+                  <Group gap="xs" justify="flex-end" wrap="nowrap">
+                    <Button
+                      size="compact-sm"
+                      variant="light"
+                      onClick={() => setEditing({ id: rule.id, draft: draftOf(rule) })}
+                    >
+                      {t("statements.rules.edit")}
+                    </Button>
+                    <ActionIcon
+                      variant="subtle"
+                      color="red"
+                      aria-label={t("common.delete")}
+                      onClick={() => {
+                        if (
+                          window.confirm(t("statements.rules.deleteConfirm", { name: rule.name }))
+                        ) {
+                          remove.mutate(rule.id);
+                        }
+                      }}
+                    >
+                      ✕
+                    </ActionIcon>
+                  </Group>
+                </Table.Td>
               </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {list.map((rule, index) => (
-                <Table.Tr key={rule.id}>
-                  <Table.Td>
-                    <Group gap={2} wrap="nowrap">
-                      <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        disabled={index === 0 || order.isPending}
-                        aria-label={t("statements.rules.up")}
-                        onClick={() => move(index, -1)}
-                      >
-                        ↑
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="subtle"
-                        color="gray"
-                        disabled={index === list.length - 1 || order.isPending}
-                        aria-label={t("statements.rules.down")}
-                        onClick={() => move(index, 1)}
-                      >
-                        ↓
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>{rule.name}</Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{conditions(rule)}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{actions(rule)}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs" justify="flex-end" wrap="nowrap">
-                      <Button
-                        size="compact-sm"
-                        variant="light"
-                        onClick={() => setEditing({ id: rule.id, draft: draftOf(rule) })}
-                      >
-                        {t("statements.rules.edit")}
-                      </Button>
-                      <ActionIcon
-                        variant="subtle"
-                        color="red"
-                        aria-label={t("common.delete")}
-                        onClick={() => {
-                          if (
-                            window.confirm(t("statements.rules.deleteConfirm", { name: rule.name }))
-                          ) {
-                            remove.mutate(rule.id);
-                          }
-                        }}
-                      >
-                        ✕
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+            ))}
+          </Table.Tbody>
+        </DataTable>
       )}
       {editing && (
         <RuleForm

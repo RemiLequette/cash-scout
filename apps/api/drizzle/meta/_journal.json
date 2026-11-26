@@ -183,6 +183,27 @@
       "when": 1795638103262,
       "tag": "0025_payment_types",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795685754404,
+      "tag": "0026_budget_months",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1795685757165,
+      "tag": "0027_budget_months_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1795685774551,
+      "tag": "0028_budget_without_types",
+      "breakpoints": true
     }
   ]
 }

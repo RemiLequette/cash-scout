@@ -1,35 +1,62 @@
 # Budget
 
-The **Budget** page plans a year, category by category. Pick the year with the arrows.
+The **Budget** page shows a year, category by category. Choose the year with the arrows, then **Plan** on a category. From there, move to another with **Previous**, **Next** or the search by code or name.
 
-## Two types of plan
+## Two ways to budget, which add up
 
-| Type          | The plan                                                  | Typical categories                            |
-| ------------- | --------------------------------------------------------- | --------------------------------------------- |
-| **Scheduled** | Future entries in the journal, each with a planned amount | Income, taxes, rent, utilities, subscriptions |
-| **Periodic**  | An annual amount, spread over the months by a profile     | Food, outings, holidays, shopping             |
+- The **grid**: an amount per month, without saying which entries will spend it.
+- **Planned entries**: future entries of the journal, each with a planned amount.
 
-The type is set per category, and kept per year. A new category is periodic by default.
+The budget of a month is the grid **plus** the planned amounts of its entries.
 
-## Periodic categories
+## The grid
 
-- **Annual amount**, in the book's currency.
-- **Profile**: how the amount is spread over 12 months (a set of weights adding up to 100 %). Create few profiles: _Even_, _Summer_…
-- **Unused budget** decides what happens to a month's leftover: it **lapses**, it **rolls over** to the next month, or the whole year is an **annual pool**.
-- **Account**: the reference account, where the remaining budget is expected to be spent. It is required, and drives the projection.
-- **Exchange rate** when that account is not in the book's currency.
+Amounts read with the sign of the nature: spending is positive. Last year's budget and actuals are shown above, to help.
+
+- **Account**: the account this budget should be spent from. It is required and drives the projection.
+- **Exchange rate** when that account is not in the book currency.
 - **Assumptions**: free text on what the plan relies on.
 
-The **Start from** button fills the categories without a budget from the previous year's budget, or from its actual spending.
+## Filling the grid
 
-## Scheduled categories
+The grid fills like a spreadsheet.
 
-The plan is a list of **planned entries**. Each is planned at its amount. Later the amount moves as more is known, then becomes the bank's, but the **planned amount never changes**: the difference is the **variance**.
+- **Move** with Enter and the left and right arrows. While typing, the arrows move in the text; Escape drops what was typed.
+- **Select** several months by dragging, Shift+click or Shift+arrows. The sum of the selection is shown.
+- **In a cell**: an amount, a formula (`=450*3`), or a change (`+10`, `+3%`, `-5%`, `*2`, `/2`). `-250` is a negative amount.
+- **On the selection**, with the field and **Apply**: the same forms; here `-10` takes 10 away.
+- **Fill right** (Ctrl+R): the first selected month up to the end of the selection, or to December for a single cell.
+- **Copy last year's budget or actuals**: onto the selection, or the whole row when a single cell is selected.
+- **Spread a total**: evenly, after the current shape, or after a row of last year. With no total typed, the current one is used.
+- **Copy and paste** with a spreadsheet: Ctrl+C copies the selection, Ctrl+V pastes from the active cell. Delete empties a selection.
+- **Undo and redo** (Ctrl+Z, Ctrl+Y) until you save.
 
-An entry made directly in the journal has no planned amount, so no variance.
+Reconciled months do not change.
 
-To prepare a new year, the proposal plans again last year's entries, one year later, at the amount they ended at.
+## Planned entries
+
+The list under the grid is edited in place. It is saved with the grid by **Save**, all or nothing: until you save, the journal does not change.
+
+- **Copy the previous year** takes all of the category's entries of the year before, planned or not, one year later, with their description, sub-category, account and payment type. Their amount becomes the planned amount. An entry already there (same date, sub-category and description) is not copied again. Transfers are not copied.
+- **Schedule** creates a series of entries: first and last date, frequency, sub-category, description, account, amount. The series is not remembered: these are ordinary entries.
+- **Tick** rows to give them a new amount or another day, change their account or sub-category, duplicate or delete them. Shift+click ticks a range; the box in the titles ticks all the rows the **filter** shows.
+- The up and down arrows and Enter go from row to row.
+- **Undo** takes back the last copy, creation or action on the ticked rows.
+
+A reconciled entry is not changed here. In this list the amount is the **planned** one: changing it also replaces the expected amount.
+
+## The Budget line
+
+Each month whose grid is not zero has a **Budget** line on its last day, in the journal. Its amount is the grid less the month's **unplanned** entries, never past zero. A refund raises it.
+
+Planned entries do not consume the grid: how they differ from their plan is their **variance**.
+
+**Reconciling** the line lets the rest go and locks the month's cell. Until then the rest is expected, even for a past month. Nothing rolls over from a month to the next.
+
+## Transfers
+
+Transfer categories have no grid, only planned transfers.
 
 ## Change of the accounts
 
-At the bottom, _income − spending − saving_ shows what the plan does to your accounts. It is shown for information, not as a target.
+At the bottom, _income − spending − savings_ shows what the plan does to your accounts. It is information, not a target.

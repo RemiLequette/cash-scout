@@ -1,0 +1,1 @@
+ALTER TABLE "category_budget" ADD COLUMN "months" bigint[] DEFAULT array_fill(0::bigint, ARRAY[12]) NOT NULL;

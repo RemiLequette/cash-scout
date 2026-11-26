@@ -10,18 +10,16 @@ async function json<T>(response: Response | Promise<Response>, status = 200): Pr
   return (await res.json()) as T;
 }
 
-const even = [834, 833, 833, 834, 833, 833, 834, 833, 833, 834, 833, 833];
-
 interface Dashboard {
   year: number;
   bookCurrency: string;
   currentMonth: number;
   cells: { subCategoryId: string; month: number; total: string; entries: number }[];
-  unused: { categoryId: string; months: string[] }[];
+  budgetLines: { categoryId: string; months: string[] }[];
   balances: { accountId: string; ends: string[] }[];
 }
 
-/** A EUR book: food (expense, with a budget), salary (income), a transfer category, two accounts. */
+/** A EUR book: food (expense), salary (income), a transfer category, two accounts. */
 async function setup() {
   const owner = await h.signedInUser();
   const { id: bookId } = await json<{ id: string }>(
@@ -51,10 +49,17 @@ async function setup() {
   const current = await account("Compte courant", "bank");
   const saving = await account("Livret", "bank");
   const virtual = await account("Compensations", "virtual");
-  const profile = await post("/budgets/profiles", { names: { fr: "Régulier" }, weights: even });
 
   const entry = (accountId: string, subCategoryId: string, date: string, amount: string) =>
     post("/journal", { date, accountId, subCategoryId, amount });
+  /** 100 a month for food, from the current account. */
+  const budgetFood = () =>
+    post("/budgets", {
+      categoryId: food.id,
+      year: 2026,
+      months: Array<string>(12).fill("100"),
+      accountId: current.id,
+    });
   const dashboard = (by = owner, query = "year=2026&today=2026-11-23") =>
     by.request("GET", `/books/${bookId}/dashboard?${query}`);
 
@@ -64,7 +69,7 @@ async function setup() {
     post,
     entry,
     dashboard,
-    profile,
+    budgetFood,
     food,
     salary,
     bakery,
@@ -102,39 +107,19 @@ describe("year dashboard", () => {
     });
   });
 
-  it("leaves the unused budget of the months ahead for a periodic category", async () => {
+  it("gives the budget lines of each month, past ones included", async () => {
     const b = await setup();
-    await json(
-      b.owner.request("POST", `/books/${b.bookId}/budgets`, {
-        categoryId: b.food.id,
-        year: 2026,
-        type: "periodic",
-        amount: "1200",
-        profileId: b.profile.id,
-        consumption: "lapse",
-        accountId: b.current.id,
-      }),
-      201,
-    );
+    await b.budgetFood();
     await b.entry(b.current.id, b.bakery.id, "2026-11-10", "-30");
-    await b.entry(b.current.id, b.bakery.id, "2026-12-05", "-150"); // a known entry, past the share
+    await b.entry(b.current.id, b.bakery.id, "2026-12-05", "-150"); // past the month's budget
 
     const data = await json<Dashboard>(b.dashboard());
-    expect(data.unused).toHaveLength(1);
-    const { categoryId, months } = data.unused[0]!;
+    expect(data.budgetLines).toHaveLength(1);
+    const { categoryId, months } = data.budgetLines[0]!;
     expect(categoryId).toBe(b.food.id);
-    // Up to the current month, the entries tell what was consumed: no unused budget.
-    expect(months.slice(0, 11)).toEqual(Array(11).fill("0.00"));
-    // December's share (99.96) is used up by its entry.
+    expect(months.slice(0, 10)).toEqual(Array(10).fill("-100.00"));
+    expect(months[10]).toBe("-70.00");
     expect(months[11]).toBe("0.00");
-
-    // Seen from earlier in the year, the months ahead keep their share.
-    const early = await json<Dashboard>(b.dashboard(b.owner, "year=2026&today=2026-02-10"));
-    const ahead = early.unused[0]!.months;
-    expect(ahead[0]).toBe("0.00");
-    expect(ahead[1]).toBe("0.00");
-    expect(ahead[2]).toBe("-99.96"); // March, an expense: negative like the entries
-    expect(ahead[10]).toBe("-69.96"); // November: -30 is already entered, the rest is unused
   });
 
   it("gives the balance of each bank account at the end of each month", async () => {
@@ -158,30 +143,18 @@ describe("year dashboard", () => {
     expect(saving.ends[2]).toBe("500.00");
   });
 
-  it("counts the unused budget of the months ahead in the future balances", async () => {
+  it("counts the budget lines in the balances", async () => {
     const b = await setup();
-    await json(
-      b.owner.request("POST", `/books/${b.bookId}/budgets`, {
-        categoryId: b.food.id,
-        year: 2026,
-        type: "periodic",
-        amount: "1200",
-        profileId: b.profile.id,
-        consumption: "lapse",
-        accountId: b.current.id,
-      }),
-      201,
-    );
+    await b.budgetFood();
     await b.entry(b.current.id, b.pay.id, "2026-10-05", "2000");
     await b.entry(b.current.id, b.bakery.id, "2026-11-10", "-30");
 
     const { balances } = await json<Dashboard>(b.dashboard());
     const { ends } = balances.find((a) => a.accountId === b.current.id)!;
-    // Past months stand as the entries made them, whatever their budget left.
-    expect(ends[9]).toBe("2000.00");
-    // November: -30 entered, and -69.96 of its budget still expected.
-    expect(ends[10]).toBe("1900.04");
-    expect(ends[11]).toBe("1800.08");
+    // Ten months of 100 not reconciled, then the entry and what November still expects.
+    expect(ends[9]).toBe("1000.00");
+    expect(ends[10]).toBe("900.00");
+    expect(ends[11]).toBe("800.00");
   });
 
   it("is open to members and closed to others", async () => {

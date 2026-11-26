@@ -12,25 +12,24 @@ async function json<T>(response: Response | Promise<Response>, status = 200): Pr
   return (await res.json()) as T;
 }
 
-const even = [834, 833, 833, 834, 833, 833, 834, 833, 833, 834, 833, 833];
-const summer = [300, 300, 300, 300, 300, 300, 3500, 3500, 300, 300, 300, 300];
+/** A grid with `amount` in every month. */
+const every = (amount: string) => Array<string>(12).fill(amount);
 
-interface Month {
-  allocated: string;
-  available: string;
-  consumed: string;
-  remaining: string;
-}
 interface Budget {
   id: string;
   categoryId: string;
-  type: string;
-  amount: string | null;
-  profileId: string | null;
+  version: number;
   assumptions: string;
+  months: string[];
   accountId: string | null;
   exchangeRate: string | null;
-  months: Month[] | null;
+}
+
+interface Year {
+  year: number;
+  bookCurrency: string;
+  budgets: Budget[];
+  journal: { categoryId: string; actual: string[]; planned: string[]; unplanned: string[] }[];
 }
 
 /** A EUR book with food (expense) and salary (income) categories, a EUR and a MYR account. */
@@ -44,7 +43,7 @@ async function bookWithCategories(owner?: User) {
     json<T & { id: string }>(owner.request("POST", `/books/${bookId}${path}`, body), 201);
 
   const group = await post("/reference/groups", { names: { fr: "Vie courante" } });
-  const food = await post<{ defaultBudgetType: string }>("/reference/categories", {
+  const food = await post("/reference/categories", {
     groupId: group.id,
     code: "C01",
     natureId: await defaultNature(owner, bookId, "expense"),
@@ -74,264 +73,114 @@ async function bookWithCategories(owner?: User) {
     kind: "bank",
     currency: "MYR",
   });
-  const profile = await post("/budgets/profiles", { names: { fr: "Régulier" }, weights: even });
 
   const budgets = (path = "") => `/books/${bookId}/budgets${path}`;
-  const addBudget = (body: Record<string, unknown>, by: User = owner) =>
-    json<Budget>(
-      by.request("POST", budgets(), {
-        categoryId: food.id,
-        year: 2026,
-        type: "periodic",
-        amount: "1200",
-        profileId: profile.id,
-        consumption: "lapse",
-        accountId: current.id,
-        ...body,
-      }),
-      201,
-    );
-  const spend = (subCategoryId: string, date: string, amount: string) =>
-    post("/journal", { date, accountId: current.id, subCategoryId, amount });
-  const year = (y = 2026, by: User = owner) =>
-    json<{ year: number; bookCurrency: string; budgets: Budget[] }>(
-      by.request("GET", budgets(`?year=${y}`)),
-    );
+  const budget = (body: Record<string, unknown> = {}) => ({
+    categoryId: food.id,
+    year: 2026,
+    months: every("100"),
+    accountId: current.id,
+    ...body,
+  });
+  const addBudget = (body: Record<string, unknown> = {}) =>
+    json<Budget>(owner.request("POST", budgets(), budget(body)), 201);
+  const spend = (subCategoryId: string, date: string, amount: string, planned = false) =>
+    post("/journal", { date, accountId: current.id, subCategoryId, amount, planned });
+  const year = (y = 2026, by: User = owner) => json<Year>(by.request("GET", budgets(`?year=${y}`)));
+  const settle = (month: number, reconciled = true, categoryId = food.id) =>
+    owner.request("POST", budgets("/settlements"), {
+      categoryId,
+      year: 2026,
+      month,
+      reconciled,
+    });
 
   return {
     owner,
     bookId,
     budgets,
+    budget,
     addBudget,
     spend,
     year,
+    settle,
     food,
     salary,
     bakery,
     pay,
     current,
     ringgit,
-    profile,
     group,
   };
 }
 
-describe("category default budget type", () => {
-  it("is periodic unless said otherwise", async () => {
-    const b = await bookWithCategories();
-    expect(b.food.defaultBudgetType).toBe("periodic");
-    const taxes = await json<{ defaultBudgetType: string }>(
-      b.owner.request("POST", `/books/${b.bookId}/reference/categories`, {
-        groupId: b.group.id,
-        code: "I01",
-        natureId: await defaultNature(b.owner, b.bookId, "expense"),
-        defaultBudgetType: "scheduled",
-        names: { fr: "Impôts" },
-      }),
-      201,
-    );
-    expect(taxes.defaultBudgetType).toBe("scheduled");
-  });
-});
-
-describe("budget profiles", () => {
-  it("lists the book's profiles with their weights", async () => {
-    const b = await bookWithCategories();
-    const list = await json<{ id: string; weights: number[]; archived: boolean }[]>(
-      b.owner.request("GET", b.budgets("/profiles")),
-    );
-    expect(list).toEqual([
-      expect.objectContaining({ id: b.profile.id, weights: even, archived: false }),
-    ]);
-  });
-
-  it("refuses weights that do not add up, or names outside the book languages", async () => {
-    const b = await bookWithCategories();
-    const bad = (body: unknown) => b.owner.request("POST", b.budgets("/profiles"), body);
-    expect((await bad({ names: { fr: "X" }, weights: [...even.slice(1), 0] })).status).toBe(400);
-    expect((await bad({ names: { en: "X" }, weights: even })).status).toBe(400);
-  });
-
-  it("is kept by an archive, not deleted while a budget uses it", async () => {
-    const b = await bookWithCategories();
-    await b.addBudget({});
-    expect((await b.owner.request("DELETE", b.budgets(`/profiles/${b.profile.id}`))).status).toBe(
-      409,
-    );
-    const archived = await json<{ archived: boolean }>(
-      b.owner.request("PATCH", b.budgets(`/profiles/${b.profile.id}`), { archived: true }),
-    );
-    expect(archived.archived).toBe(true);
-    // An archived profile cannot be chosen for a new budget.
-    const refused = await b.owner.request("POST", b.budgets(), {
-      categoryId: b.salary.id,
-      year: 2026,
-      type: "periodic",
-      amount: "100",
-      profileId: b.profile.id,
-      consumption: "lapse",
-    });
-    expect(refused.status).toBe(400);
-  });
-});
-
 describe("category budgets", () => {
-  it("spreads the annual amount by the profile and shows what the journal consumed", async () => {
+  it("keeps 12 monthly amounts, and what the journal holds month by month", async () => {
     const b = await bookWithCategories();
-    const summerProfile = await json<{ id: string }>(
-      b.owner.request("POST", b.budgets("/profiles"), {
-        names: { fr: "Été" },
-        weights: summer,
-      }),
-      201,
-    );
-    await b.addBudget({ amount: "1200", profileId: summerProfile.id });
+    const months = every("0");
+    months[6] = "420";
+    await b.addBudget({ months, assumptions: "Summer" });
     await b.spend(b.bakery.id, "2026-07-14", "-100");
-    await b.spend(b.bakery.id, "2026-07-20", "-30.50");
+    await b.spend(b.bakery.id, "2026-07-20", "-30.50", true);
     await b.spend(b.bakery.id, "2025-07-20", "-999"); // another year
 
-    const { budgets, bookCurrency } = await b.year();
-    expect(bookCurrency).toBe("EUR");
-    const [food] = budgets;
-    expect(food).toMatchObject({ type: "periodic", amount: "1200.00", accountId: b.current.id });
-    const months = food!.months!;
-    expect(months).toHaveLength(12);
-    expect(months[0]).toMatchObject({ allocated: "36.00", consumed: "0.00", remaining: "36.00" });
-    expect(months[6]).toMatchObject({
-      allocated: "420.00",
-      consumed: "130.50",
-      remaining: "289.50",
-    });
-    expect(months.reduce((sum, m) => sum + Number(m.allocated), 0)).toBeCloseTo(1200, 2);
+    const read = await b.year();
+    expect(read.bookCurrency).toBe("EUR");
+    expect(read.budgets[0]).toMatchObject({ assumptions: "Summer", accountId: b.current.id });
+    expect(read.budgets[0]!.months[6]).toBe("420.00");
+    const [food] = read.journal;
+    // Read with the nature's sign: spending is positive.
+    expect(food!.actual[6]).toBe("130.50");
+    expect(food!.unplanned[6]).toBe("100.00");
+    expect(food!.planned[6]).toBe("30.50");
     expect((await b.year(2027)).budgets).toEqual([]);
   });
 
-  it("gives the year's total of every category, budgeted or not", async () => {
+  it("accepts a negative amount: a planned withdrawal", async () => {
     const b = await bookWithCategories();
-    await b.spend(b.bakery.id, "2026-03-05", "-40");
-    await b.spend(b.bakery.id, "2026-04-05", "-10.50");
-    await b.spend(b.pay.id, "2026-04-28", "2000");
-    await b.spend(b.bakery.id, "2025-04-05", "-999");
-    const { actuals } = (await b.year()) as unknown as {
-      actuals: { categoryId: string; total: string }[];
-    };
-    expect(actuals).toEqual(
-      expect.arrayContaining([
-        { categoryId: b.food.id, total: "50.50" },
-        { categoryId: b.salary.id, total: "2000.00" },
-      ]),
-    );
-    expect(actuals).toHaveLength(2);
-  });
-
-  it("counts income of an income category as consumption, and carries it by mode", async () => {
-    const b = await bookWithCategories();
-    await b.addBudget({ categoryId: b.salary.id, amount: "1200", consumption: "roll_over" });
-    await b.spend(b.pay.id, "2026-01-28", "250");
-    const [salary] = (await b.year()).budgets;
-    const months = salary!.months!;
-    // 8.34 % of 1200 = 100.08 in January; 250 earned is 149.92 over it.
-    expect(months[0]).toMatchObject({
-      allocated: "100.08",
-      available: "100.08",
-      consumed: "250.00",
-      remaining: "-149.92",
-    });
-    // February: its own 99.96, less what January overspent.
-    expect(months[1]).toMatchObject({ allocated: "99.96", available: "-49.96" });
-  });
-
-  it("accepts a negative amount in any category: a planned withdrawal", async () => {
-    const b = await bookWithCategories();
-    const insurance = await json<{ id: string }>(
-      b.owner.request("POST", `/books/${b.bookId}/reference/categories`, {
-        groupId: b.group.id,
-        code: "E01",
-        natureId: await defaultNature(b.owner, b.bookId, "saving"),
-        names: { fr: "Assurance vie" },
-      }),
-      201,
-    );
-    const withdrawal = await b.addBudget({ categoryId: insurance.id, amount: "-3000" });
-    expect(withdrawal.amount).toBe("-3000.00");
-    const refund = await b.addBudget({ categoryId: b.food.id, amount: "-10" });
-    expect(refund.amount).toBe("-10.00");
-  });
-
-  it("keeps a scheduled budget to its type and assumptions", async () => {
-    const b = await bookWithCategories();
-    const scheduled = await json<Budget>(
-      b.owner.request("POST", b.budgets(), {
-        categoryId: b.food.id,
-        year: 2026,
-        type: "scheduled",
-        assumptions: "Rent +3 % in July",
-      }),
-      201,
-    );
-    expect(scheduled).toMatchObject({
-      type: "scheduled",
-      amount: null,
-      assumptions: "Rent +3 % in July",
-    });
-    expect((await b.year()).budgets[0]!.months).toBeNull();
-    const withAmount = await b.owner.request("POST", b.budgets(), {
-      categoryId: b.salary.id,
-      year: 2026,
-      type: "scheduled",
-      amount: "10",
-    });
-    expect(withAmount.status).toBe(400);
+    const withdrawal = await b.addBudget({ months: every("-250") });
+    expect(withdrawal.months[0]).toBe("-250.00");
   });
 
   it("allows one budget per category and year", async () => {
     const b = await bookWithCategories();
-    await b.addBudget({});
-    const again = await b.owner.request("POST", b.budgets(), {
-      categoryId: b.food.id,
-      year: 2026,
-      type: "scheduled",
-    });
-    expect(again.status).toBe(409);
+    await b.addBudget();
+    expect((await b.owner.request("POST", b.budgets(), b.budget())).status).toBe(409);
     await b.addBudget({ year: 2027 });
   });
 
-  it("requires the reference account of a periodic budget", async () => {
+  it("requires an account as soon as a month is not zero", async () => {
     const b = await bookWithCategories();
-    const refused = await b.owner.request("POST", b.budgets(), {
-      categoryId: b.food.id,
-      year: 2026,
-      type: "periodic",
-      amount: "1200",
-      profileId: b.profile.id,
-      consumption: "lapse",
-    });
+    const refused = await b.owner.request("POST", b.budgets(), b.budget({ accountId: undefined }));
     expect(refused.status).toBe(400);
-    // A scheduled budget has none.
-    const scheduled = await b.owner.request("POST", b.budgets(), {
-      categoryId: b.food.id,
-      year: 2026,
-      type: "scheduled",
-    });
-    expect(scheduled.status).toBe(201);
+    // Assumptions alone need none.
+    await b.addBudget({ months: every("0"), accountId: undefined, assumptions: "To see" });
+  });
+
+  it("has no grid in a transfer category", async () => {
+    const b = await bookWithCategories();
+    const moves = await json<{ id: string }>(
+      b.owner.request("POST", `/books/${b.bookId}/reference/categories`, {
+        groupId: b.group.id,
+        code: "T01",
+        natureId: await defaultNature(b.owner, b.bookId, "transfer"),
+        names: { fr: "Virements" },
+      }),
+      201,
+    );
+    const refused = await b.owner.request("POST", b.budgets(), b.budget({ categoryId: moves.id }));
+    expect(refused.status).toBe(400);
   });
 
   it("keeps the rate for an account in another currency, and requires it", async () => {
     const b = await bookWithCategories();
-    const same = await b.addBudget({ accountId: b.current.id });
-    expect(same).toMatchObject({ accountId: b.current.id, exchangeRate: "1" });
-
-    const missing = await b.owner.request("POST", b.budgets(), {
-      categoryId: b.salary.id,
-      year: 2026,
-      type: "periodic",
-      amount: "100",
-      profileId: b.profile.id,
-      consumption: "lapse",
-      accountId: b.ringgit.id,
-    });
+    expect(await b.addBudget()).toMatchObject({ exchangeRate: "1" });
+    const missing = await b.owner.request(
+      "POST",
+      b.budgets(),
+      b.budget({ categoryId: b.salary.id, accountId: b.ringgit.id }),
+    );
     expect(missing.status).toBe(400);
-
     const foreign = await b.addBudget({
       categoryId: b.salary.id,
       accountId: b.ringgit.id,
@@ -340,36 +189,28 @@ describe("category budgets", () => {
     expect(foreign).toMatchObject({ accountId: b.ringgit.id, exchangeRate: "0.2" });
   });
 
-  it("revises the amount, re-spreading it, and can drop to a scheduled budget", async () => {
+  it("locks the grid amount of a reconciled month", async () => {
     const b = await bookWithCategories();
-    const budget = await b.addBudget({});
-    const revised = await json<Budget>(
-      b.owner.request("PATCH", b.budgets(`/${budget.id}`), { amount: "2400" }),
-    );
-    expect(revised.amount).toBe("2400.00");
-    const months = (await b.year()).budgets[0]!.months!;
-    expect(months.reduce((sum, m) => sum + Number(m.allocated), 0)).toBeCloseTo(2400, 2);
+    const budget = await b.addBudget();
+    expect((await b.settle(3)).status).toBe(204);
 
-    const scheduled = await json<Budget>(
-      b.owner.request("PATCH", b.budgets(`/${budget.id}`), {
-        type: "scheduled",
-        amount: null,
-        profileId: null,
-        consumption: null,
-      }),
-    );
-    expect(scheduled).toMatchObject({ type: "scheduled", amount: null, profileId: null });
+    const march = every("100");
+    march[2] = "150";
+    const patch = (months: string[]) =>
+      b.owner.request("PATCH", b.budgets(`/${budget.id}`), { months });
+    expect((await patch(march)).status).toBe(400);
+    expect((await b.owner.request("DELETE", b.budgets(`/${budget.id}`))).status).toBe(400);
+    const april = every("100");
+    april[3] = "150";
+    expect((await patch(april)).status).toBe(200);
 
-    // And back to periodic: the whole plan has to be given again.
-    const incomplete = await b.owner.request("PATCH", b.budgets(`/${budget.id}`), {
-      type: "periodic",
-    });
-    expect(incomplete.status).toBe(400);
+    expect((await b.settle(3, false)).status).toBe(204);
+    expect((await patch(march)).status).toBe(200);
   });
 
   it("is deleted by its editors", async () => {
     const b = await bookWithCategories();
-    const budget = await b.addBudget({});
+    const budget = await b.addBudget();
     expect((await b.owner.request("DELETE", b.budgets(`/${budget.id}`))).status).toBe(204);
     expect((await b.owner.request("DELETE", b.budgets(`/${budget.id}`))).status).toBe(404);
   });
@@ -377,59 +218,47 @@ describe("category budgets", () => {
   it("refuses a category from another book", async () => {
     const a = await bookWithCategories();
     const other = await bookWithCategories();
-    const refused = await a.owner.request("POST", a.budgets(), {
-      categoryId: other.food.id,
-      year: 2026,
-      type: "scheduled",
-    });
+    const refused = await a.owner.request(
+      "POST",
+      a.budgets(),
+      a.budget({ categoryId: other.food.id }),
+    );
     expect(refused.status).toBe(400);
   });
 });
 
 describe("saving the budgets of a year at once", () => {
-  const save = (b: Awaited<ReturnType<typeof bookWithCategories>>, body: unknown) =>
-    b.owner.request("POST", b.budgets("/batch"), body);
-  const periodic = (b: Awaited<ReturnType<typeof bookWithCategories>>, categoryId: string) => ({
-    categoryId,
-    year: 2027,
-    type: "periodic",
-    amount: "600",
-    profileId: b.profile.id,
-    consumption: "lapse",
-    accountId: b.current.id,
-  });
+  type Book = Awaited<ReturnType<typeof bookWithCategories>>;
+  const save = (b: Book, body: unknown) => b.owner.request("POST", b.budgets("/batch"), body);
+  const item = (b: Book, categoryId: string, amount = "50") =>
+    b.budget({ categoryId, year: 2027, months: every(amount) });
 
   it("creates, replaces and removes budgets together", async () => {
     const b = await bookWithCategories();
     const first = await save(b, {
       year: 2027,
-      save: [periodic(b, b.food.id), { categoryId: b.salary.id, year: 2027, type: "scheduled" }],
+      save: [item(b, b.food.id), item(b, b.salary.id)],
     });
     expect(await first.json()).toEqual({ saved: 2, removed: 0 });
-    const read = (await b.year(2027)).budgets as (Budget & { version: number })[];
-    expect(read.map((x) => x.type)).toEqual(["periodic", "scheduled"]);
-
+    const read = (await b.year(2027)).budgets;
     const versions = Object.fromEntries(read.map((x) => [x.categoryId, x.version]));
     const second = await save(b, {
       year: 2027,
-      save: [{ ...periodic(b, b.food.id), amount: "900" }],
+      save: [item(b, b.food.id, "75")],
       remove: [b.salary.id],
       versions,
     });
     expect(await second.json()).toEqual({ saved: 1, removed: 1 });
     const after = (await b.year(2027)).budgets;
     expect(after).toHaveLength(1);
-    expect(after[0]).toMatchObject({ amount: "900.00" });
+    expect(after[0]!.months).toEqual(every("75.00"));
   });
 
   it("refuses everything when one budget is wrong", async () => {
     const b = await bookWithCategories();
     const refused = await save(b, {
       year: 2027,
-      save: [
-        periodic(b, b.food.id),
-        { ...periodic(b, b.salary.id), profileId: crypto.randomUUID() },
-      ],
+      save: [item(b, b.food.id), { ...item(b, b.salary.id), accountId: crypto.randomUUID() }],
     });
     expect(refused.status).toBe(400);
     expect((await b.year(2027)).budgets).toEqual([]);
@@ -437,27 +266,28 @@ describe("saving the budgets of a year at once", () => {
 
   it("refuses a change made on a budget that moved on since it was read", async () => {
     const b = await bookWithCategories();
-    await save(b, { year: 2027, save: [periodic(b, b.food.id)] });
-    const [read] = (await b.year(2027)).budgets as (Budget & { version: number })[];
-    const patch = await b.owner.request("PATCH", b.budgets(`/${read!.id}`), { amount: "700" });
+    await save(b, { year: 2027, save: [item(b, b.food.id)] });
+    const [read] = (await b.year(2027)).budgets;
+    const patch = await b.owner.request("PATCH", b.budgets(`/${read!.id}`), {
+      months: every("70"),
+    });
     expect(patch.status).toBe(200);
 
     const stale = await save(b, {
       year: 2027,
-      save: [{ ...periodic(b, b.food.id), amount: "800" }],
+      save: [item(b, b.food.id, "80")],
       versions: { [b.food.id]: read!.version },
     });
     expect(stale.status).toBe(409);
     // A budget the screen did not know about counts as a conflict too.
-    const unknown = await save(b, { year: 2027, save: [periodic(b, b.food.id)] });
-    expect(unknown.status).toBe(409);
-    expect((await b.year(2027)).budgets[0]).toMatchObject({ amount: "700.00" });
+    expect((await save(b, { year: 2027, save: [item(b, b.food.id)] })).status).toBe(409);
+    expect((await b.year(2027)).budgets[0]!.months).toEqual(every("70.00"));
   });
 
   it("needs the editor role and budgets of the year", async () => {
     const b = await bookWithCategories();
     expect(
-      (await save(b, { year: 2027, save: [{ ...periodic(b, b.food.id), year: 2026 }] })).status,
+      (await save(b, { year: 2027, save: [{ ...item(b, b.food.id), year: 2026 }] })).status,
     ).toBe(400);
     const viewer = await h.signedInUser();
     await b.owner.request("POST", `/books/${b.bookId}/members`, {
@@ -480,29 +310,61 @@ describe("budget access", () => {
       }),
       201,
     );
-    await b.addBudget({});
+    await b.addBudget();
 
     expect((await b.year(2026, viewer)).budgets).toHaveLength(1);
-    expect(
-      (
-        await viewer.request("POST", b.budgets(), {
-          categoryId: b.salary.id,
-          year: 2026,
-          type: "scheduled",
-        })
-      ).status,
-    ).toBe(403);
-    expect(
-      (
-        await viewer.request("POST", b.budgets("/profiles"), {
-          names: { fr: "X" },
-          weights: even,
-        })
-      ).status,
-    ).toBe(403);
+    const write = await viewer.request("POST", b.budgets(), b.budget({ categoryId: b.salary.id }));
+    expect(write.status).toBe(403);
 
     const stranger = await h.signedInUser();
     expect((await stranger.request("GET", b.budgets("?year=2026"))).status).toBe(404);
-    expect((await stranger.request("GET", b.budgets("/profiles"))).status).toBe(404);
+  });
+});
+
+describe("saving a category's plan", () => {
+  it("saves the grid and the entries together, or nothing", async () => {
+    const b = await bookWithCategories();
+    const entry = (date: string, extra = {}) => ({
+      date,
+      accountId: b.current.id,
+      subCategoryId: b.bakery.id,
+      description: "Pain",
+      amount: "-20",
+      ...extra,
+    });
+    const batch = (versions = {}) => ({
+      year: 2026,
+      save: [b.budget()],
+      versions,
+    });
+    const plan = (body: Record<string, unknown>) =>
+      b.owner.request("POST", b.budgets("/plan"), body);
+    const entries = async () =>
+      (
+        await json<{
+          entries: { id: string; version: number; amount: string; plannedAmount: string }[];
+        }>(b.owner.request("GET", `/books/${b.bookId}/journal?limit=50&offset=0`))
+      ).entries;
+
+    expect(
+      (await plan({ budget: batch(), create: [entry("2026-01-05"), entry("2026-02-05")] })).status,
+    ).toBe(204);
+    const [second, first] = await entries();
+    expect(first).toMatchObject({ amount: "-20.00", plannedAmount: "-20.00" });
+
+    const [saved] = (await b.year()).budgets;
+    const change = {
+      budget: batch({ [b.food.id]: saved!.version }),
+      update: [{ id: first!.id, version: first!.version, amount: "-25", planned: true }],
+      remove: [{ id: second!.id, version: second!.version + 1 }], // moved on
+    };
+    expect((await plan(change)).status).toBe(409);
+    expect((await entries()).map((e) => e.amount)).toEqual(["-20.00", "-20.00"]);
+
+    change.remove = [{ id: second!.id, version: second!.version }];
+    expect((await plan(change)).status).toBe(204);
+    expect(await entries()).toEqual([
+      expect.objectContaining({ amount: "-25.00", plannedAmount: "-25.00" }),
+    ]);
   });
 });

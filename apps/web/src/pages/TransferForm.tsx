@@ -54,7 +54,10 @@ const emptyDraft = (): Draft => ({
 const unsigned = (amount: string) => amount.replace(/^[-+]/, "");
 const rateText = (rate: string) => (rate === "1" ? "" : rate);
 
-function draftOf(transfer: Transfer): Draft {
+/** From the budget, the amounts asked for are the planned ones. */
+function draftOf(transfer: Transfer, planned: boolean): Draft {
+  const amountOf = (side: Transfer["source"]) =>
+    unsigned(planned && Number(side.plannedAmount) !== 0 ? side.plannedAmount : side.amount);
   return {
     id: transfer.id,
     version: transfer.version,
@@ -65,8 +68,8 @@ function draftOf(transfer: Transfer): Draft {
     subCategoryId: transfer.source.subCategoryId,
     description: transfer.source.description,
     paymentTypeId: transfer.source.paymentTypeId,
-    amount: unsigned(transfer.source.amount),
-    destinationAmount: unsigned(transfer.destination.amount),
+    amount: amountOf(transfer.source),
+    destinationAmount: amountOf(transfer.destination),
     sourceRate: rateText(transfer.source.exchangeRate),
     destinationRate: rateText(transfer.destination.exchangeRate),
   };
@@ -237,9 +240,24 @@ function TransferFields({
       return;
     }
     if (draft.id) {
-      // The planned amounts are fixed: the API ignores them, so they are not sent.
+      // From the budget, new planned amounts replace both amounts of both sides; left as
+      // they were, they change neither. The journal never touches the planned amounts.
+      const { amount, destinationAmount, ...rest } = body;
+      const replanned =
+        decimalInput(draft.amount) !== decimalInput(initial.amount) ||
+        decimalInput(draft.destinationAmount) !== decimalInput(initial.destinationAmount);
       change.mutate(
-        { action: "updateTransfer", id: draft.id, body: { ...body, version: draft.version } },
+        {
+          action: "updateTransfer",
+          id: draft.id,
+          body: planned
+            ? {
+                ...rest,
+                version: draft.version,
+                ...(replanned && { amount, destinationAmount, planned: true }),
+              }
+            : { ...body, version: draft.version },
+        },
         { onSuccess: onClose },
       );
     } else {
@@ -307,8 +325,8 @@ function TransferFields({
           <TextInput
             label={
               wants.sourceCurrency
-                ? `${t("transfer.amount")} (${wants.sourceCurrency})`
-                : t("transfer.amount")
+                ? `${t(planned ? "budget.plannedAmount" : "transfer.amount")} (${wants.sourceCurrency})`
+                : t(planned ? "budget.plannedAmount" : "transfer.amount")
             }
             description={t("transfer.amountHint")}
             required
@@ -437,7 +455,7 @@ export function TransferForm({
   bookCurrency: string;
   reference: Reference;
   transferId?: string;
-  /** The transfer is part of the budget's plan: the planned amounts are then the amounts. */
+  /** Opened from the budget: the amounts asked for are the planned ones. */
   planned?: boolean;
   initialDate?: string;
   onClose: () => void;
@@ -455,7 +473,7 @@ export function TransferForm({
   }
   // A new transfer starts from what the book's transfers use most.
   const initial = loaded.data
-    ? draftOf(loaded.data)
+    ? draftOf(loaded.data, planned)
     : {
         ...emptyDraft(),
         subCategoryId: defaults.data?.subCategoryId ?? null,

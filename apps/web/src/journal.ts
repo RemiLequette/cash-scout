@@ -19,7 +19,7 @@ const transfers = api.books[":bookId"].transfers;
 export type Transfer = InferResponseType<(typeof transfers)[":id"]["$get"], 200>;
 
 const budgets = api.books[":bookId"].budgets;
-/** What a periodic category's budget left unused in a month: a line of the journal's month end. */
+/** A budget line: what a month's grid amount still expects, at the month's end. */
 export type MonthEnd = InferResponseType<(typeof budgets)["month-ends"]["$get"], 200>[number];
 export type Projection = InferResponseType<typeof journal.projection.$get, 200>[number];
 
@@ -121,7 +121,7 @@ export function useMonthEnds(bookId: string, years: number[]) {
   });
 }
 
-/** Settles ("reconciles") a month's unused budget, or takes it back. */
+/** Reconciles a month's budget line, or takes it back. */
 export function useSettle(bookId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -133,7 +133,7 @@ export function useSettle(bookId: string) {
 
 /**
  * The balance of every account over a window, with what changes it day by day.
- * Under the budgets' key, since the unused budgets move it as much as entries do.
+ * Under the budgets' key, since the budget lines move it as much as entries do.
  */
 export function useProjection(bookId: string, from: string, to: string) {
   const now = today();

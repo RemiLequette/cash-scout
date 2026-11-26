@@ -40,6 +40,7 @@ import {
   type Reference,
   type ReferenceKind,
 } from "../reference";
+import { DataTable } from "../table";
 
 // ---------------------------------------------------------------------------
 // Shared pieces
@@ -393,7 +394,6 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
         />
         <Select
           label={t("reference.nature")}
-          description={t("reference.natureHint")}
           required
           data={reference.natures
             .filter((n) => !n.archived || n.id === fields.natureId)
@@ -821,7 +821,7 @@ function AccountsTab({
       )}
       {accounts.length === 0 && <Text c="dimmed">{t("reference.emptyAccounts")}</Text>}
       {accounts.length > 0 && (
-        <Table>
+        <DataTable minWidth={700}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("reference.name")}</Table.Th>
@@ -875,7 +875,7 @@ function AccountsTab({
               </Table.Tr>
             ))}
           </Table.Tbody>
-        </Table>
+        </DataTable>
       )}
       <Modal
         opened={openingOf !== null}
@@ -1003,9 +1003,6 @@ function NaturesTab({ bookId, reference, canEdit, showArchived, openEditor }: Ta
             value={String(fields.sign)}
             onChange={(value) => set({ sign: Number(value) })}
           />
-          <Text size="xs" c="dimmed">
-            {t("reference.signHint")}
-          </Text>
         </Stack>
         <Switch
           label={t("reference.transfer")}

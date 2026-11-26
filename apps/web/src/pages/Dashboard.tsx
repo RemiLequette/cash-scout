@@ -22,7 +22,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useDashboard, type DashboardData } from "../dashboard";
-import { useJournal, type JournalFilters } from "../journal";
+import { formatDate, useJournal, useMonthEnds, type JournalFilters } from "../journal";
+import { useMonthNames } from "../options";
 import { useNameOf, useReference } from "../reference";
 
 const PAGE_SIZE = 500;
@@ -116,7 +117,7 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
         month: cell.month,
         total: parseAmount(cell.total, bookCurrency).minor,
       })),
-      data.unused.map((u) => ({
+      data.budgetLines.map((u) => ({
         categoryId: u.categoryId,
         months: u.months.map((m) => parseAmount(m, bookCurrency).minor),
       })),
@@ -267,15 +268,6 @@ const negative = (minor: bigint): CSSProperties =>
   minor < 0n ? { color: "var(--mantine-color-red-6)" } : {};
 
 /** Month names in the interface language, "janv." to "déc.". */
-function useMonthNames(style: "short" | "long") {
-  const { i18n } = useTranslation();
-  return MONTHS.map((m) =>
-    new Intl.DateTimeFormat(i18n.language, { month: style, timeZone: "UTC" }).format(
-      new Date(Date.UTC(2026, m - 1, 1)),
-    ),
-  );
-}
-
 /**
  * A grid amount without its currency (the page says it once): a dash for zero.
  * Rounded, it shows whole units, half away from zero.
@@ -352,7 +344,7 @@ function Grid(props: {
     row.kind === "nature" ||
     row.kind === "group" ||
     (row.kind === "category" &&
-      rows.some((r) => r.parentKey === row.key && (r.kind === "sub" || r.kind === "unused")));
+      rows.some((r) => r.parentKey === row.key && (r.kind === "sub" || r.kind === "budget")));
 
   // Months ahead show what is planned: they read differently from the past ones.
   const ahead = (month: number) => month > data.currentMonth;
@@ -371,8 +363,8 @@ function Grid(props: {
         return nameOf(categories.get(row.id)?.names ?? {});
       case "sub":
         return nameOf(subCategories.get(row.id)?.names ?? {});
-      case "unused":
-        return t("dashboard.unused");
+      case "budget":
+        return t("dashboard.budgetRow");
     }
   }
 
@@ -460,8 +452,8 @@ function Grid(props: {
                   <Text
                     size="sm"
                     fw="inherit"
-                    fs={row.kind === "unused" ? "italic" : undefined}
-                    c={row.kind === "unused" ? "dimmed" : undefined}
+                    fs={row.kind === "budget" ? "italic" : undefined}
+                    c={row.kind === "budget" ? "dimmed" : undefined}
                     truncate
                     style={{ cursor: "pointer" }}
                     onClick={() => select({ kind: "row", key, month: null })}
@@ -629,11 +621,21 @@ function DetailPanel({
       : rows
           .filter((r) => r.kind === "sub" && within.some((ancestor) => isInside(r, ancestor)))
           .map((r) => r.id);
-  const unusedOnly = row?.kind === "unused";
+  const budgetOnly = row?.kind === "budget";
+  // The categories whose budget lines the selection adds up: the lines are not entries.
+  const lineCategories = new Set(
+    !row
+      ? []
+      : budgetOnly || row.kind === "category"
+        ? [row.id]
+        : rows
+            .filter((r) => r.kind === "budget" && within.some((ancestor) => isInside(r, ancestor)))
+            .map((r) => r.id),
+  );
 
   const month = selection?.month ?? null;
   const filters: JournalFilters | null =
-    selection === null || unusedOnly
+    selection === null || budgetOnly
       ? null
       : {
           ...(selection.kind === "account" ? { accountId: selection.accountId } : {}),
@@ -645,6 +647,7 @@ function DetailPanel({
           offset: 0,
         };
   const journal = useJournal(bookId, filters ?? { limit: 1, offset: 0 }, filters !== null);
+  const monthEnds = useMonthEnds(bookId, [year]);
 
   const title = (() => {
     if (!selection) return t("dashboard.detail");
@@ -659,8 +662,8 @@ function DetailPanel({
               ? nameOf(balances.get(row.id)?.names ?? {})
               : row.kind === "group"
                 ? nameOf(groups.get(row.id)?.names ?? {})
-                : row.kind === "unused"
-                  ? `${nameOf(categories.get(row.id)?.names ?? {})} · ${t("dashboard.unused")}`
+                : row.kind === "budget"
+                  ? `${nameOf(categories.get(row.id)?.names ?? {})} · ${t("dashboard.budgetRow")}`
                   : row.kind === "category"
                     ? nameOf(categories.get(row.id)?.names ?? {})
                     : nameOf(subCategories.get(row.id)?.names ?? {});
@@ -682,7 +685,15 @@ function DetailPanel({
 
   const format = (amount: string, currency: string) =>
     formatMoney(parseAmount(amount, currency), i18n.language);
-  const entries = journal.data?.entries ?? [];
+  const entries = filters ? (journal.data?.entries ?? []) : [];
+  const budgetLines = (monthEnds.data ?? []).filter(
+    (line) =>
+      selection !== null &&
+      (month === null || line.month === month) &&
+      (selection.kind === "account"
+        ? line.accountId === selection.accountId
+        : lineCategories.has(line.categoryId)),
+  );
 
   return (
     <Paper withBorder style={{ flexShrink: 0, display: "flex", flexDirection: "column" }}>
@@ -704,11 +715,11 @@ function DetailPanel({
           <Text fw={600} size="sm" truncate>
             {title}
           </Text>
-          {filters && journal.data && (
+          {selection && (!filters || journal.data) && (
             <Badge variant="light" color="gray">
-              {journal.data.total > entries.length
-                ? t("dashboard.showing", { shown: entries.length, total: journal.data.total })
-                : t("journal.count", { count: journal.data.total })}
+              {(journal.data?.total ?? 0) > entries.length && filters
+                ? t("dashboard.showing", { shown: entries.length, total: journal.data!.total })
+                : t("journal.count", { count: entries.length + budgetLines.length })}
             </Badge>
           )}
         </Group>
@@ -735,17 +746,13 @@ function DetailPanel({
             <Text c="dimmed" size="sm" p="sm">
               {t("dashboard.selectHint")}
             </Text>
-          ) : unusedOnly ? (
-            <Text c="dimmed" size="sm" p="sm">
-              {t("dashboard.unusedHint")}
-            </Text>
           ) : journal.error ? (
             <Alert color="red" m="sm">
               {t("common.error", { message: journal.error.message })}
             </Alert>
-          ) : entries.length === 0 ? (
+          ) : entries.length === 0 && budgetLines.length === 0 ? (
             <Text c="dimmed" size="sm" p="sm">
-              {journal.isPending ? <Loader size="xs" /> : t("journal.empty")}
+              {filters && journal.isPending ? <Loader size="xs" /> : t("journal.empty")}
             </Text>
           ) : (
             <Table stickyHeader verticalSpacing={3} horizontalSpacing="xs">
@@ -760,16 +767,43 @@ function DetailPanel({
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
+                {budgetLines.map((line) => (
+                  <Table.Tr key={`${line.categoryId}-${line.month}`}>
+                    <Table.Td style={{ whiteSpace: "nowrap" }}>
+                      {formatDate(line.date, i18n.language)}
+                    </Table.Td>
+                    <Table.Td>{nameOf(accounts.get(line.accountId)?.names ?? {})}</Table.Td>
+                    <Table.Td>
+                      {`${nameOf(categories.get(line.categoryId)?.names ?? {})} › ${t("dashboard.budgetRow")}`}
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="dimmed">
+                        {t("journal.plannedShort", {
+                          planned: format(line.plannedAmount, line.currency),
+                        })}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <Text size="sm" fw={600}>
+                        {format(line.amount, line.currency)}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {!line.reconciled && (
+                        <Badge variant="light" color="orange">
+                          {t("journal.forecasts")}
+                        </Badge>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
                 {entries.map((entry) => {
                   const sub = subCategories.get(entry.subCategoryId);
                   const category = sub && categories.get(sub.categoryId);
                   return (
                     <Table.Tr key={entry.id}>
                       <Table.Td style={{ whiteSpace: "nowrap" }}>
-                        {new Intl.DateTimeFormat(i18n.language, {
-                          dateStyle: "medium",
-                          timeZone: "UTC",
-                        }).format(new Date(`${entry.date}T00:00:00Z`))}
+                        {formatDate(entry.date, i18n.language)}
                       </Table.Td>
                       <Table.Td>{nameOf(accounts.get(entry.accountId)?.names ?? {})}</Table.Td>
                       <Table.Td>

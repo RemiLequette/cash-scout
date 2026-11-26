@@ -120,6 +120,27 @@ describe("transfers", () => {
     expect(t.destination.plannedAmount).toBe("300.00");
   });
 
+  it("moves the planned amounts of both sides when changed in the budget's plan", async () => {
+    const b = await bookWithAccounts();
+    const t = await b.create({ planned: true });
+    const replanned = await json<Transfer>(
+      b.owner.request("PATCH", `${b.base}/${t.id}`, { amount: "450", planned: true }),
+    );
+    expect(replanned.source).toMatchObject({ amount: "-450.00", plannedAmount: "-450.00" });
+    expect(replanned.destination).toMatchObject({ amount: "450.00", plannedAmount: "450.00" });
+    await json(
+      b.owner.request("POST", `/books/${b.bookId}/journal/reconcile`, {
+        ids: [t.source.id],
+        reconciled: true,
+      }),
+    );
+    const refused = await b.owner.request("PATCH", `${b.base}/${t.id}`, {
+      amount: "500",
+      planned: true,
+    });
+    expect(refused.status).toBe(400);
+  });
+
   it("needs a transfer sub-category and two different accounts", async () => {
     const b = await bookWithAccounts();
     await b.create({ subCategoryId: b.bakery.id }, 400);

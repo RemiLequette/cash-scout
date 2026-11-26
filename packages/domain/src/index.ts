@@ -3,6 +3,8 @@ export * from "./money.js";
 export * from "./reference.js";
 export * from "./journal.js";
 export * from "./budget.js";
+export * from "./grid.js";
+export * from "./plan.js";
 export * from "./projection.js";
 export * from "./dashboard.js";
 export * from "./opening.js";

@@ -14,10 +14,30 @@ Les catégories ont trois niveaux : **groupe → catégorie → sous-catégorie*
 
 ## Natures et soldes
 
-Une **nature** dit quel genre de flux porte une catégorie : revenu, dépense, épargne, exceptionnel… Elle fixe les sections du tableau de bord et la façon dont les budgets comptent la catégorie.
+Une **nature** dit quel genre de flux porte une catégorie : revenu, dépense, épargne, exceptionnel… Elle fixe la section de la catégorie dans le tableau de bord.
 
-- **C'est la catégorie qui décide, pas le signe.** Un impôt prélevé est un revenu négatif ; un remboursement est une dépense positive. Les rapports additionnent les montants signés dans chaque catégorie et les lisent avec le signe de sa nature.
-- L'affichage **Inversé** fait lire en positif les montants saisis en négatif (dépenses), dans le tableau de bord et les budgets.
+- **C'est la catégorie qui décide, pas le signe.** Un impôt prélevé est un revenu négatif ; un remboursement est une dépense positive. Les rapports additionnent les montants signés dans chaque catégorie.
+
+### Le sens d'affichage
+
+Chaque nature a un **affichage** :
+
+- **Inversé**, pour les dépenses : les montants négatifs se lisent en positif.
+- **Tel que saisi**, pour les revenus.
+
+Il agit sur le tableau de bord, et sur le budget par un seul point : il dit ce que signifie un montant saisi dans la grille, qui ne porte pas de signe.
+
+| 300 dans la grille        | Nature **inversée** (Dépenses) | Nature **telle que saisie** (Revenus) |
+| ------------------------- | ------------------------------ | ------------------------------------- |
+| Ce que cela veut dire     | 300 à dépenser                 | 300 à recevoir                        |
+| Ligne Budget du journal   | -300                           | +300                                  |
+| Solde prévu du compte     | baisse                         | monte                                 |
+| Ce qui consomme la grille | les montants négatifs imprévus | les montants positifs imprévus        |
+
+Les écritures et les soldes gardent toujours leur signe. Changer l'affichage d'une nature qui a déjà des budgets inverse donc le sens de leurs grilles.
+
+### Virements et soldes
+
 - Une nature peut être marquée **Virements entre comptes** : ses catégories servent aux virements et restent hors des totaux.
 - Un **solde** est un sous-total : la somme, telle que saisie, des natures que vous choisissez.
 

@@ -20,7 +20,7 @@ La catégorie décide si un montant est un revenu ou une dépense, jamais son si
 
 ## Saisir vite
 
-- **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose celles que vous utilisez le plus sur les 12 derniers mois, datées d'aujourd'hui.
+- **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose celles que vous utilisez le plus sur les 12 derniers mois, datées d'aujourd'hui. Une nouvelle écriture est cochée **Rapproché** : décochez pour saisir une prévision.
 - **Dupliquer** copie une écriture existante.
 - **Marquer rapprochées** et **Marquer en prévision** changent le statut d'une écriture depuis la liste.
 
@@ -32,9 +32,11 @@ Filtrez par période (année, mois), compte, catégorie, sous-catégorie, statut
 
 Saisissez ce que vous savez à venir (loyer, facture) en prévision. Quand la banque le montre, mettez le montant de la banque et cochez **Rapproché**. Les prévisions alimentent la projection de trésorerie.
 
-## Lignes de budget non utilisé
+## Lignes Budget
 
-À la fin de chaque mois, le budget non utilisé d'une catégorie **périodique** apparaît comme une ligne calculée, sur le compte de référence du budget. Elle ne se modifie pas. La rapprocher abandonne le budget non utilisé. Un message au-dessus du journal signale les mois passés dont la ligne n'est pas rapprochée.
+À la fin de chaque mois budgété dans la grille d'une catégorie, une ligne **Budget** calculée montre ce qui reste attendu, sur le compte du budget (voir [Budget](06-budget.md)). Elle ne se modifie pas ; la rapprocher abandonne le reste.
+
+Un message au-dessus du journal signale les écritures passées non rapprochées, lignes Budget comprises.
 
 ## Graphique des comptes
 

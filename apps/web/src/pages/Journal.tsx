@@ -199,8 +199,6 @@ export function EntryForm({
   initial,
   onClose,
   onDuplicate,
-  planned = false,
-  categoryIds,
 }: {
   bookId: string;
   bookCurrency: string;
@@ -209,16 +207,15 @@ export function EntryForm({
   onClose: () => void;
   /** Starts a new entry from the saved one. */
   onDuplicate?: (draft: Draft) => void;
-  /** The entries created are part of the budget's plan: their planned amount is their amount. */
-  planned?: boolean;
-  /** Only the sub-categories of these categories can be picked. */
-  categoryIds?: string[];
 }) {
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
   const formatAmount = useMoney();
   const change = useJournalChange(bookId);
-  const [draft, setDraft] = useState(initial);
+  // A new entry is usually one the bank already shows: it starts reconciled.
+  const [draft, setDraft] = useState(() =>
+    initial.id ? initial : { ...initial, reconciled: true },
+  );
   const [shown, setShown] = useState<Partial<Record<Field, true>>>({});
   const [showOriginal, setShowOriginal] = useState(initial.originalAmount !== "");
   const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
@@ -233,7 +230,6 @@ export function EntryForm({
   const subCategoryOptions = useSubCategoryOptions(
     reference,
     initial.id ? (initial.subCategoryId ?? undefined) : undefined,
-    categoryIds,
   );
   const paymentTypeOptions = reference.paymentTypes
     .filter((p) => !p.archived || p.id === initial.paymentTypeId)
@@ -252,16 +248,13 @@ export function EntryForm({
       return;
     }
     if (draft.id) {
-      // The planned amount is fixed: the API ignores it, so it is not sent.
+      // The planned amount is fixed here: it only changes from the budget.
       change.mutate(
         { action: "update", id: draft.id, body: { ...body, version: draft.version } },
         { onSuccess: onClose },
       );
     } else {
-      change.mutate(
-        { action: "create", body: planned ? { ...body, planned: true } : body },
-        { onSuccess: onClose },
-      );
+      change.mutate({ action: "create", body }, { onSuccess: onClose });
     }
   }
 
@@ -1221,9 +1214,9 @@ const CardEntry = memo(function CardEntry({
 });
 
 /**
- * The month-end line of a periodic category: what its budget left unused in the
- * month, on its reference account. It is computed, never edited; settling it
- * ("reconciled") lets the unused budget go and sets the line to 0.
+ * A budget line: what a category's grid amount still expects at the end of a
+ * month, on the budget's account. It is computed, never edited; reconciling it
+ * lets that go and sets the line to 0.
  */
 interface MonthEndViewProps {
   line: MonthEnd;
@@ -1248,6 +1241,11 @@ function MonthEndAmount({ line, bookCurrency }: Pick<MonthEndViewProps, "line" |
           {formatAmount(line.bookAmount, bookCurrency)}
         </Text>
       )}
+      <Text size="xs" c="dimmed">
+        {t("journal.plannedShort", {
+          planned: formatAmount(line.plannedAmount, line.currency),
+        })}
+      </Text>
       {line.reconciled && Number(line.unused) !== 0 && (
         <Text size="xs" c="dimmed">
           {t("journal.monthEndLetGo", { amount: formatAmount(line.unused, bookCurrency) })}
@@ -1297,7 +1295,7 @@ const MonthEndTableRow = memo(function MonthEndTableRow(props: MonthEndViewProps
           {props.category}
         </Text>
       </Table.Td>
-      <Table.Td />
+      <Table.Td>{t("journal.monthEnd")}</Table.Td>
       <Table.Td style={{ whiteSpace: "nowrap" }}>{props.account}</Table.Td>
       <Table.Td />
       <Table.Td>
@@ -1443,6 +1441,13 @@ function NewEntryButton({
   );
 }
 
+/** The day before today, as "2026-11-21". */
+function yesterday(): string {
+  const day = new Date(`${today()}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() - 1);
+  return day.toISOString().slice(0, 10);
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -1499,8 +1504,8 @@ export function Journal({
       list.data && reference.data ? toRows(list.data.entries, reference.data, i18n.language) : [],
     [list.data, reference.data, i18n.language],
   );
-  // The month-end lines of the unused budgets: of the years the period reaches, and of the
-  // last two, whatever the period, so that a past month left unreconciled is always reported.
+  // The budget lines: of the years the period reaches, and of the last two, whatever the
+  // period, so that a past line left unreconciled is always reported.
   const monthsWithEntries = useMonths(bookId);
   const thisYear = Number(today().slice(0, 4));
   const years = [
@@ -1514,6 +1519,13 @@ export function Journal({
   ].sort();
   const monthEnds = useMonthEnds(bookId, years);
   const { mutate: settleMonth } = useSettle(bookId);
+  // What is past and not reconciled, whatever the filters: to be dealt with by hand.
+  const overdue = useJournal(bookId, {
+    to: yesterday(),
+    reconciled: "false",
+    limit: LOAD_LIMIT,
+    offset: 0,
+  });
   const onSettle = useCallback(
     (line: MonthEnd, reconciled: boolean) =>
       settleMonth({
@@ -1564,7 +1576,7 @@ export function Journal({
     else byMonth.set(month, [row]);
   }
 
-  // The month-end lines follow the journal's filters, except the search, which looks in
+  // The budget lines follow the journal's filters, except the search, which looks in
   // descriptions they do not have.
   const categoryOf = new Map(ref.categories.map((c) => [c.id, c]));
   const accountName = new Map(ref.accounts.map((a) => [a.id, nameOf(a.names)]));
@@ -1597,17 +1609,14 @@ export function Journal({
     canEdit,
     onSettle,
   });
-  // Past months whose unused budget is still a forecast: to be reconciled or settled.
-  const pending = [
-    ...new Set(
-      (monthEnds.data ?? [])
-        .filter(
-          (line) =>
-            !line.reconciled && Number(line.amount) !== 0 && line.date.slice(0, 7) < currentMonth(),
-        )
-        .map((line) => line.date.slice(0, 7)),
-    ),
-  ].sort();
+  // Past entries and budget lines that are still forecasts.
+  const overdueLines = (monthEnds.data ?? []).filter(
+    (line) => !line.reconciled && Number(line.amount) !== 0 && line.date < today(),
+  );
+  const overdueCount = (overdue.data?.total ?? 0) + overdueLines.length;
+  const overdueMonths = new Set(
+    [...(overdue.data?.entries ?? []), ...overdueLines].map((row) => row.date.slice(0, 7)),
+  );
   // Only on a period holding today: elsewhere every entry is on the same side.
   const dividerAfter = containsToday(months) ? lastPastIndex(rows) : -1;
   const dividerId = rows[dividerAfter]?.entry.id;
@@ -1710,30 +1719,22 @@ export function Journal({
       )}
       {canEdit && !canAdd && <Text c="dimmed">{t("journal.needsReference")}</Text>}
       <ErrorAlert error={list.error ?? change.error ?? monthEnds.error} />
-      {pending.length > 0 && (
+      {overdueCount > 0 && (
         <Alert color="orange" variant="light" py={6}>
           <Group justify="space-between" wrap="nowrap" gap="xs">
-            <Text size="sm">
-              {t("journal.monthEndPending", {
-                months:
-                  pending.length > 3
-                    ? `${formatMonth(pending[0]!, i18n.language)} – ${formatMonth(pending[pending.length - 1]!, i18n.language)}`
-                    : pending.map((month) => formatMonth(month, i18n.language)).join(", "),
-                count: pending.length,
-              })}
-            </Text>
+            <Text size="sm">{t("journal.overdue", { count: overdueCount })}</Text>
             <Button
               size="compact-xs"
               variant="default"
               onClick={() => {
-                setMonths(new Set(pending));
-                setStatus("all");
+                setMonths(overdueMonths);
+                setStatus("false");
                 setSubCategories(null);
                 setAccountId(null);
                 setSearch("");
               }}
             >
-              {t("journal.monthEndShow")}
+              {t("journal.overdueShow")}
             </Button>
           </Group>
         </Alert>

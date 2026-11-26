@@ -1,23 +1,13 @@
-import {
-  consumptionModes,
-  formatMoney,
-  money,
-  parseAmount,
-  raise,
-  toDecimalString,
-  type BudgetType,
-  type ConsumptionMode,
-} from "@cash-scout/domain";
+import { formatMoney, money, parseAmount, toDecimalString } from "@cash-scout/domain";
 import {
   ActionIcon,
   Alert,
   Badge,
   Button,
   Group,
+  Loader,
   Modal,
-  NumberInput,
   Paper,
-  SegmentedControl,
   Select,
   Stack,
   Table,
@@ -28,146 +18,72 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap } from "../api";
+import { useBudgetYear, type BudgetYear, type CategoryBudgetRow } from "../budget";
+import { entryChanges, invalidRows, PlanEntries, plannedByMonth, rowsOf } from "../budgetEntries";
+import { cellText, GridTools, useGrid } from "../budgetGrid";
 import {
-  useBudgetProfiles,
-  useBudgetYear,
-  type BudgetProfile,
-  type BudgetYear,
-  type CategoryBudgetRow,
-} from "../budget";
-import { formatDate, useJournal, type Entry } from "../journal";
+  decimalInput,
+  formatDate,
+  useJournal,
+  useMonthEnds,
+  type Entry,
+  type MonthEnd,
+} from "../journal";
+import { useMonthNames } from "../options";
 import { useNameOf, useReference, type Reference } from "../reference";
-import {
-  draftOf as entryDraftOf,
-  emptyDraft,
-  EntryForm,
-  type Draft as EntryDraft,
-} from "./Journal";
+import { DataTable } from "../table";
 import { TransferForm } from "./TransferForm";
 
-// ---------------------------------------------------------------------------
-// Drafts: what the page edits, one per category
-// ---------------------------------------------------------------------------
-
-interface Draft {
-  type: BudgetType;
-  /** Annual amount as typed, in the book currency (periodic). */
-  amount: string;
-  profileId: string | null;
-  consumption: ConsumptionMode;
-  accountId: string | null;
-  exchangeRate: string;
-  assumptions: string;
-  /** The category has a budget row (saved, or kept when it is a scheduled one). */
-  existed: boolean;
-}
+const MONTHS = Array.from({ length: 12 }, (_, i) => i);
 
 type Category = Reference["categories"][number];
 
-function blankDraft(category: Category, profiles: BudgetProfile[]): Draft {
-  return {
-    type: category.defaultBudgetType,
-    amount: "",
-    profileId: profiles.find((p) => !p.archived)?.id ?? null,
-    consumption: "lapse",
-    accountId: null,
-    exchangeRate: "",
-    assumptions: "",
-    existed: false,
-  };
+/** What the page edits of a category's budget, as typed. */
+interface Draft {
+  /** The 12 monthly amounts of the grid; empty for 0. */
+  months: string[];
+  accountId: string | null;
+  exchangeRate: string;
+  assumptions: string;
 }
 
-function draftOf(budget: CategoryBudgetRow): Draft {
-  return {
-    type: budget.type,
-    amount: budget.amount ?? "",
-    profileId: budget.profileId,
-    consumption: budget.consumption ?? "lapse",
-    accountId: budget.accountId,
-    exchangeRate: budget.exchangeRate ?? "",
-    assumptions: budget.assumptions,
-    existed: true,
-  };
-}
-
-/** Whether the draft is a budget to keep, as opposed to a category left to its default. */
-function isPlanned(draft: Draft, category: Category): boolean {
-  return draft.type === "periodic"
-    ? draft.amount.trim() !== ""
-    : draft.existed || draft.type !== category.defaultBudgetType || draft.assumptions.trim() !== "";
-}
-
-/** The parts of a draft that make up a budget; `existed` is bookkeeping. */
-function sameBudget(a: Draft, b: Draft): boolean {
-  if (a.type !== b.type || a.assumptions.trim() !== b.assumptions.trim()) return false;
-  if (a.type === "scheduled") return true;
-  return (
-    a.amount.trim() === b.amount.trim() &&
-    a.profileId === b.profileId &&
-    a.consumption === b.consumption &&
-    a.accountId === b.accountId &&
-    (a.accountId === null || a.exchangeRate.trim() === b.exchangeRate.trim())
-  );
-}
-
-/** The request body of a planned draft. */
-function inputOf(categoryId: string, year: number, draft: Draft) {
-  const assumptions = draft.assumptions.trim();
-  if (draft.type === "scheduled")
-    return { categoryId, year, type: "scheduled" as const, assumptions };
-  return {
-    categoryId,
-    year,
-    type: "periodic" as const,
-    assumptions,
-    amount: draft.amount.trim(),
-    profileId: draft.profileId ?? undefined,
-    consumption: draft.consumption,
-    ...(draft.accountId && {
-      accountId: draft.accountId,
-      ...(draft.exchangeRate.trim() !== "" && { exchangeRate: draft.exchangeRate.trim() }),
-    }),
-  };
-}
-
-type Account = Reference["accounts"][number];
-
-/** What is wrong with a planned periodic draft, if anything, as a translation key. */
-function problemOf(
-  draft: Draft,
-  category: Category,
-  accounts: Account[],
-  bookCurrency: string,
-): string | undefined {
-  if (!isPlanned(draft, category) || draft.type === "scheduled") return undefined;
+/** An amount typed or read as text, in minor units; 0 when empty, null when not a number. */
+function parsed(text: string, currency: string): bigint | null {
+  if (text.trim() === "") return 0n;
   try {
-    parseAmount(draft.amount, bookCurrency);
+    return parseAmount(decimalInput(text), currency).minor;
   } catch {
-    return "budget.problemAmount";
+    return null;
   }
-  if (!draft.profileId) return "budget.problemProfile";
-  if (!draft.accountId) return "budget.problemAccount";
-  const account = accounts.find((a) => a.id === draft.accountId);
-  if (account && account.currency !== bookCurrency && draft.exchangeRate.trim() === "") {
-    return "budget.problemRate";
-  }
-  return undefined;
 }
 
-/** An amount typed or read as text, in minor units of the book currency; 0 when empty or invalid. */
-function minorOf(text: string, currency: string): bigint {
-  try {
-    return parseAmount(text, currency).minor;
-  } catch {
-    return 0n;
-  }
+const minorOf = (text: string | undefined, currency: string) => parsed(text ?? "", currency) ?? 0n;
+
+const sum = (values: readonly bigint[]) => values.reduce((a, b) => a + b, 0n);
+
+/** A year's budget of one category, month by month, in minor units. */
+function yearOf(data: BudgetYear, categoryId: string) {
+  const saved = data.budgets.find((b) => b.categoryId === categoryId);
+  const held = data.journal.find((j) => j.categoryId === categoryId);
+  const read = (values: readonly string[] | undefined) =>
+    MONTHS.map((m) => minorOf(values?.[m], data.bookCurrency));
+  const grid = read(saved?.months);
+  const planned = read(held?.planned);
+  return {
+    saved,
+    grid,
+    planned,
+    actual: read(held?.actual),
+    /** The budget of a month: its grid amount plus its planned entries. */
+    budget: MONTHS.map((m) => grid[m]! + planned[m]!),
+  };
 }
 
 // ---------------------------------------------------------------------------
-// The page
+// The page: the categories of a year, or one of them being planned
 // ---------------------------------------------------------------------------
 
 export function BudgetPage({
@@ -179,536 +95,228 @@ export function BudgetPage({
   bookCurrency: string;
   canEdit: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [year, setYear] = useState(new Date().getFullYear());
-  const [reload, setReload] = useState(0);
-  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [planning, setPlanning] = useState<string | null>(null);
+  /** Raised to start the category's editor again, from what is stored. */
+  const [revision, setRevision] = useState(0);
+  /** Whether the category being planned has changes not saved yet. */
+  const [dirty, setDirty] = useState(false);
   const reference = useReference(bookId);
-  const profiles = useBudgetProfiles(bookId);
   const current = useBudgetYear(bookId, year);
   const previous = useBudgetYear(bookId, year - 1);
+  const lines = useMonthEnds(bookId, [year]);
+  const nameOf = useNameOf(reference.data?.defaultLanguage);
 
-  const failure = reference.error ?? profiles.error ?? current.error ?? previous.error;
-  return (
-    <Stack>
-      <Group justify="space-between">
+  /** Runs a move away from the category, after asking when something would be lost. */
+  const leave = (move: () => void) => {
+    if (dirty && !window.confirm(t("budget.leaveUnsaved"))) return;
+    setDirty(false);
+    move();
+  };
+
+  const failure = reference.error ?? current.error ?? previous.error ?? lines.error;
+  const header = (
+    <Group gap="xs">
+      <ActionIcon
+        variant="default"
+        aria-label={t("budget.previousYear")}
+        onClick={() => leave(() => setYear(year - 1))}
+      >
+        ◀
+      </ActionIcon>
+      <Title order={3}>{t("budget.title", { year })}</Title>
+      <ActionIcon
+        variant="default"
+        aria-label={t("budget.nextYear")}
+        onClick={() => leave(() => setYear(year + 1))}
+      >
+        ▶
+      </ActionIcon>
+    </Group>
+  );
+
+  if (!reference.data || !current.data || !previous.data || !lines.data) {
+    return (
+      <Stack>
+        {header}
+        {failure && <Alert color="red">{t("common.error", { message: failure.message })}</Alert>}
+      </Stack>
+    );
+  }
+
+  const ref = reference.data;
+  const groups = [...ref.groups].filter((g) => !g.archived).sort((a, b) => a.position - b.position);
+  const transferNatures = new Set(ref.natures.filter((n) => n.transfer).map((n) => n.id));
+  const categories = groups.flatMap((group) =>
+    ref.categories
+      .filter((c) => c.groupId === group.id && !c.archived && !transferNatures.has(c.natureId))
+      .sort((a, b) => a.code.localeCompare(b.code)),
+  );
+  const index = categories.findIndex((c) => c.id === planning);
+  const category = categories[index];
+  const text = (minor: bigint) => formatMoney(money(minor, bookCurrency), i18n.language);
+
+  if (category) {
+    const go = (step: number) =>
+      leave(() =>
+        setPlanning(categories[(index + step + categories.length) % categories.length]!.id),
+      );
+    return (
+      <Stack>
+        {header}
+        {failure && <Alert color="red">{t("common.error", { message: failure.message })}</Alert>}
         <Group gap="xs">
-          <ActionIcon
-            variant="default"
-            aria-label={t("budget.previousYear")}
-            onClick={() => setYear(year - 1)}
-          >
-            ◀
-          </ActionIcon>
-          <Title order={3}>{t("budget.title", { year })}</Title>
-          <ActionIcon
-            variant="default"
-            aria-label={t("budget.nextYear")}
-            onClick={() => setYear(year + 1)}
-          >
-            ▶
-          </ActionIcon>
+          <Button size="xs" variant="default" onClick={() => leave(() => setPlanning(null))}>
+            {t("budget.allCategories")}
+          </Button>
+          <Button size="xs" variant="default" onClick={() => go(-1)}>
+            {t("budget.previousCategory")}
+          </Button>
+          <Button size="xs" variant="default" onClick={() => go(1)}>
+            {t("budget.nextCategory")}
+          </Button>
+          <Select
+            size="xs"
+            w={240}
+            searchable
+            allowDeselect={false}
+            aria-label={t("budget.searchCategory")}
+            placeholder={t("budget.searchCategory")}
+            nothingFoundMessage={t("budget.noCategory")}
+            // By code or by name, within the book's groups.
+            data={groups
+              .map((group) => ({
+                group: nameOf(group.names),
+                items: categories
+                  .filter((c) => c.groupId === group.id)
+                  .map((c) => ({ value: c.id, label: `${c.code} ${nameOf(c.names)}` })),
+              }))
+              .filter((group) => group.items.length > 0)}
+            value={category.id}
+            // The current name is selected, so that typing starts a search.
+            onFocus={(event) => event.currentTarget.select()}
+            onClick={(event) => event.currentTarget.select()}
+            onChange={(id) => id && id !== category.id && leave(() => setPlanning(id))}
+          />
+          <Badge variant="light">{category.code}</Badge>
+          <Title order={4}>{nameOf(category.names)}</Title>
         </Group>
-        <Button variant="default" onClick={() => setProfilesOpen(true)}>
-          {t("budget.profiles")}
-        </Button>
-      </Group>
-      {failure && <Alert color="red">{t("common.error", { message: failure.message })}</Alert>}
-      {reference.data && profiles.data && current.data && previous.data && (
-        <BudgetEditor
-          key={`${year}|${reload}`}
+        <CategoryEditor
+          // Not on the saved version: the editor starts again once everything is reloaded.
+          key={`${category.id}|${year}|${revision}`}
           bookId={bookId}
           bookCurrency={bookCurrency}
           canEdit={canEdit}
           year={year}
-          reference={reference.data}
-          profiles={profiles.data}
+          reference={ref}
+          category={category}
           current={current.data}
           previous={previous.data}
-          onReload={() => setReload(reload + 1)}
+          lines={lines.data}
+          onDirty={setDirty}
+          onReload={() => setRevision((r) => r + 1)}
         />
-      )}
-      {reference.data && profiles.data && (
-        <Modal
-          opened={profilesOpen}
-          onClose={() => setProfilesOpen(false)}
-          title={t("budget.profiles")}
-          size="lg"
-        >
-          <ProfilesPanel
-            bookId={bookId}
-            defaultLanguage={reference.data.defaultLanguage}
-            profiles={profiles.data}
-            canEdit={canEdit}
-          />
-        </Modal>
-      )}
-    </Stack>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// The table of a year
-// ---------------------------------------------------------------------------
-
-/** A signature of the saved budgets: it changes when someone else saves. */
-const signatureOf = (budgets: CategoryBudgetRow[]) =>
-  budgets.map((b) => `${b.id}:${b.version}`).join("|");
-
-function BudgetEditor({
-  bookId,
-  bookCurrency,
-  canEdit,
-  year,
-  reference,
-  profiles,
-  current,
-  previous,
-  onReload,
-}: {
-  bookId: string;
-  bookCurrency: string;
-  canEdit: boolean;
-  year: number;
-  reference: Reference;
-  profiles: BudgetProfile[];
-  current: BudgetYear;
-  previous: BudgetYear;
-  onReload: () => void;
-}) {
-  const { t, i18n } = useTranslation();
-  const queryClient = useQueryClient();
-  const nameOf = useNameOf(reference.defaultLanguage);
-
-  const categories = reference.categories.filter((c) => !c.archived);
-  const savedBy = new Map(current.budgets.map((b) => [b.categoryId, b]));
-  const previousBy = new Map(previous.budgets.map((b) => [b.categoryId, b]));
-  const previousActual = new Map(previous.actuals.map((a) => [a.categoryId, a.total]));
-  const entriesOf = new Map(current.actuals.map((a) => [a.categoryId, a.total]));
-
-  const initial = (category: Category) => {
-    const saved = savedBy.get(category.id);
-    return saved ? draftOf(saved) : blankDraft(category, profiles);
-  };
-  const [drafts, setDrafts] = useState(
-    () => new Map(categories.map((c) => [c.id, initial(c)] as const)),
-  );
-  const [open, setOpen] = useState<string | null>(null);
-  const [startOpen, setStartOpen] = useState(false);
-  // The budgets as they were when the page was opened, to notice other people's changes.
-  const [baseline] = useState(() => signatureOf(current.budgets));
-  const draftOfCategory = (c: Category) => drafts.get(c.id) ?? initial(c);
-
-  const changed = categories.filter((c) => {
-    const draft = draftOfCategory(c);
-    const saved = savedBy.get(c.id);
-    const planned = isPlanned(draft, c);
-    return saved ? !planned || !sameBudget(draftOf(saved), draft) : planned;
-  });
-  const problems = categories.filter((c) =>
-    problemOf(draftOfCategory(c), c, reference.accounts, bookCurrency),
-  );
-  const dirty = changed.length > 0;
-  const staleElsewhere = signatureOf(current.budgets) !== baseline;
-
-  const save = useMutation({
-    mutationFn: () => {
-      const toSave = changed.filter((c) => isPlanned(draftOfCategory(c), c));
-      const toRemove = changed.filter((c) => !isPlanned(draftOfCategory(c), c));
-      return unwrap(
-        api.books[":bookId"].budgets.batch.$post({
-          param: { bookId },
-          json: {
-            year,
-            save: toSave.map((c) => inputOf(c.id, year, draftOfCategory(c))),
-            remove: toRemove.map((c) => c.id),
-            versions: Object.fromEntries(
-              changed.flatMap((c) => {
-                const saved = savedBy.get(c.id);
-                return saved ? [[c.id, saved.version] as const] : [];
-              }),
-            ),
-          },
-        }),
-      );
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["books", bookId, "budgets"] });
-      onReload();
-    },
-  });
-
-  function update(category: Category, patch: Partial<Draft>) {
-    setDrafts((previousDrafts) =>
-      new Map(previousDrafts).set(category.id, { ...draftOfCategory(category), ...patch }),
+      </Stack>
     );
   }
-  const copyFromPrevious = (category: Category, percent = 0) => {
-    const budget = previousBy.get(category.id);
-    const actual = previousActual.get(category.id);
-    const raised = (text: string) =>
-      toDecimalString(
-        money(raise(minorOf(text, bookCurrency), Math.round(percent * 100)), bookCurrency),
-      );
-    if (budget) {
-      const draft = draftOf(budget);
-      update(category, {
-        ...draft,
-        existed: savedBy.has(category.id),
-        amount: draft.amount === "" ? "" : raised(draft.amount),
-      });
-    } else if (
-      actual &&
-      category.defaultBudgetType === "periodic" &&
-      minorOf(actual, bookCurrency) !== 0n
-    ) {
-      update(category, { type: "periodic", amount: raised(actual) });
-    }
-  };
-  const startFromPrevious = (percent: number) => {
-    for (const category of categories) {
-      if (!isPlanned(draftOfCategory(category), category)) copyFromPrevious(category, percent);
-    }
-  };
 
-  const groups = [...reference.groups]
-    .filter((g) => !g.archived)
-    .sort((a, b) => a.position - b.position);
-  const text = (minor: bigint) => formatMoney(money(minor, bookCurrency), i18n.language);
-  const show = (value: string | undefined) =>
-    value === undefined ? "–" : text(minorOf(value, bookCurrency));
-
-  // The year's plan, and last year's reality, by nature: transfers are left out.
-  const natureById = new Map(reference.natures.map((n) => [n.id, n]));
+  const natureById = new Map(ref.natures.map((n) => [n.id, n]));
   const totals = new Map<string, bigint>();
   const lastYear = new Map<string, bigint>();
-  for (const category of categories) {
-    const nature = natureById.get(category.natureId);
-    if (!nature || nature.transfer) continue;
-    const draft = draftOfCategory(category);
-    const planned =
-      draft.type === "periodic"
-        ? isPlanned(draft, category)
-          ? minorOf(draft.amount, bookCurrency)
-          : 0n
-        : minorOf(entriesOf.get(category.id) ?? "0", bookCurrency);
-    totals.set(nature.id, (totals.get(nature.id) ?? 0n) + planned);
+  for (const c of categories) {
+    totals.set(c.natureId, (totals.get(c.natureId) ?? 0n) + sum(yearOf(current.data, c.id).budget));
     lastYear.set(
-      nature.id,
-      (lastYear.get(nature.id) ?? 0n) +
-        minorOf(previousActual.get(category.id) ?? "0", bookCurrency),
+      c.natureId,
+      (lastYear.get(c.natureId) ?? 0n) + sum(yearOf(previous.data, c.id).actual),
     );
   }
-  const summaryNatures = [...reference.natures]
+  const summaryNatures = [...ref.natures]
     .filter((n) => !n.transfer && (!n.archived || totals.get(n.id) || lastYear.get(n.id)))
     .sort((a, b) => a.position - b.position);
   // The change adds each nature with its own sign: income up, spending down.
   const change = (values: Map<string, bigint>) =>
-    summaryNatures.reduce((sum, n) => sum + BigInt(n.sign) * (values.get(n.id) ?? 0n), 0n);
-
-  const profileOptions = profiles
-    .filter((p) => !p.archived)
-    .map((p) => ({ value: p.id, label: nameOf(p.names) }));
-  const accountOptions = reference.accounts
-    .filter((a) => !a.archived && a.kind === "bank")
-    .map((a) => ({ value: a.id, label: `${nameOf(a.names)} (${a.currency})` }));
-  const consumptionOptions = consumptionModes.map((m) => ({
-    value: m,
-    label: t(`budget.consumption.${m}`),
-  }));
+    summaryNatures.reduce((total, n) => total + BigInt(n.sign) * (values.get(n.id) ?? 0n), 0n);
 
   return (
     <Stack>
-      {staleElsewhere && (
-        <Alert color="yellow">
-          <Group justify="space-between">
-            <Text size="sm">{t("budget.changedElsewhere")}</Text>
-            <Button size="xs" variant="default" onClick={onReload}>
-              {t("budget.reload")}
-            </Button>
-          </Group>
-        </Alert>
-      )}
-      {save.error && (
-        <Alert color="red">{t("common.error", { message: save.error.message })}</Alert>
-      )}
-      {profiles.filter((p) => !p.archived).length === 0 && (
-        <Alert color="blue">{t("budget.noProfile")}</Alert>
-      )}
-      {canEdit && (
-        <Group justify="space-between">
-          <Button variant="default" onClick={() => setStartOpen(true)}>
-            {t("budget.startFrom", { year: year - 1 })}
-          </Button>
-          <Group>
-            {problems.length > 0 && (
-              <Text size="sm" c="red">
-                {t("budget.problems", { count: problems.length })}
-              </Text>
-            )}
-            <Button
-              disabled={!dirty || problems.length > 0}
-              loading={save.isPending}
-              onClick={() => save.mutate()}
-            >
-              {t("common.save")}
-            </Button>
-          </Group>
-        </Group>
-      )}
-      <Paper withBorder p="sm">
-        <Table.ScrollContainer minWidth={1000}>
-          <Table verticalSpacing={4}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>{t("budget.category")}</Table.Th>
-                <Table.Th w={150}>{t("budget.type")}</Table.Th>
-                <Table.Th w={110} ta="right">
-                  {t("budget.actualOf", { year: year - 1 })}
-                </Table.Th>
-                <Table.Th w={110} ta="right">
-                  {t("budget.plannedOf", { year: year - 1 })}
-                </Table.Th>
-                <Table.Th w={130}>{t("budget.amount")}</Table.Th>
-                <Table.Th w={150}>{t("budget.profile")}</Table.Th>
-                <Table.Th w={140}>{t("budget.consumptionLabel")}</Table.Th>
-                <Table.Th w={110} />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {groups.map((group) => {
-                const rows = categories
-                  .filter((c) => c.groupId === group.id)
-                  .sort((a, b) => a.code.localeCompare(b.code));
-                if (rows.length === 0) return null;
-                return [
-                  <Table.Tr key={group.id}>
-                    <Table.Td colSpan={8} bg="var(--mantine-color-gray-light)">
-                      <Text fw={600}>{nameOf(group.names)}</Text>
-                    </Table.Td>
-                  </Table.Tr>,
-                  ...rows.flatMap((category) => {
-                    const draft = draftOfCategory(category);
-                    const planned = isPlanned(draft, category);
-                    const problem = problemOf(draft, category, reference.accounts, bookCurrency);
-                    const previousBudget = previousBy.get(category.id);
-                    const isOpen = open === category.id;
-                    const account = reference.accounts.find((a) => a.id === draft.accountId);
-                    const needsRate = account !== undefined && account.currency !== bookCurrency;
-                    return [
-                      <Table.Tr key={category.id}>
-                        <Table.Td>
-                          <Group gap="xs" wrap="nowrap">
-                            <Badge variant="light" style={{ flexShrink: 0 }}>
-                              {category.code}
-                            </Badge>
-                            <Text size="sm">{nameOf(category.names)}</Text>
-                            <Badge size="xs" variant="dot" style={{ flexShrink: 0 }}>
-                              {nameOf(natureById.get(category.natureId)?.names ?? {})}
-                            </Badge>
-                          </Group>
-                        </Table.Td>
-                        <Table.Td>
-                          <SegmentedControl
-                            size="xs"
-                            disabled={!canEdit}
-                            value={draft.type}
-                            onChange={(value) => update(category, { type: value as BudgetType })}
-                            data={[
-                              { value: "periodic", label: t("budget.periodic") },
-                              { value: "scheduled", label: t("budget.scheduled") },
-                            ]}
-                          />
-                        </Table.Td>
-                        <Table.Td ta="right">{show(previousActual.get(category.id))}</Table.Td>
-                        <Table.Td ta="right">
-                          {previousBudget?.amount != null
-                            ? show(previousBudget.amount)
-                            : previousBudget
-                              ? t("budget.scheduled")
-                              : "–"}
-                        </Table.Td>
-                        {draft.type === "periodic" ? (
-                          <>
-                            <Table.Td>
-                              <TextInput
-                                size="xs"
-                                aria-label={t("budget.amount")}
-                                disabled={!canEdit}
-                                inputMode="decimal"
-                                value={draft.amount}
-                                error={problem === "budget.problemAmount"}
-                                onChange={(e) =>
-                                  update(category, { amount: e.currentTarget.value })
-                                }
-                                styles={{ input: { textAlign: "right" } }}
-                              />
-                            </Table.Td>
-                            <Table.Td>
-                              <Select
-                                size="xs"
-                                aria-label={t("budget.profile")}
-                                disabled={!canEdit}
-                                data={profileOptions}
-                                value={draft.profileId}
-                                allowDeselect={false}
-                                error={problem === "budget.problemProfile"}
-                                onChange={(value) => update(category, { profileId: value })}
-                              />
-                            </Table.Td>
-                            <Table.Td>
-                              <Select
-                                size="xs"
-                                aria-label={t("budget.consumptionLabel")}
-                                disabled={!canEdit}
-                                data={consumptionOptions}
-                                value={draft.consumption}
-                                allowDeselect={false}
-                                onChange={(value) =>
-                                  value &&
-                                  update(category, { consumption: value as ConsumptionMode })
-                                }
-                              />
-                            </Table.Td>
-                          </>
-                        ) : (
-                          <Table.Td colSpan={3}>
-                            <Text size="sm" c="dimmed">
-                              {t("budget.entriesOf", {
-                                amount: show(entriesOf.get(category.id) ?? "0"),
-                              })}
-                            </Text>
-                          </Table.Td>
-                        )}
-                        <Table.Td>
-                          <Group gap={2} wrap="nowrap" justify="flex-end">
-                            <Tooltip label={t("budget.details")}>
-                              <ActionIcon
-                                variant={isOpen ? "light" : "subtle"}
-                                aria-label={t("budget.details")}
-                                onClick={() => setOpen(isOpen ? null : category.id)}
-                              >
-                                ⋯
-                              </ActionIcon>
-                            </Tooltip>
-                            {canEdit && (
-                              <Tooltip label={t("budget.copyFrom", { year: year - 1 })}>
-                                <ActionIcon
-                                  variant="subtle"
-                                  aria-label={t("budget.copyFrom", { year: year - 1 })}
-                                  onClick={() => copyFromPrevious(category)}
-                                >
-                                  ⎘
-                                </ActionIcon>
-                              </Tooltip>
-                            )}
-                            {canEdit && (planned || draft.existed) && (
-                              <Tooltip label={t("budget.clear")}>
-                                <ActionIcon
-                                  variant="subtle"
-                                  color="red"
-                                  aria-label={t("budget.clear")}
-                                  onClick={() =>
-                                    setDrafts((m) =>
-                                      new Map(m).set(category.id, blankDraft(category, profiles)),
-                                    )
-                                  }
-                                >
-                                  ✕
-                                </ActionIcon>
-                              </Tooltip>
-                            )}
-                          </Group>
-                        </Table.Td>
-                      </Table.Tr>,
-                      problem && (
-                        <Table.Tr key={`${category.id}-problem`}>
-                          <Table.Td colSpan={8} pt={0}>
-                            <Text size="xs" c="red">
-                              {t(problem)}
-                            </Text>
-                          </Table.Td>
-                        </Table.Tr>
-                      ),
-                      isOpen && (
-                        <Table.Tr key={`${category.id}-details`}>
-                          <Table.Td colSpan={8}>
-                            <Group align="flex-start" grow>
-                              {draft.type === "periodic" && (
-                                <Stack gap="xs">
-                                  <Select
-                                    size="xs"
-                                    label={t("budget.account")}
-                                    description={t("budget.accountHint")}
-                                    disabled={!canEdit}
-                                    withAsterisk
-                                    error={problem === "budget.problemAccount"}
-                                    data={accountOptions}
-                                    value={draft.accountId}
-                                    onChange={(value) => update(category, { accountId: value })}
-                                  />
-                                  {needsRate && (
-                                    <TextInput
-                                      size="xs"
-                                      label={t("budget.rate", {
-                                        from: account.currency,
-                                        to: bookCurrency,
-                                      })}
-                                      disabled={!canEdit}
-                                      inputMode="decimal"
-                                      value={draft.exchangeRate}
-                                      error={problem === "budget.problemRate"}
-                                      onChange={(e) =>
-                                        update(category, { exchangeRate: e.currentTarget.value })
-                                      }
-                                    />
-                                  )}
-                                </Stack>
-                              )}
-                              <Textarea
-                                size="xs"
-                                label={t("budget.assumptions")}
-                                disabled={!canEdit}
-                                autosize
-                                minRows={2}
-                                maxLength={2000}
-                                value={draft.assumptions}
-                                onChange={(e) =>
-                                  update(category, { assumptions: e.currentTarget.value })
-                                }
-                              />
-                            </Group>
-                          </Table.Td>
-                        </Table.Tr>
-                      ),
-                    ];
-                  }),
-                ];
-              })}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
+      {header}
+      {failure && <Alert color="red">{t("common.error", { message: failure.message })}</Alert>}
+      <Paper withBorder>
+        <DataTable minWidth={760} verticalSpacing={4} highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>{t("budget.category")}</Table.Th>
+              <Table.Th ta="right">{t("budget.actualOf", { year: year - 1 })}</Table.Th>
+              <Table.Th ta="right">{t("budget.plannedOf", { year: year - 1 })}</Table.Th>
+              <Table.Th ta="right">{t("budget.gridOf", { year })}</Table.Th>
+              <Table.Th ta="right">{t("budget.entriesOf", { year })}</Table.Th>
+              <Table.Th ta="right">{t("budget.plannedOf", { year })}</Table.Th>
+              <Table.Th w={100} />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {groups.map((group) => {
+              const rows = categories.filter((c) => c.groupId === group.id);
+              if (rows.length === 0) return null;
+              return [
+                <Table.Tr key={group.id}>
+                  <Table.Td colSpan={7} bg="var(--mantine-color-gray-light)">
+                    <Text fw={600}>{nameOf(group.names)}</Text>
+                  </Table.Td>
+                </Table.Tr>,
+                ...rows.map((c) => {
+                  const now = yearOf(current.data, c.id);
+                  const before = yearOf(previous.data, c.id);
+                  return (
+                    <Table.Tr key={c.id}>
+                      <Table.Td>
+                        <Group gap="xs" wrap="nowrap">
+                          <Badge variant="light" style={{ flexShrink: 0 }}>
+                            {c.code}
+                          </Badge>
+                          <Text size="sm">{nameOf(c.names)}</Text>
+                          <Badge size="xs" variant="dot" style={{ flexShrink: 0 }}>
+                            {nameOf(natureById.get(c.natureId)?.names ?? {})}
+                          </Badge>
+                        </Group>
+                      </Table.Td>
+                      <Table.Td ta="right">{text(sum(before.actual))}</Table.Td>
+                      <Table.Td ta="right">{text(sum(before.budget))}</Table.Td>
+                      <Table.Td ta="right">{text(sum(now.grid))}</Table.Td>
+                      <Table.Td ta="right">{text(sum(now.planned))}</Table.Td>
+                      <Table.Td ta="right" fw={600}>
+                        {text(sum(now.budget))}
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        <Button size="compact-xs" onClick={() => setPlanning(c.id)}>
+                          {t("budget.plan")}
+                        </Button>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                }),
+              ];
+            })}
+          </Table.Tbody>
+        </DataTable>
       </Paper>
-      {(categories.some((c) => draftOfCategory(c).type === "scheduled") ||
-        reference.categories.some((c) => natureById.get(c.natureId)?.transfer)) && (
-        <PlannedEntries
+      {transferNatures.size > 0 && (
+        <PlannedTransfers
           bookId={bookId}
           bookCurrency={bookCurrency}
           canEdit={canEdit}
           year={year}
-          reference={reference}
-          categoryIds={categories
-            .filter((c) => draftOfCategory(c).type === "scheduled")
-            .map((c) => c.id)}
+          reference={ref}
         />
       )}
       <Paper withBorder p="sm">
-        <Table>
+        <DataTable minWidth={360}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th />
               <Table.Th ta="right">{t("budget.actualOf", { year: year - 1 })}</Table.Th>
-              <Table.Th ta="right">{t("budget.planOf", { year })}</Table.Th>
+              <Table.Th ta="right">{t("budget.plannedOf", { year })}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -733,323 +341,408 @@ function BudgetEditor({
               </Table.Td>
             </Table.Tr>
           </Table.Tbody>
-        </Table>
+        </DataTable>
       </Paper>
-      <StartFromPrevious
-        opened={startOpen}
-        year={year}
-        onClose={() => setStartOpen(false)}
-        onStart={(percent) => {
-          startFromPrevious(percent);
-          setStartOpen(false);
-        }}
-      />
     </Stack>
   );
 }
 
-function StartFromPrevious({
-  opened,
-  year,
-  onClose,
-  onStart,
-}: {
-  opened: boolean;
-  year: number;
-  onClose: () => void;
-  onStart: (percent: number) => void;
-}) {
-  const { t } = useTranslation();
-  const [percent, setPercent] = useState<number | string>(0);
-  return (
-    <Modal opened={opened} onClose={onClose} title={t("budget.startFrom", { year: year - 1 })}>
-      <Stack>
-        <Text size="sm">{t("budget.startHint", { year: year - 1 })}</Text>
-        <NumberInput
-          label={t("budget.increase")}
-          suffix=" %"
-          decimalScale={2}
-          step={0.5}
-          value={percent}
-          onChange={setPercent}
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={() => onStart(Number(percent) || 0)}>{t("budget.fill")}</Button>
-        </Group>
-      </Stack>
-    </Modal>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Profiles
+// One category: its grid, with the previous year at hand
 // ---------------------------------------------------------------------------
 
-const EVEN = [834, 834, 834, 834, 833, 833, 833, 833, 833, 833, 833, 833];
-const MONTH_KEYS = Array.from({ length: 12 }, (_, i) => i);
-
-function ProfilesPanel({
-  bookId,
-  defaultLanguage,
-  profiles,
-  canEdit,
-}: {
-  bookId: string;
-  defaultLanguage: string;
-  profiles: BudgetProfile[];
-  canEdit: boolean;
-}) {
-  const { t } = useTranslation();
-  const nameOf = useNameOf(defaultLanguage);
-  const [editing, setEditing] = useState<BudgetProfile | "new" | null>(null);
-  return (
-    <Stack>
-      {profiles.length === 0 && <Text c="dimmed">{t("budget.noProfile")}</Text>}
-      {profiles.map((profile) => (
-        <Group key={profile.id} justify="space-between">
-          <Group gap="xs">
-            <Text>{nameOf(profile.names)}</Text>
-            {profile.archived && <Badge color="gray">{t("reference.archived")}</Badge>}
-          </Group>
-          <Button variant="subtle" size="xs" onClick={() => setEditing(profile)}>
-            {canEdit ? t("budget.edit") : t("budget.view")}
-          </Button>
-        </Group>
-      ))}
-      {canEdit && editing === null && (
-        <Group>
-          <Button onClick={() => setEditing("new")}>{t("budget.newProfile")}</Button>
-        </Group>
-      )}
-      {editing !== null && (
-        <ProfileForm
-          key={editing === "new" ? "new" : editing.id}
-          bookId={bookId}
-          defaultLanguage={defaultLanguage}
-          profile={editing === "new" ? undefined : editing}
-          canEdit={canEdit}
-          onDone={() => setEditing(null)}
-        />
-      )}
-    </Stack>
-  );
-}
-
-function ProfileForm({
-  bookId,
-  defaultLanguage,
-  profile,
-  canEdit,
-  onDone,
-}: {
-  bookId: string;
-  defaultLanguage: string;
-  profile?: BudgetProfile;
-  canEdit: boolean;
-  onDone: () => void;
-}) {
-  const { t, i18n } = useTranslation();
-  const queryClient = useQueryClient();
-  const [name, setName] = useState(profile?.names[defaultLanguage] ?? "");
-  const [weights, setWeights] = useState<number[]>(profile?.weights ?? EVEN);
-  const total = weights.reduce((a, b) => a + b, 0);
-  const valid = total === 10_000 && name.trim() !== "";
-  const months = new Intl.DateTimeFormat(i18n.language, { month: "short" });
-
-  const done = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["books", bookId, "budgets"] });
-    onDone();
+function draftFrom(
+  saved: CategoryBudgetRow | undefined,
+  previous: CategoryBudgetRow | undefined,
+): Draft {
+  const shown = (amount: string) => (Number(amount) === 0 ? "" : amount.replace(/\.0+$/, ""));
+  // A year not budgeted yet starts with last year's account, and no amount.
+  const from = saved ?? previous;
+  return {
+    months: saved ? saved.months.map(shown) : MONTHS.map(() => ""),
+    accountId: from?.accountId ?? null,
+    exchangeRate: from?.exchangeRate ?? "",
+    assumptions: saved?.assumptions ?? "",
   };
-  const save = useMutation({
-    mutationFn: () => {
-      const names = { ...profile?.names, [defaultLanguage]: name.trim() };
-      return profile
-        ? unwrap(
-            api.books[":bookId"].budgets.profiles[":id"].$patch({
-              param: { bookId, id: profile.id },
-              json: { names, weights, version: profile.version },
-            }),
-          )
-        : unwrap(
-            api.books[":bookId"].budgets.profiles.$post({
-              param: { bookId },
-              json: { names, weights },
-            }),
-          );
-    },
-    onSuccess: done,
-  });
-  const archive = useMutation({
-    mutationFn: () =>
-      unwrap(
-        api.books[":bookId"].budgets.profiles[":id"].$patch({
-          param: { bookId, id: profile!.id },
-          json: { archived: !profile!.archived, version: profile!.version },
-        }),
-      ),
-    onSuccess: done,
-  });
-  const error = save.error ?? archive.error;
+}
 
+type CategoryProps = {
+  bookId: string;
+  bookCurrency: string;
+  canEdit: boolean;
+  year: number;
+  reference: Reference;
+  category: Category;
+  current: BudgetYear;
+  previous: BudgetYear;
+  lines: MonthEnd[];
+  onDirty: (dirty: boolean) => void;
+  onReload: () => void;
+};
+
+/** Reads the category's entries of the year and the one before, then starts planning. */
+function CategoryEditor(props: CategoryProps) {
+  const { t } = useTranslation();
+  const { bookId, year, reference, category } = props;
+  const subCategoryIds = reference.subCategories
+    .filter((s) => s.categoryId === category.id)
+    .map((s) => s.id)
+    .join(",");
+  const filters = (y: number) => ({
+    from: `${y}-01-01`,
+    to: `${y}-12-31`,
+    subCategoryIds,
+    limit: 2000,
+    offset: 0,
+  });
+  const entries = useJournal(bookId, filters(year));
+  const before = useJournal(bookId, filters(year - 1));
+  // The list shown while another loads is of another category: wait for ours.
+  if (entries.error) {
+    return <Alert color="red">{t("common.error", { message: entries.error.message })}</Alert>;
+  }
+  if (!entries.data || entries.isPlaceholderData || entries.isFetching) return <Loader size="sm" />;
   return (
-    <Paper withBorder p="sm">
-      <Stack>
-        {error && <Alert color="red">{t("common.error", { message: error.message })}</Alert>}
-        <TextInput
-          label={t("budget.profileName")}
-          required
-          maxLength={100}
-          disabled={!canEdit}
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-        />
-        <Group grow>
-          {MONTH_KEYS.map((month) => (
-            <NumberInput
-              key={month}
-              size="xs"
-              label={months.format(new Date(2026, month, 1))}
-              suffix=" %"
-              decimalScale={2}
-              step={0.5}
-              min={0}
-              max={100}
-              disabled={!canEdit}
-              value={(weights[month] ?? 0) / 100}
-              onChange={(value) =>
-                setWeights(
-                  weights.map((w, i) => (i === month ? Math.round(Number(value) * 100) : w)),
-                )
-              }
-              style={{ minWidth: 70 }}
-            />
-          ))}
-        </Group>
-        <Text size="sm" c={total === 10_000 ? "dimmed" : "red"}>
-          {t("budget.total", { total: (total / 100).toFixed(2) })}
-        </Text>
-        <Group justify="space-between">
-          <Group>
-            {canEdit && (
-              <Button variant="default" size="xs" onClick={() => setWeights(EVEN)}>
-                {t("budget.even")}
-              </Button>
-            )}
-            {canEdit && profile && (
-              <Button
-                variant="default"
-                size="xs"
-                loading={archive.isPending}
-                onClick={() => archive.mutate()}
-              >
-                {profile.archived ? t("budget.unarchive") : t("budget.archive")}
-              </Button>
-            )}
-          </Group>
-          <Group>
-            <Button variant="default" onClick={onDone}>
-              {t("common.cancel")}
-            </Button>
-            {canEdit && (
-              <Button disabled={!valid} loading={save.isPending} onClick={() => save.mutate()}>
-                {t("common.save")}
-              </Button>
-            )}
-          </Group>
-        </Group>
-      </Stack>
-    </Paper>
+    <CategoryPlan
+      {...props}
+      entries={entries.data.entries}
+      previousEntries={before.isPlaceholderData ? undefined : before.data?.entries}
+    />
   );
 }
 
-// ---------------------------------------------------------------------------
-// Planned entries: the plan of the scheduled categories
-// ---------------------------------------------------------------------------
-
-/** The same day one year later; 29 February becomes 28 February. */
-function yearAhead(date: string): string {
-  const [year, month, day] = date.split("-");
-  return `${Number(year) + 1}-${month}-${month === "02" && day === "29" ? "28" : day}`;
-}
-
-function PlannedEntries({
+function CategoryPlan({
   bookId,
   bookCurrency,
   canEdit,
   year,
   reference,
-  categoryIds,
+  category,
+  current,
+  previous,
+  lines,
+  onDirty,
+  onReload,
+  entries,
+  previousEntries,
+}: CategoryProps & { entries: Entry[]; previousEntries: Entry[] | undefined }) {
+  const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
+  const nameOf = useNameOf(reference.defaultLanguage);
+  const monthNames = useMonthNames("short");
+  const now = yearOf(current, category.id);
+  const before = yearOf(previous, category.id);
+  const [initial] = useState(() => draftFrom(now.saved, before.saved));
+  const [draft, setDraft] = useState(initial);
+  // As read when planning started: what is saved is the difference.
+  const [read] = useState(() => ({ rows: rowsOf(entries), entries }));
+  const [rows, setRows] = useState(read.rows);
+  const context = {
+    accounts: new Map(reference.accounts.map((a) => [a.id, a])),
+    bookCurrency,
+    year,
+  };
+  const sign = BigInt(reference.natures.find((n) => n.id === category.natureId)?.sign ?? 1);
+  /** The planned entries per month, read like the grid. */
+  const planned = plannedByMonth(rows, context).map((v) => sign * v);
+  const changes = entryChanges(rows, read.rows, context);
+  const entriesChanged = changes.create.length + changes.update.length + changes.remove.length > 0;
+  const wrongRows = invalidRows(rows, context);
+
+  const update = (patch: Partial<Draft>) => setDraft((old) => ({ ...old, ...patch }));
+  const locked = new Set(
+    lines.filter((l) => l.categoryId === category.id && l.reconciled).map((l) => l.month - 1),
+  );
+  const editor = useGrid({
+    values: MONTHS.map((m) => minorOf(draft.months[m], bookCurrency)),
+    onChange: (values) => update({ months: values.map((v) => cellText(v, bookCurrency)) }),
+    locked,
+    currency: bookCurrency,
+  });
+  /** The amounts as they would be saved, what is being typed included. */
+  const grid = editor.effective;
+  const budgetChanged =
+    JSON.stringify({ ...draft, months: grid.map((v) => cellText(v, bookCurrency)) }) !==
+    JSON.stringify(initial);
+  const dirty = budgetChanged || entriesChanged;
+  useEffect(() => onDirty(dirty), [dirty, onDirty]);
+
+  const budgeted = grid.some((a) => a !== 0n);
+  const account = reference.accounts.find((a) => a.id === draft.accountId);
+  const needsRate = account !== undefined && account.currency !== bookCurrency;
+  const problem =
+    editor.invalid !== null
+      ? "budget.problemAmount"
+      : budgeted && !draft.accountId
+        ? "budget.problemAccount"
+        : draft.accountId && needsRate && draft.exchangeRate.trim() === ""
+          ? "budget.problemRate"
+          : wrongRows > 0
+            ? "budget.problemEntries"
+            : undefined;
+
+  const save = useMutation({
+    mutationFn: () => {
+      const keep = budgeted || draft.assumptions.trim() !== "";
+      const budget = {
+        year,
+        save:
+          budgetChanged && keep
+            ? [
+                {
+                  categoryId: category.id,
+                  year,
+                  assumptions: draft.assumptions.trim(),
+                  months: grid.map((minor) => toDecimalString(money(minor, bookCurrency))),
+                  ...(draft.accountId && {
+                    accountId: draft.accountId,
+                    ...(needsRate && { exchangeRate: decimalInput(draft.exchangeRate) }),
+                  }),
+                },
+              ]
+            : [],
+        remove: budgetChanged && !keep && now.saved ? [category.id] : [],
+        versions: now.saved ? { [category.id]: now.saved.version } : {},
+      };
+      return unwrap(
+        api.books[":bookId"].budgets.plan.$post({
+          param: { bookId },
+          json: { budget, ...changes },
+        }),
+      );
+    },
+    onSuccess: async () => {
+      onDirty(false);
+      await queryClient.invalidateQueries({ queryKey: ["books", bookId] });
+      onReload();
+    },
+  });
+
+  const saveButton = (
+    <Button
+      disabled={!dirty || problem !== undefined}
+      loading={save.isPending}
+      onClick={() => save.mutate()}
+    >
+      {t("common.save")}
+    </Button>
+  );
+
+  const figure = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 });
+  const text = (minor: bigint) =>
+    figure.format(Number(toDecimalString(money(minor, bookCurrency))));
+  const row = (label: string, values: readonly bigint[], strong = false) => (
+    <Table.Tr>
+      <Table.Td style={{ whiteSpace: "nowrap" }}>{label}</Table.Td>
+      {values.map((value, i) => (
+        <Table.Td key={i} ta="right" fw={strong ? 600 : undefined}>
+          {value === 0n ? "–" : text(value)}
+        </Table.Td>
+      ))}
+      <Table.Td ta="right" fw={600}>
+        {text(sum(values))}
+      </Table.Td>
+    </Table.Tr>
+  );
+
+  return (
+    <Stack>
+      <Paper withBorder p="sm">
+        <Stack gap="sm">
+          {save.error && (
+            <Alert color="red">
+              <Group justify="space-between">
+                <Text size="sm">{t("common.error", { message: save.error.message })}</Text>
+                <Button size="xs" variant="default" onClick={onReload}>
+                  {t("budget.reload")}
+                </Button>
+              </Group>
+            </Alert>
+          )}
+          {canEdit && (
+            <GridTools
+              grid={editor}
+              monthNames={monthNames}
+              format={text}
+              previousBudget={before.budget}
+              previousActual={before.actual}
+              year={year}
+            />
+          )}
+          <DataTable minWidth={820} verticalSpacing={4} horizontalSpacing={2} fz="xs">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th />
+                {MONTHS.map((m) => (
+                  <Table.Th key={m} ta="right">
+                    {monthNames[m]}
+                  </Table.Th>
+                ))}
+                <Table.Th ta="right">{t("budget.total")}</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {row(t("budget.plannedOf", { year: year - 1 }), before.budget)}
+              {row(t("budget.actualOf", { year: year - 1 }), before.actual)}
+              <Table.Tr>
+                <Table.Td fw={600} style={{ whiteSpace: "nowrap" }}>
+                  {t("budget.gridOf", { year })}
+                </Table.Td>
+                {MONTHS.map((m) => {
+                  const { selected, ...cell } = editor.cell(m);
+                  return (
+                    <Table.Td key={m}>
+                      <TextInput
+                        {...cell}
+                        size="xs"
+                        miw={44}
+                        aria-label={`${t("budget.gridOf", { year })} ${monthNames[m]}`}
+                        title={locked.has(m) ? t("budget.locked") : undefined}
+                        disabled={!canEdit || locked.has(m)}
+                        error={editor.invalid === m}
+                        styles={{
+                          input: {
+                            textAlign: "right",
+                            paddingInline: 3,
+                            ...(selected && { background: "var(--mantine-color-blue-light)" }),
+                          },
+                        }}
+                      />
+                    </Table.Td>
+                  );
+                })}
+                <Table.Td ta="right" fw={600}>
+                  {text(sum(grid))}
+                </Table.Td>
+              </Table.Tr>
+              {row(t("budget.entriesOf", { year }), planned)}
+              {row(
+                t("budget.plannedOf", { year }),
+                MONTHS.map((m) => grid[m]! + planned[m]!),
+                true,
+              )}
+            </Table.Tbody>
+          </DataTable>
+          <Group align="flex-start" grow>
+            <Stack gap="xs">
+              <Select
+                size="xs"
+                label={t("budget.account")}
+                description={t("budget.accountHint")}
+                disabled={!canEdit}
+                withAsterisk={budgeted}
+                clearable={!budgeted}
+                error={problem === "budget.problemAccount"}
+                data={reference.accounts
+                  .filter((a) => (!a.archived && a.kind === "bank") || a.id === draft.accountId)
+                  .map((a) => ({ value: a.id, label: `${nameOf(a.names)} (${a.currency})` }))}
+                value={draft.accountId}
+                onChange={(value) => update({ accountId: value, exchangeRate: "" })}
+              />
+              {needsRate && (
+                <TextInput
+                  size="xs"
+                  label={t("budget.rate", { from: account.currency, to: bookCurrency })}
+                  disabled={!canEdit}
+                  inputMode="decimal"
+                  value={draft.exchangeRate}
+                  error={problem === "budget.problemRate"}
+                  onChange={(e) => update({ exchangeRate: e.currentTarget.value })}
+                />
+              )}
+            </Stack>
+            <Textarea
+              size="xs"
+              label={t("budget.assumptions")}
+              disabled={!canEdit}
+              autosize
+              minRows={2}
+              maxLength={2000}
+              value={draft.assumptions}
+              onChange={(e) => update({ assumptions: e.currentTarget.value })}
+            />
+          </Group>
+          {canEdit && (
+            <Group justify="flex-end">
+              {problem && (
+                <Text size="sm" c="red">
+                  {t(problem, { count: wrongRows })}
+                </Text>
+              )}
+              {saveButton}
+            </Group>
+          )}
+        </Stack>
+      </Paper>
+      <PlanEntries
+        canEdit={canEdit}
+        year={year}
+        reference={reference}
+        categoryId={category.id}
+        bookCurrency={bookCurrency}
+        rows={rows}
+        setRows={setRows}
+        previous={previousEntries}
+        unplanned={read.entries.filter((e) => Number(e.plannedAmount) === 0)}
+      />
+      {canEdit && <Group justify="flex-end">{saveButton}</Group>}
+    </Stack>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Planned transfers: their two sides add up to zero, so they have no budget
+// ---------------------------------------------------------------------------
+
+function PlannedTransfers({
+  bookId,
+  bookCurrency,
+  canEdit,
+  year,
+  reference,
 }: {
   bookId: string;
   bookCurrency: string;
   canEdit: boolean;
   year: number;
   reference: Reference;
-  categoryIds: string[];
 }) {
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
-  // Transfers are planned too: their two sides add up to zero, so they have no budget type.
-  const transferNatures = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
-  const transferCategoryIds = reference.categories
-    .filter((c) => transferNatures.has(c.natureId))
-    .map((c) => c.id);
-  const subCategories = reference.subCategories.filter(
-    (s) => categoryIds.includes(s.categoryId) || transferCategoryIds.includes(s.categoryId),
+  const natures = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
+  const categories = new Set(
+    reference.categories.filter((c) => natures.has(c.natureId)).map((c) => c.id),
   );
-  const filters = (y: number) => ({
-    from: `${y}-01-01`,
-    to: `${y}-12-31`,
+  const subCategories = reference.subCategories.filter((s) => categories.has(s.categoryId));
+  const current = useJournal(bookId, {
+    from: `${year}-01-01`,
+    to: `${year}-12-31`,
     subCategoryIds: subCategories.map((s) => s.id).join(","),
     limit: 2000,
     offset: 0,
   });
-  const current = useJournal(bookId, filters(year));
-  const [editing, setEditing] = useState<EntryDraft | null>(null);
-  const [proposing, setProposing] = useState(false);
   /** A planned transfer being created (no id) or edited. */
   const [transfer, setTransfer] = useState<{ id?: string } | null>(null);
 
-  const entries = [...(current.data?.entries ?? [])].sort(
-    (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id),
-  );
+  const entries = (current.data?.entries ?? [])
+    .filter((entry) => Number(entry.plannedAmount) !== 0)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   const format = (amount: string, currency: string) =>
     formatMoney(parseAmount(amount, currency), i18n.language);
   const subOf = new Map(reference.subCategories.map((s) => [s.id, s]));
-  const categoryOf = new Map(reference.categories.map((c) => [c.id, c]));
   const accountOf = new Map(reference.accounts.map((a) => [a.id, a]));
-  const planned = (entry: Entry) => Number(entry.plannedAmount) !== 0;
 
   return (
     <Paper withBorder p="sm">
       <Stack>
         <Group justify="space-between">
-          <Title order={4}>{t("budget.plannedEntries", { year })}</Title>
+          <Title order={4}>{t("budget.plannedTransfers", { year })}</Title>
           {canEdit && (
-            <Group>
-              <Button variant="default" size="xs" onClick={() => setProposing(true)}>
-                {t("budget.startFrom", { year: year - 1 })}
-              </Button>
-              {transferCategoryIds.length > 0 && (
-                <Button variant="default" size="xs" onClick={() => setTransfer({})}>
-                  {t("budget.newPlannedTransfer")}
-                </Button>
-              )}
-              <Button
-                size="xs"
-                onClick={() => setEditing({ ...emptyDraft(), date: `${year}-01-01` })}
-              >
-                {t("budget.newPlanned")}
-              </Button>
-            </Group>
+            <Button variant="default" size="xs" onClick={() => setTransfer({})}>
+              {t("budget.newPlannedTransfer")}
+            </Button>
           )}
         </Group>
-        <Text size="sm" c="dimmed">
-          {t("budget.plannedEntriesHint")}
-        </Text>
         {current.error && (
           <Alert color="red">{t("common.error", { message: current.error.message })}</Alert>
         )}
@@ -1057,81 +750,40 @@ function PlannedEntries({
           <Text c="dimmed">{t("budget.noPlannedEntries")}</Text>
         )}
         {entries.length > 0 && (
-          <Table.ScrollContainer minWidth={700}>
-            <Table verticalSpacing={4} highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th w={110}>{t("journal.date")}</Table.Th>
-                  <Table.Th>{t("journal.subCategory")}</Table.Th>
-                  <Table.Th>{t("journal.description")}</Table.Th>
-                  <Table.Th>{t("journal.account")}</Table.Th>
-                  <Table.Th w={110} ta="right">
-                    {t("budget.plannedAmount")}
-                  </Table.Th>
-                  <Table.Th w={110} ta="right">
-                    {t("journal.amount")}
-                  </Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {entries.map((entry) => {
-                  const sub = subOf.get(entry.subCategoryId);
-                  const category = sub && categoryOf.get(sub.categoryId);
-                  return (
-                    <Table.Tr
-                      key={entry.id}
-                      style={{ cursor: canEdit ? "pointer" : undefined }}
-                      onClick={() =>
-                        canEdit &&
-                        (entry.transferId
-                          ? setTransfer({ id: entry.transferId })
-                          : setEditing(entryDraftOf(entry, "edit")))
-                      }
-                    >
-                      <Table.Td>{formatDate(entry.date, i18n.language)}</Table.Td>
-                      <Table.Td>
-                        <Text size="sm">
-                          {category ? `${category.code} ` : ""}
-                          {sub ? nameOf(sub.names) : ""}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>{entry.description}</Table.Td>
-                      <Table.Td>{nameOf(accountOf.get(entry.accountId)?.names ?? {})}</Table.Td>
-                      <Table.Td ta="right">
-                        {planned(entry) ? format(entry.plannedAmount, entry.currency) : "–"}
-                      </Table.Td>
-                      <Table.Td ta="right">
-                        <Text size="sm" fw={600}>
-                          {format(entry.amount, entry.currency)}
-                        </Text>
-                      </Table.Td>
-                    </Table.Tr>
-                  );
-                })}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
+          <DataTable minWidth={700} verticalSpacing={4} highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={110}>{t("journal.date")}</Table.Th>
+                <Table.Th>{t("journal.subCategory")}</Table.Th>
+                <Table.Th>{t("journal.description")}</Table.Th>
+                <Table.Th>{t("journal.account")}</Table.Th>
+                <Table.Th w={110} ta="right">
+                  {t("budget.plannedAmount")}
+                </Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {entries.map((entry) => {
+                const editable = canEdit && !entry.reconciled && entry.transferId;
+                return (
+                  <Table.Tr
+                    key={entry.id}
+                    style={{ cursor: editable ? "pointer" : undefined }}
+                    c={entry.reconciled ? "dimmed" : undefined}
+                    onClick={() => editable && setTransfer({ id: entry.transferId! })}
+                  >
+                    <Table.Td>{formatDate(entry.date, i18n.language)}</Table.Td>
+                    <Table.Td>{nameOf(subOf.get(entry.subCategoryId)?.names ?? {})}</Table.Td>
+                    <Table.Td>{entry.description}</Table.Td>
+                    <Table.Td>{nameOf(accountOf.get(entry.accountId)?.names ?? {})}</Table.Td>
+                    <Table.Td ta="right">{format(entry.plannedAmount, entry.currency)}</Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </DataTable>
         )}
       </Stack>
-      <Modal
-        opened={editing !== null}
-        onClose={() => setEditing(null)}
-        title={editing?.id ? t("journal.editEntry") : t("budget.newPlanned")}
-        size="lg"
-      >
-        {editing && (
-          <EntryForm
-            key={editing.id ?? "new"}
-            bookId={bookId}
-            bookCurrency={bookCurrency}
-            reference={reference}
-            initial={editing}
-            planned
-            categoryIds={categoryIds}
-            onClose={() => setEditing(null)}
-          />
-        )}
-      </Modal>
       <Modal
         opened={transfer !== null}
         onClose={() => setTransfer(null)}
@@ -1151,106 +803,6 @@ function PlannedEntries({
           />
         )}
       </Modal>
-      <ProposeEntries
-        opened={proposing}
-        bookId={bookId}
-        bookCurrency={bookCurrency}
-        year={year}
-        filters={filters(year - 1)}
-        alreadyPlanned={new Set(entries.filter(planned).map((entry) => entry.subCategoryId))}
-        onClose={() => setProposing(false)}
-      />
     </Paper>
-  );
-}
-
-/**
- * Creates the plan of the year from the previous one: its planned entries, a
- * year later, at the amount they ended at, with an increase. A sub-category
- * that already has planned entries this year is left alone, so the proposal
- * can be taken again without doubling.
- */
-function ProposeEntries({
-  opened,
-  bookId,
-  bookCurrency,
-  year,
-  filters,
-  alreadyPlanned,
-  onClose,
-}: {
-  opened: boolean;
-  bookId: string;
-  bookCurrency: string;
-  year: number;
-  filters: Parameters<typeof useJournal>[1];
-  alreadyPlanned: Set<string>;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const previous = useJournal(bookId, filters);
-  const [percent, setPercent] = useState<number | string>(0);
-
-  const proposals = (previous.data?.entries ?? []).filter(
-    (entry) => Number(entry.plannedAmount) !== 0 && !alreadyPlanned.has(entry.subCategoryId),
-  );
-  const create = useMutation({
-    mutationFn: async () => {
-      const basisPoints = Math.round((Number(percent) || 0) * 100);
-      for (const entry of proposals) {
-        const minor = parseAmount(entry.amount, entry.currency).minor;
-        await unwrap(
-          api.books[":bookId"].journal.$post({
-            param: { bookId },
-            json: {
-              date: yearAhead(entry.date),
-              accountId: entry.accountId,
-              subCategoryId: entry.subCategoryId,
-              description: entry.description,
-              paymentTypeId: entry.paymentTypeId,
-              amount: toDecimalString(money(raise(minor, basisPoints), entry.currency)),
-              ...(entry.currency !== bookCurrency && { exchangeRate: entry.exchangeRate }),
-              planned: true,
-            },
-          }),
-        );
-      }
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["books", bookId] }),
-    onSuccess: onClose,
-  });
-
-  return (
-    <Modal opened={opened} onClose={onClose} title={t("budget.startFrom", { year: year - 1 })}>
-      <Stack>
-        <Text size="sm">
-          {t("budget.proposeHint", { year: year - 1, count: proposals.length })}
-        </Text>
-        {create.error && (
-          <Alert color="red">{t("common.error", { message: create.error.message })}</Alert>
-        )}
-        <NumberInput
-          label={t("budget.increase")}
-          suffix=" %"
-          decimalScale={2}
-          step={0.5}
-          value={percent}
-          onChange={setPercent}
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            disabled={proposals.length === 0}
-            loading={create.isPending}
-            onClick={() => create.mutate()}
-          >
-            {t("budget.createPlanned", { count: proposals.length })}
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
   );
 }

@@ -79,7 +79,7 @@ The file follows the same rules as above (header line, comma or semicolon, UTF-8
 | `description`       | no       | Free text                                                                                                                                                  |
 | `payment_type`      | no       | Payment type name                                                                                                                                          |
 | `amount`            | yes      | Signed amount, as on the bank statement: `-12.50`, `-12,50` and `-1 234,56` work. The sign is kept; the category decides whether it is spending or income. |
-| `planned_amount`    | no       | The amount first planned (the sheets' budget column). Defaults to `amount`.                                                                                |
+| `planned_amount`    | no       | The amount planned (the sheets' budget column). Empty or missing means 0: the entry was not planned.                                                       |
 | `exchange_rate`     | no       | When the account is not in the book currency: 1 unit of the account currency = this many units of the book currency.                                       |
 | `book_amount`       | no       | Instead of `exchange_rate`: the amount in the book currency. The rate is computed from the two amounts.                                                    |
 | `original_amount`   | no       | For information: the amount actually paid in another currency. Goes with `original_currency`.                                                              |

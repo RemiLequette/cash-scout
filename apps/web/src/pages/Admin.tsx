@@ -17,6 +17,7 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { authClient, useSession } from "../auth";
 import { ResetPassword } from "./Password";
+import { DataTable } from "../table";
 
 /** Turns a better-auth { data, error } result into a value or a thrown error. */
 async function check<T>(result: Promise<{ data: T | null; error: { message?: string } | null }>) {
@@ -119,7 +120,7 @@ export function Admin() {
           {t("common.error", { message: (users.error ?? remove.error)?.message })}
         </Alert>
       )}
-      <Table>
+      <DataTable minWidth={500}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{t("admin.name")}</Table.Th>
@@ -158,7 +159,7 @@ export function Admin() {
             </Table.Tr>
           ))}
         </Table.Tbody>
-      </Table>
+      </DataTable>
       <Modal opened={opened} onClose={close} title={t("admin.create")}>
         <CreateUser onClose={close} />
       </Modal>
