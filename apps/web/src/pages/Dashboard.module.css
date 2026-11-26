@@ -1,0 +1,164 @@
+/*
+ * The dashboard reads like a spreadsheet: ruled cells, short rows, frozen titles
+ * and labels. Borders are drawn by each cell (right and bottom) with separate
+ * borders, so they stay with the frozen cells while the rest scrolls.
+ */
+
+.sheet {
+  --line: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  --head: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet th,
+.sheet td {
+  padding: 0 6px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  background-color: var(--row, var(--mantine-color-body));
+}
+
+.sheet tr > :last-child {
+  border-right: 0;
+}
+
+.sheet thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--head);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* The frozen first column. */
+.sheet .label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  text-align: left;
+  border-right-width: 2px;
+}
+
+.sheet thead .label {
+  z-index: 3;
+}
+
+.labelContent {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.labelText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.toggle {
+  flex: 0 0 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mantine-color-dimmed);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sheet .number {
+  min-width: 64px;
+  text-align: right;
+}
+
+.sheet tbody .number,
+.sheet tbody .label {
+  cursor: pointer;
+}
+
+.sheet tbody .fixed {
+  cursor: default;
+}
+
+/* Shades laid over the row's own colour, which stays visible under them. */
+/* The month under way: two thin lines, so that the rows keep their colours. */
+.sheet .current {
+  box-shadow:
+    inset 1px 0 var(--mantine-color-blue-5),
+    inset -1px 0 var(--mantine-color-blue-5);
+}
+
+.sheet thead .current {
+  color: var(--mantine-color-blue-filled);
+}
+
+.sheet .total {
+  background-image: linear-gradient(
+    var(--mantine-color-gray-light),
+    var(--mantine-color-gray-light)
+  );
+  border-left: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.sheet tbody tr:hover > td {
+  box-shadow:
+    inset 0 1px var(--mantine-color-blue-4),
+    inset 0 -1px var(--mantine-color-blue-4);
+}
+
+.sheet tbody td.selected,
+.sheet tbody tr:hover > td.selected {
+  background-image: linear-gradient(
+    var(--mantine-primary-color-light),
+    var(--mantine-primary-color-light)
+  );
+  box-shadow: inset 0 0 0 2px var(--mantine-primary-color-filled);
+}
+
+.ahead {
+  font-style: italic;
+  color: var(--mantine-color-dimmed);
+}
+
+.negative {
+  color: var(--mantine-color-red-6);
+}
+
+/* Title of the accounts' section, across the sheet. */
+.sheet .section {
+  padding-top: 10px;
+  background-color: var(--head);
+  border-right: 0;
+  font-weight: 700;
+}
+
+.sectionText {
+  position: sticky;
+  left: 6px;
+}
+
+/* The colour of a group, down the left of its rows. */
+.mark {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+}
+
+.sheet .account {
+  padding-left: 20px;
+}
+
+.sheet .sum {
+  --row: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+  font-weight: 700;
+}
