@@ -25,7 +25,7 @@ Any category can hold, for any month:
 
 The budget of a month is the grid amount **plus** the planned amounts of the month's entries.
 
-Only **unplanned** entries (planned amount 0), reconciled or not, consume the grid amount. A planned entry never does: its drift from the plan is its own variance.
+Consumption is **by month**: only the **unplanned** entries (planned amount 0) dated in the month, reconciled or not, consume its grid amount. A planned entry never does: its drift from the plan is its own variance. A refund is not a special case: it is an unplanned entry of the opposite sign, which raises what remains, possibly above the grid amount.
 
 ### Budget sub-category
 
@@ -43,12 +43,13 @@ A month with a grid amount other than zero has one **budget line** in the Budget
 | Amount         | The grid amount less the month's unplanned entries, never past zero |
 | Reconciled     | Set by the user; the amount is then 0                              |
 
-- The line is **computed**, not stored: only the grid and the reconciled months are.
+- The line is a **virtual entry**: computed, not stored. Only the grid and the reconciled months are.
+- It is shown as long as its planned amount is not zero, even used up or reconciled.
 - In the journal, the only action is **reconciled**, which can be taken back.
 - A budget used up or overspent leaves the line at 0.
 - The line shows no variance of its own: variance is read on a total (below).
 - It appears in the journal, in the detail panel of the year dashboard, and in the cash projection.
-- Each month stands alone. Until its line is reconciled, what remains is still expected, **past months included**. Reconciling lets it go.
+- Each month stands alone: nothing rolls over, and there is no annual envelope. Until its line is reconciled, what remains is still expected, **past months included**. Reconciling lets it go.
 
 ### Totals
 
@@ -70,9 +71,13 @@ Example: 300 in the grid and one planned entry of 100.
 
 Amounts here are read with the sign of the category's nature.
 
+### Signs
+
+The grid reads with the **sign of the category's nature**, so that spending, most of the grid, is entered as positive numbers. What is added to or compared with the grid (previous year, planned entries per month, totals) reads the same way. **Entries**, planned ones included, keep their **true sign**, as in the journal.
+
 ### Category budget
 
-One per category and year: the **12 monthly amounts** of the grid in the book currency, the **assumptions** (free text), the **account** of the budget lines and its exchange rate. The account is required as soon as a month is not zero.
+One per category and year: the **12 monthly amounts** of the grid in the book currency, the **assumptions** (free text), the **account** of the budget lines and its exchange rate. A category has **one account for its budget in a year**, required as soon as a month is not zero: without it, overdrafts cannot be anticipated. Planned entries keep their own accounts.
 
 ## Planning view
 
@@ -110,7 +115,7 @@ Undo and redo work until the save.
 ### Editing rules
 
 - Writing a planned amount **always overwrites** the current amount.
-- A **reconciled entry** is read only here, and so is the grid cell of a reconciled month.
+- A **reconciled entry** is read only here, and so is the grid cell of a reconciled month: take the reconciliation back first to change it.
 - The grid and the list are saved together by **Save**, all or nothing. Leaving a category with unsaved changes asks first. Nothing is stored before the save.
 - A change made by someone else in the meantime is refused, as elsewhere in the application.
 
@@ -118,30 +123,24 @@ There is no "reviewed" mark.
 
 ## Effects on the rest of the application
 
-- **Journal**: budget lines replace the month-end lines. Planned and unplanned entries are unchanged.
+- **Journal**: budget lines replace the month-end lines. Planned and unplanned entries are unchanged. An **alert** reports the past entries that are not reconciled, budget lines included; they are dealt with by hand.
 - **Year dashboard**: a cell is the sum of the month's entries and budget line, for every category. The Budget sub-category replaces the unused budget line.
 - **Cash projection**: entries plus the unreconciled budget lines, past months included.
 - **Yearly balance**: planned income, spending and saving are the planned amounts of entries plus the grids.
 - **Bank import**: matching a statement line with its forecast matters more. A line left unmatched becomes an unplanned entry, which consumes the grid while the forecast is still expected.
 
-## Data and migration
+## Data
 
 - `category_budget`: 12 monthly amounts replace `type`, `amount`, `profile_id` and `consumption`.
 - `sub_category`: a flag marks the Budget sub-category; the migration creates one per category.
 - Dropped: `budget_profile`, `category.default_budget_type`, the budget type and consumption mode enums.
-- A periodic budget becomes 12 amounts: its annual amount spread by its profile, without loss.
-- A scheduled budget keeps its assumptions, with an empty grid. Its entries do not change.
-- Reconciled months are kept.
 - The import of the sheets writes the monthly amounts as they are, instead of picking a profile.
 
-## To settle before building
+Existing data is adjusted by hand: the migration does no more than the change of schema needs.
 
-1. **Existing planned entries in periodic categories** consume the budget today and will add to it. The migration must either take them out of the grid or accept that those totals rise. Count them first.
-2. **Past unreconciled lines** now stay in the projection, so they can pile up. Proposed: reconcile all the budget lines of a month at once.
-3. **Roll over and annual pool budgets** already stored: only December could be reconciled. What happens to their earlier months, which would all get a line?
-4. **Transfers**: proposed, no grid and no Budget sub-category for categories of a transfer nature; planned transfers are created from the planning view, as today from the budget page.
-5. **Refunds** are unplanned entries of the opposite sign: they raise what remains, possibly above the grid amount. To confirm.
-6. **Proposed and not yet confirmed**: line at 0 when used up, locked grid cell for a reconciled month, one account per category and year, computed line.
+## Transfers
+
+Categories of a transfer nature have no grid and no Budget sub-category, only planned transfers, created from the planning view as today from the budget page.
 
 ## Steps
 
