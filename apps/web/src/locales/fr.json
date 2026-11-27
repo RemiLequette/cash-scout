@@ -123,9 +123,9 @@
     "naturesIntro": "Les natures découpent le tableau de bord en sections (revenus, dépenses, exceptionnel…). Un solde additionne les natures choisies. Natures et soldes partagent un seul ordre, celui du tableau de bord.",
     "newNature": "Nouvelle nature",
     "editNature": "Modifier la nature",
-    "transfer": "Virements entre comptes",
-    "transferHint": "Les mouvements de cette nature restent hors du tableau de bord ; seuls ses catégories servent aux virements.",
-    "transferBadge": "Virements",
+    "transfer": "Transferts entre comptes",
+    "transferHint": "Les mouvements de cette nature restent hors du tableau de bord ; seuls ses catégories servent aux transferts.",
+    "transferBadge": "Transferts",
     "sign": "Affichage",
     "signAsEntered": "Tel que saisi",
     "signReversed": "Inversé",
@@ -258,9 +258,9 @@
       "suggestRule": "« {text} » est classé dans {subCategory}. Une règle ferait pareil pour les prochains relevés.",
       "suggestOthers": "{count, plural, one {# autre ligne à revoir de ce relevé correspond} other {# autres lignes à revoir de ce relevé correspondent}}",
       "suggestNo": "Non merci",
-      "makeTransfer": "Virement avec le compte…",
-      "transferTo": "Virement vers {account} (l'autre côté sera à rapprocher)",
-      "transferFrom": "Virement depuis {account} (l'autre côté sera à rapprocher)"
+      "makeTransfer": "Transfert avec le compte…",
+      "transferTo": "Transfert vers {account} (l'autre côté sera à rapprocher)",
+      "transferFrom": "Transfert depuis {account} (l'autre côté sera à rapprocher)"
     },
     "rules": {
       "title": "Règles",
@@ -303,7 +303,7 @@
     "rounded": "Arrondir",
     "expand": "Déplier",
     "collapse": "Replier",
-    "transfers": "Virements",
+    "transfers": "Transferts",
     "balances": "Soldes des comptes en fin de mois",
     "balanceTotal": "Tous les comptes",
     "empty": "Rien sur cette année.",
@@ -330,7 +330,7 @@
     "problemRate": "Indique le taux de change de la devise de ce compte.",
     "plannedEntries": "Écritures planifiées {year}",
     "newPlanned": "Nouvelle écriture planifiée",
-    "newPlannedTransfer": "Nouveau virement planifié",
+    "newPlannedTransfer": "Nouveau transfert planifié",
     "plannedAmount": "Prévu",
     "actualOf": "Réel {year}",
     "plan": "Planifier",
@@ -347,7 +347,7 @@
     "leaveUnsaved": "Des modifications ne sont pas sauvegardées. Les abandonner ?",
     "accountHint": "Le compte d'où ce budget devrait être dépensé : c'est là qu'apparaît, à la fin de chaque mois, ce qui reste attendu.",
     "problemAccount": "Choisissez le compte de ce budget.",
-    "plannedTransfers": "Virements planifiés {year}",
+    "plannedTransfers": "Transferts planifiés {year}",
     "noPlannedEntries": "Aucune écriture cette année.",
     "searchCategory": "Chercher une catégorie",
     "noCategory": "Aucune catégorie",
@@ -387,15 +387,15 @@
     "problemEntries": "{count, plural, one {# écriture à corriger} other {# écritures à corriger}}",
     "createPlanned": "{count, plural, one {Créer # écriture} other {Créer # écritures}}",
     "reload": "Recharger",
-    "noPlannedTransfers": "Aucun virement planifié cette année.",
+    "noPlannedTransfers": "Aucun transfert planifié cette année.",
     "transfers": {
       "filter": "Filtrer (libellé, sous-catégorie, compte)",
-      "count": "{count, plural, =0 {Aucun virement} one {# virement} other {# virements}}",
+      "count": "{count, plural, =0 {Aucun transfert} one {# transfert} other {# transferts}}",
       "delay": "Délai (j)",
-      "copied": "{count, plural, =0 {Rien à copier} one {# virement copié} other {# virements copiés}}",
-      "skipped": "{count, plural, one {# virement entre devises non modifié} other {# virements entre devises non modifiés}}",
-      "problem": "{count, plural, one {# virement à corriger} other {# virements à corriger}}",
-      "create": "{count, plural, one {Créer # virement} other {Créer # virements}}"
+      "copied": "{count, plural, =0 {Rien à copier} one {# transfert copié} other {# transferts copiés}}",
+      "skipped": "{count, plural, one {# transfert entre devises non modifié} other {# transferts entre devises non modifiés}}",
+      "problem": "{count, plural, one {# transfert à corriger} other {# transferts à corriger}}",
+      "create": "{count, plural, one {Créer # transfert} other {Créer # transferts}}"
     }
   },
   "accountKinds": {
@@ -512,12 +512,12 @@
     "changeFailed": "Le mot de passe actuel est faux, ou le nouveau n'est pas accepté."
   },
   "transfer": {
-    "new": "Nouveau virement",
-    "edit": "Modifier le virement",
-    "badge": "Virement",
+    "new": "Nouveau transfert",
+    "edit": "Modifier le transfert",
+    "badge": "Transfert",
     "leg": {
-      "source": "Virement : sort de ce compte",
-      "destination": "Virement : arrive sur ce compte"
+      "source": "Transfert : sort de ce compte",
+      "destination": "Transfert : arrive sur ce compte"
     },
     "source": "Compte source",
     "destination": "Compte destination",
@@ -531,10 +531,10 @@
     "amountPlaceholder": "300",
     "destinationAmount": "Montant reçu",
     "destinationAmountHint": "Les comptes ont des devises différentes : le montant qui arrive.",
-    "subCategoryHint": "Seulement les catégories de direction virement, exclues des totaux.",
-    "noCategory": "Ajoutez d'abord, dans les données de référence, une catégorie de direction virement avec une sous-catégorie.",
-    "reconcileHint": "Chaque côté se rapproche seul, avec sa propre ligne de relevé. Modifier le virement modifie les deux côtés.",
-    "deleteConfirm": "Supprimer ce virement et ses deux écritures ?",
+    "subCategoryHint": "Seulement les catégories de direction transfert, exclues des totaux.",
+    "noCategory": "Ajoutez d'abord, dans les données de référence, une catégorie de direction transfert avec une sous-catégorie.",
+    "reconcileHint": "Chaque côté se rapproche seul, avec sa propre ligne de relevé. Modifier le transfert modifie les deux côtés.",
+    "deleteConfirm": "Supprimer ce transfert et ses deux écritures ?",
     "invalid": {
       "date": "Saisissez une date.",
       "delayDays": "Saisissez un nombre entier de jours, de 0 à 60.",

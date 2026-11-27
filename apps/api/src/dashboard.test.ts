@@ -16,6 +16,7 @@ interface Dashboard {
   currentMonth: number;
   cells: { subCategoryId: string; month: number; total: string; entries: number }[];
   budgetLines: { categoryId: string; months: string[] }[];
+  transfers: { accountId: string; months: string[] }[];
   balances: { accountId: string; ends: string[] }[];
 }
 
@@ -184,6 +185,24 @@ describe("year dashboard", () => {
     const saving = balances.find((a) => a.accountId === b.saving.id)!;
     expect(saving.ends[1]).toBe("0.00");
     expect(saving.ends[2]).toBe("500.00");
+  });
+
+  it("gives what transfers moved on each bank account per month", async () => {
+    const b = await setup();
+    await b.entry(b.current.id, b.bakery.id, "2026-03-05", "-30"); // not a transfer
+    await b.entry(b.current.id, b.move.id, "2026-03-06", "-500");
+    await b.entry(b.current.id, b.move.id, "2026-03-20", "100");
+    await b.entry(b.saving.id, b.move.id, "2026-04-01", "500");
+    await b.entry(b.virtual.id, b.move.id, "2026-03-06", "700"); // not a bank account
+    await b.entry(b.saving.id, b.move.id, "2025-03-06", "50"); // another year
+
+    const { transfers } = await json<Dashboard>(b.dashboard());
+    expect(transfers.map((a) => a.accountId).sort()).toEqual([b.current.id, b.saving.id].sort());
+    const monthsOf = (id: string) => transfers.find((a) => a.accountId === id)!.months;
+    expect(monthsOf(b.current.id)[2]).toBe("-400.00");
+    expect(monthsOf(b.current.id)[3]).toBe("0.00");
+    expect(monthsOf(b.saving.id)[2]).toBe("0.00");
+    expect(monthsOf(b.saving.id)[3]).toBe("500.00");
   });
 
   it("counts the budget lines in the balances", async () => {

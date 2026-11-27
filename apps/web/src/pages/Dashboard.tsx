@@ -47,7 +47,12 @@ type Selection =
   /** A row of the grid in a month, or in the whole year when `month` is null. */
   | { kind: "row"; key: string; month: number | null }
   /** A bank account in a month. */
-  | { kind: "account"; accountId: string; month: number };
+  | { kind: "account"; accountId: string; month: number }
+  /** The transfers of a bank account in a month, or in the year when `month` is null. */
+  | { kind: "transfers"; accountId: string; month: number | null };
+
+/** The fold of the transfers block, among the keys of the rows. */
+const TRANSFERS_KEY = "transfers";
 
 const isSelected = (selection: Selection | null, key: string, month: number | null) =>
   selection?.kind === "row" && selection.key === key && selection.month === month;
@@ -153,11 +158,12 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
   };
   const expandAll = () =>
     setExpanded(
-      new Set(
-        rows
+      new Set([
+        ...rows
           .filter((r) => r.kind === "nature" || r.kind === "group" || r.kind === "category")
           .map(rowKey),
-      ),
+        TRANSFERS_KEY,
+      ]),
     );
 
   const error = reference.error ?? dashboard.error;
@@ -369,6 +375,15 @@ function Grid(props: {
     data.balances.reduce((sum, a) => sum + parseAmount(a.ends[i]!, bookCurrency).minor, 0n),
   );
 
+  const transfers = data.transfers.map((account) => {
+    const months = account.months.map((m) => parseAmount(m, bookCurrency).minor);
+    return { accountId: account.accountId, months, total: months.reduce((a, b) => a + b, 0n) };
+  });
+  // The block's own line: what the bank accounts gained or lost by transfers, all together.
+  const transferTotals = MONTHS.map((_, i) => transfers.reduce((sum, a) => sum + a.months[i]!, 0n));
+  const transferTotal = transferTotals.reduce((a, b) => a + b, 0n);
+  const transfersOpen = isExpanded(TRANSFERS_KEY);
+
   return (
     <table className={classes.sheet}>
       <thead>
@@ -490,6 +505,98 @@ function Grid(props: {
             </tr>
           );
         })}
+
+        {transfers.length > 0 && (
+          <>
+            <tr className={classes.sum}>
+              <td className={cx(classes.label, classes.fixed)}>
+                <div className={classes.labelContent}>
+                  <button
+                    type="button"
+                    className={classes.toggle}
+                    aria-label={t(transfersOpen ? "dashboard.collapse" : "dashboard.expand")}
+                    aria-expanded={transfersOpen}
+                    onClick={() => toggle(TRANSFERS_KEY)}
+                  >
+                    {transfersOpen ? "▾" : "▸"}
+                  </button>
+                  <span className={classes.labelText} onClick={() => toggle(TRANSFERS_KEY)}>
+                    {t("dashboard.transfers")}
+                  </span>
+                </div>
+              </td>
+              {transferTotals.map((minor, i) => (
+                <td
+                  key={i}
+                  className={cx(classes.number, classes.fixed, monthClass(i + 1), negative(minor))}
+                >
+                  {amount(minor)}
+                </td>
+              ))}
+              {[transferTotal, perMonth(transferTotal)].map((minor, i) => (
+                <td
+                  key={i}
+                  className={cx(classes.number, classes.total, classes.fixed, negative(minor))}
+                >
+                  {amount(minor)}
+                </td>
+              ))}
+            </tr>
+            {transfersOpen &&
+              transfers.map(({ accountId, months, total }) => {
+                const picked = (month: number | null) =>
+                  selection?.kind === "transfers" &&
+                  selection.accountId === accountId &&
+                  selection.month === month;
+                const pick = (month: number | null) =>
+                  select({ kind: "transfers", accountId, month });
+                return (
+                  <tr key={accountId}>
+                    <td
+                      className={cx(
+                        classes.label,
+                        classes.account,
+                        picked(null) && classes.selected,
+                      )}
+                      onClick={() => pick(null)}
+                    >
+                      <div className={classes.labelText}>
+                        {nameOf(accounts.get(accountId)?.names ?? {})}
+                      </div>
+                    </td>
+                    {months.map((minor, i) => (
+                      <td
+                        key={i}
+                        className={cx(
+                          classes.number,
+                          monthClass(i + 1),
+                          negative(minor),
+                          picked(i + 1) && classes.selected,
+                        )}
+                        onClick={() => pick(i + 1)}
+                      >
+                        {amount(minor)}
+                      </td>
+                    ))}
+                    {[total, perMonth(total)].map((minor, i) => (
+                      <td
+                        key={i}
+                        className={cx(
+                          classes.number,
+                          classes.total,
+                          negative(minor),
+                          picked(null) && classes.selected,
+                        )}
+                        onClick={() => pick(null)}
+                      >
+                        {amount(minor)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+          </>
+        )}
 
         {data.balances.length > 0 && (
           <>
@@ -625,15 +732,24 @@ function DetailPanel({
             .map((r) => r.id),
   );
 
+  // From the reference data, not the grid: transfer natures have no rows there.
+  const transferSubIds = () => {
+    const moving = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
+    return reference.subCategories
+      .filter((s) => moving.has(categories.get(s.categoryId)?.natureId ?? ""))
+      .map((s) => s.id);
+  };
+
   const month = selection?.month ?? null;
   const filters: JournalFilters | null =
     selection === null || budgetOnly
       ? null
       : {
-          ...(selection.kind === "account" ? { accountId: selection.accountId } : {}),
+          ...(selection.kind !== "row" ? { accountId: selection.accountId } : {}),
           ...(selection.kind === "row" ? { subCategoryIds: subIds.join(",") } : {}),
-          // Cells add up budget months; account balances follow the dates.
-          ...(selection.kind === "account"
+          ...(selection.kind === "transfers" ? { subCategoryIds: transferSubIds().join(",") } : {}),
+          // Cells add up budget months; balances and transfers follow the dates.
+          ...(selection.kind !== "row"
             ? month === null
               ? { from: `${year}-01-01`, to: `${year}-12-31` }
               : { from: `${year}-${pad(month)}-01`, to: lastDay(year, month) }
@@ -649,19 +765,21 @@ function DetailPanel({
     const what =
       selection.kind === "account"
         ? nameOf(accounts.get(selection.accountId)?.names ?? {})
-        : !row
-          ? ""
-          : row.kind === "nature"
-            ? nameOf(natures.get(row.id)?.names ?? {})
-            : row.kind === "balance"
-              ? nameOf(balances.get(row.id)?.names ?? {})
-              : row.kind === "group"
-                ? nameOf(groups.get(row.id)?.names ?? {})
-                : row.kind === "budget"
-                  ? `${nameOf(categories.get(row.id)?.names ?? {})} · ${t("dashboard.budgetRow")}`
-                  : row.kind === "category"
-                    ? nameOf(categories.get(row.id)?.names ?? {})
-                    : nameOf(subCategories.get(row.id)?.names ?? {});
+        : selection.kind === "transfers"
+          ? `${nameOf(accounts.get(selection.accountId)?.names ?? {})} · ${t("dashboard.transfers")}`
+          : !row
+            ? ""
+            : row.kind === "nature"
+              ? nameOf(natures.get(row.id)?.names ?? {})
+              : row.kind === "balance"
+                ? nameOf(balances.get(row.id)?.names ?? {})
+                : row.kind === "group"
+                  ? nameOf(groups.get(row.id)?.names ?? {})
+                  : row.kind === "budget"
+                    ? `${nameOf(categories.get(row.id)?.names ?? {})} · ${t("dashboard.budgetRow")}`
+                    : row.kind === "category"
+                      ? nameOf(categories.get(row.id)?.names ?? {})
+                      : nameOf(subCategories.get(row.id)?.names ?? {});
     return `${what} · ${month === null ? year : `${monthNames[month - 1]} ${year}`}`;
   })();
 

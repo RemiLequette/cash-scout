@@ -62,7 +62,7 @@ describe("natures", () => {
       ["Revenus", 1, false, 0],
       ["Dépenses", -1, false, 1],
       ["Épargne", -1, false, 2],
-      ["Virements", 1, true, 3],
+      ["Transferts", 1, true, 3],
     ]);
   });
 

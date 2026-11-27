@@ -37,12 +37,12 @@ Il agit sur le tableau de bord, et sur le budget par un seul point : il dit ce q
 
 Les écritures et les soldes gardent toujours leur signe. Changer l'affichage d'une nature qui a déjà des budgets inverse donc le sens de leurs grilles.
 
-### Virements et soldes
+### Transferts et soldes
 
-- Une nature peut être marquée **Virements entre comptes** : ses catégories servent aux virements et restent hors des totaux.
+- Une nature peut être marquée **Transferts entre comptes** : ses catégories servent aux transferts et restent hors des totaux.
 - Un **solde** est un sous-total : la somme, telle que saisie, des natures que vous choisissez.
 
-Un nouveau livre démarre avec quatre natures : Revenus, Dépenses, Épargne et Virements.
+Un nouveau livre démarre avec quatre natures : Revenus, Dépenses, Épargne et Transferts.
 
 ## Comptes
 

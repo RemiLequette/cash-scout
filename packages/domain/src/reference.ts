@@ -146,7 +146,7 @@ export function defaultNatures(
   defaultLanguage: string,
 ): { names: Names; sign: NatureSign; transfer: boolean }[] {
   const titles: Record<string, [string, string, string, string]> = {
-    fr: ["Revenus", "Dépenses", "Épargne", "Virements"],
+    fr: ["Revenus", "Dépenses", "Épargne", "Transferts"],
     en: ["Income", "Expenses", "Savings", "Transfers"],
   };
   const known = (language: string) => titles[language.split("-")[0] ?? language];
