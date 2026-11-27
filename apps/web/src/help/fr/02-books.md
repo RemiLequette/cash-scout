@@ -14,6 +14,8 @@ Chaque membre a un rôle dans chaque livre :
 
 Un livre à un seul membre est privé ; à plusieurs, il est partagé.
 
+L'onglet du navigateur porte le nom du livre ouvert et de la page affichée : un marque-page les reprend.
+
 ## Paramètres et membres
 
 Ouvrez **Paramètres et membres** dans le menu du livre. Un propriétaire peut :

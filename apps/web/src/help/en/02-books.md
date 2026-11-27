@@ -14,6 +14,8 @@ Each member has a role in each book:
 
 A book with one member is private; with several, it is shared.
 
+The browser tab carries the name of the open book and of the page shown, and a bookmark takes it over.
+
 ## Settings and members
 
 Open **Settings and members** in the book's menu. An owner can:

@@ -13,7 +13,7 @@ import {
   Title,
 } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Outlet,
   createRootRoute,
@@ -56,28 +56,51 @@ function useOpenBook(): { bookId?: string; view: BookView } {
   return { bookId, view: view ?? "journal" };
 }
 
+/** The name of a part of a book; none for the journal, the part a book opens on. */
+function useViewName(view: BookView): string | undefined {
+  const { t } = useTranslation();
+  if (view === "journal") return undefined;
+  return t(
+    view === "reference"
+      ? "book.referenceData"
+      : view === "budget"
+        ? "book.budget"
+        : view === "dashboard"
+          ? "book.dashboard"
+          : view === "import"
+            ? "book.import"
+            : "book.settingsAndMembers",
+  );
+}
+
+/**
+ * Names the browser tab, and so a bookmark, after the open book. The book comes first: a narrow tab
+ * cuts the end.
+ */
+function useDocumentTitle(bookId: string | undefined, view: BookView) {
+  const { t } = useTranslation();
+  const { data: session } = useSession();
+  const book = useBook(session ? bookId : undefined);
+  const viewName = useViewName(view);
+  const bookName = session && bookId ? book.data?.name : undefined;
+  const title = [bookName, bookName && viewName, t("app.title")].filter(Boolean).join(" · ");
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
+}
+
 /** The name of the open book and of the part shown, next to the app title. */
 function BookTitle({ bookId, view }: { bookId: string; view: BookView }) {
-  const { t } = useTranslation();
   const book = useBook(bookId);
+  const viewName = useViewName(view);
   if (!book.data) return null;
   return (
     <Text fw={600} truncate>
       {book.data.name}
-      {view !== "journal" && (
+      {viewName && (
         <Text span c="dimmed" fw={400}>
           {" · "}
-          {t(
-            view === "reference"
-              ? "book.referenceData"
-              : view === "budget"
-                ? "book.budget"
-                : view === "dashboard"
-                  ? "book.dashboard"
-                  : view === "import"
-                    ? "book.import"
-                    : "book.settingsAndMembers",
-          )}
+          {viewName}
         </Text>
       )}
     </Text>
@@ -219,6 +242,7 @@ function Layout() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const { bookId, view } = useOpenBook();
+  useDocumentTitle(bookId, view);
 
   if (isPending) {
     return (
