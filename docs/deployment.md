@@ -17,7 +17,12 @@ Requirements on the server: Docker with Compose 2.24 or later (`docker compose v
    - `BETTER_AUTH_URL=https://cash.smith.lequette.eu`.
    - `PROXY_NETWORK`: the Caddy network found above.
    - `SUPERUSER_EMAIL`, `SUPERUSER_PASSWORD`: the administrator, created at first start. Sign-up is closed: the super user creates every account.
-4. **Caddy**: add the block of [`deploy/Caddyfile.snippet`](../deploy/Caddyfile.snippet) to the Caddyfile of the server and reload Caddy.
+4. **Caddy**: add the block of [`deploy/Caddyfile.snippet`](../deploy/Caddyfile.snippet) to the Caddyfile of the server, once: a name defined twice makes the whole file invalid. Validate, and reload only if validation succeeds:
+   ```sh
+   docker exec <caddy-container> caddy validate --config /etc/caddy/Caddyfile
+   docker exec <caddy-container> caddy reload --config /etc/caddy/Caddyfile
+   ```
+   Do not restart Caddy with an invalid file: it would loop at start, taking down every site it serves.
 5. **Start**: `scripts/deploy.sh`. It builds the image, starts the services and applies the migrations.
 6. **Check**: open `https://cash.smith.lequette.eu` and sign in as the super user.
 7. **Backups**: add the nightly dump to the crontab (`crontab -e`):
