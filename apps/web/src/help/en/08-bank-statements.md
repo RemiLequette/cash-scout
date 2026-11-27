@@ -52,7 +52,7 @@ In a rule, **the label contains** looks in the counterparty, the label and the m
 **Import** writes the validated lines into the journal in one go:
 
 - a new line becomes a **reconciled** entry dated as the bank dates it;
-- a matched entry becomes **reconciled** and takes the bank's date, and for a forecast the bank's amount (the side of a transfer keeps its date and amount).
+- a matched entry becomes **reconciled** and takes the bank's date (a forecast keeps its [budget month](04-journal.md)), and for a forecast the bank's amount (the side of a transfer keeps its date and amount).
 
 When no line is left to review and the statement gives a balance, the screen offers to **set the opening balance** of the account so that the account matches the statement's last balance. It shows the old and the new amount; it is ticked for you only when the account has no entry yet. For an account in another currency, give the exchange rate of the import.
 

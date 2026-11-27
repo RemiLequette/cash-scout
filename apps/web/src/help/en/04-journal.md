@@ -18,6 +18,15 @@ The journal holds one entry per transaction, **past or future**, for the open bo
 
 The category decides whether an amount is income or spending, never its sign.
 
+## Budget month
+
+An entry counts in the month of its date. When it falls just before or just after the month it belongs to (a salary paid on the 31st, a rent taken on the 2nd), tick **Count in …**: up to the 15th it counts in the month before, from the 16th in the month after. The journal says so next to its date (“→ Nov”).
+
+- Budgets, the dashboard and the journal's period filter follow that month.
+- Balances, the projection and reconciling always follow the date.
+- When importing a statement moves a forecast to another month, the box is ticked for you, so that it stays in its month.
+- If you change the date, the box stays ticked as long as the same month can be reached.
+
 ## Entering fast
 
 - **New entry** opens the form. **Start from a frequent entry** proposes the ones you use most in the last 12 months, dated today. A new entry is ticked **Reconciled**: untick it to enter a forecast.

@@ -16,7 +16,10 @@ export const amountTextSchema = z
   .trim()
   .regex(/^[+-]?\d+(\.\d+)?$/, "Invalid amount");
 
-/** Calendar date, "2026-11-22". Year and month are derived from it, never stored. */
+/**
+ * Calendar date, "2026-11-22". Year and month are derived from it, never stored;
+ * see budget-month.ts for the month an entry counts in.
+ */
 export const entryDateSchema = z.iso.date();
 
 /**
@@ -46,6 +49,8 @@ export const entryInputSchema = z
     originalAmount: amountTextSchema.nullable().optional(),
     originalCurrency: currencySchema.nullable().optional(),
     reconciled: z.boolean().optional(),
+    /** Counts in the budget of the month before or after its date's (see budget-month.ts). */
+    monthShifted: z.boolean().optional(),
     /**
      * Part of the budget's plan: the planned amount is then the amount. An entry
      * made in the journal is not planned, and its planned amount is 0.
@@ -74,6 +79,7 @@ export const entryUpdateSchema = z
     originalAmount: amountTextSchema.nullable(),
     originalCurrency: currencySchema.nullable(),
     reconciled: z.boolean(),
+    monthShifted: z.boolean(),
     planned: z.boolean(),
     version: versionSchema,
   })
@@ -177,7 +183,7 @@ export const journalQuerySchema = z.object({
     .transform((text) => (text === "" ? [] : text.split(",")))
     .pipe(z.array(z.uuid()).max(1000))
     .optional(),
-  /** Only these months ("2026-11"), comma-separated; an empty list matches no entry. */
+  /** Only these budget months ("2026-11"), comma-separated; an empty list matches no entry. */
   months: z
     .string()
     .transform((text) => (text === "" ? [] : text.split(",")))

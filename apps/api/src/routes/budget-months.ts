@@ -7,6 +7,7 @@ import {
   unconvert,
 } from "@cash-scout/domain";
 import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { BUDGET_MONTH, inBudgetYear } from "../db/budget-date.js";
 import type { Tx } from "../db/client.js";
 import {
   bookAccount,
@@ -17,8 +18,6 @@ import {
   nature,
   subCategory,
 } from "../db/schema.js";
-
-const MONTH = sql<number>`extract(month from ${journalEntry.date})::int`;
 
 export const budgetColumns = {
   version: categoryBudget.version,
@@ -31,7 +30,7 @@ export const budgetColumns = {
   exchangeRate: categoryBudget.exchangeRate,
 };
 
-/** What the journal holds for a category in each month, in minor units of the book currency. */
+/** What the journal holds for a category in each budget month, in minor units of the book currency. */
 export interface CategoryJournal {
   /** Every entry. */
   actual: bigint[];
@@ -50,10 +49,7 @@ const zeros = () => Array<bigint>(MONTHS).fill(0n);
  * entries, all read with the sign of the category's nature.
  */
 export async function loadYear(tx: Tx, bookId: string, bookCurrency: string, year: number) {
-  const inYear = and(
-    eq(journalEntry.bookId, bookId),
-    sql`extract(year from ${journalEntry.date}) = ${year}`,
-  );
+  const inYear = and(eq(journalEntry.bookId, bookId), inBudgetYear(year));
   const [rows, totals, plannedEntries] = await Promise.all([
     tx
       .select({ ...budgetColumns, code: category.code, sign: nature.sign })
@@ -66,7 +62,7 @@ export async function loadYear(tx: Tx, bookId: string, bookCurrency: string, yea
       .select({
         categoryId: subCategory.categoryId,
         sign: nature.sign,
-        month: MONTH,
+        month: BUDGET_MONTH,
         actual: sql<string>`sum(${journalEntry.bookAmount})`,
         reconciled: sql<string>`coalesce(sum(${journalEntry.bookAmount}) filter (where ${journalEntry.reconciled}), 0)`,
         unplanned: sql<string>`coalesce(sum(${journalEntry.bookAmount}) filter (where ${journalEntry.plannedAmount} = 0), 0)`,
@@ -76,13 +72,13 @@ export async function loadYear(tx: Tx, bookId: string, bookCurrency: string, yea
       .innerJoin(category, eq(category.id, subCategory.categoryId))
       .innerJoin(nature, eq(nature.id, category.natureId))
       .where(inYear)
-      .groupBy(subCategory.categoryId, nature.sign, MONTH),
+      .groupBy(subCategory.categoryId, nature.sign, BUDGET_MONTH),
     // One by one: each planned amount is converted at its own entry's rate.
     tx
       .select({
         categoryId: subCategory.categoryId,
         sign: nature.sign,
-        month: MONTH,
+        month: BUDGET_MONTH,
         plannedAmount: journalEntry.plannedAmount,
         exchangeRate: journalEntry.exchangeRate,
         currency: bookAccount.currency,

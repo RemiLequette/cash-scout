@@ -6,10 +6,10 @@ The **Dashboard** reads one year at a glance. It never changes data, and every m
 
 - **Columns**: the 12 months, the year's total and the value per month (a twelfth of the total, forecasts included).
 - **Rows**: your natures and balances, in the order set in the reference data. A nature opens on its groups, categories and sub-categories. Use _Expand all_ and _Collapse all_.
-- A category's cell is the sum of the month's entries, reconciled or not, and of its Budget line. Future values are shown differently from past ones. The current month is shaded.
+- A category's cell is the sum of the month's entries (by their [budget month](04-journal.md)), reconciled or not, and of its Budget line. Future values are shown differently from past ones. The current month is shaded.
 - The **Budget** line appears under an expanded category, so that its sub-categories and this line add up to the category.
 - **Round** hides the cents.
-- **Account balances at month end** sums the entries up to each month's end. Future months are the projected balance. Virtual accounts are left out.
+- **Account balances at month end** sums the entries up to each month's end. Future months are the projected balance. Virtual accounts are left out. Balances follow the dates: with entries counted in another month, a month's change may differ from the sum of its cells.
 
 ## Detail panel
 

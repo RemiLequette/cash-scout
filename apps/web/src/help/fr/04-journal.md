@@ -18,6 +18,15 @@ Le journal contient une écriture par opération, **passée ou future**, pour le
 
 La catégorie décide si un montant est un revenu ou une dépense, jamais son signe.
 
+## Mois du budget
+
+Une écriture compte dans le mois de sa date. Quand elle tombe juste avant ou juste après le mois auquel elle appartient (un salaire versé le 31, un loyer prélevé le 2), cochez **Compter en …** : jusqu'au 15, elle compte dans le mois précédent ; à partir du 16, dans le mois suivant. Le journal l'indique à côté de sa date (« → nov. »).
+
+- Les budgets, le tableau de bord et le choix de la période du journal suivent ce mois.
+- Les soldes, la projection et le pointage suivent toujours la date.
+- Quand l'import d'un relevé change le mois d'une prévision, la case est cochée toute seule pour qu'elle reste dans son mois.
+- Si vous changez la date, la case reste cochée tant que le même mois peut être atteint.
+
 ## Saisir vite
 
 - **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose celles que vous utilisez le plus sur les 12 derniers mois, datées d'aujourd'hui. Une nouvelle écriture est cochée **Rapproché** : décochez pour saisir une prévision.

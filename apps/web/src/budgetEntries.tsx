@@ -1,10 +1,13 @@
 import {
+  budgetMonth,
   convert,
   entriesToCopy,
   money,
+  monthKept,
   parseAmount,
   rateSchema,
   scheduleDates,
+  shiftToKeep,
   type PlanInput,
 } from "@cash-scout/domain";
 import {
@@ -45,6 +48,8 @@ export interface PlanRow {
   id?: string;
   version?: number;
   date: string;
+  /** The budget month a shifted entry is meant to count in, "2026-11". */
+  keptMonth: string | null;
   subCategoryId: string;
   description: string;
   accountId: string;
@@ -73,6 +78,7 @@ export function rowsOf(entries: readonly Entry[]): PlanRow[] {
       id: e.id,
       version: e.version,
       date: e.date,
+      keptMonth: e.monthShifted ? budgetMonth(e.date, true) : null,
       subCategoryId: e.subCategoryId,
       description: e.description,
       accountId: e.accountId,
@@ -109,7 +115,7 @@ function problemsOf(row: PlanRow, { accounts, bookCurrency, year }: Context) {
   const account = accounts.get(row.accountId);
   const foreign = account !== undefined && account.currency !== bookCurrency;
   return {
-    date: !row.date.startsWith(`${year}-`),
+    date: !monthKept(row.date, row.keptMonth).startsWith(`${year}-`),
     account: !account,
     subCategory: !row.subCategoryId,
     amount: !account || amountOf(row, account.currency) === null,
@@ -130,7 +136,8 @@ export function plannedByMonth(rows: readonly PlanRow[], context: Context): bigi
   const months = Array<bigint>(12).fill(0n);
   for (const row of rows) {
     const account = context.accounts.get(row.accountId);
-    if (row.removed || !account || !row.date.startsWith(`${context.year}-`)) continue;
+    const budgetedIn = monthKept(row.date, row.keptMonth);
+    if (row.removed || !account || !budgetedIn.startsWith(`${context.year}-`)) continue;
     const minor = amountOf(row, account.currency);
     if (minor === null) continue;
     let inBook = minor;
@@ -139,7 +146,7 @@ export function plannedByMonth(rows: readonly PlanRow[], context: Context): bigi
       if (!rateSchema.safeParse(rate).success) continue;
       inBook = convert(money(minor, account.currency), rate, context.bookCurrency).minor;
     }
-    const month = Number(row.date.slice(5, 7)) - 1;
+    const month = Number(budgetedIn.slice(5, 7)) - 1;
     months[month] = months[month]! + inBook;
   }
   return months;
@@ -168,7 +175,10 @@ export function entryChanges(
       paymentTypeId: row.paymentTypeId,
     };
     if (!row.id) {
-      if (!row.removed) create.push({ ...fields, ...rate, amount: decimalInput(row.amount) });
+      const monthShifted = row.keptMonth !== null && shiftToKeep(row.date, row.keptMonth);
+      if (!row.removed) {
+        create.push({ ...fields, ...rate, monthShifted, amount: decimalInput(row.amount) });
+      }
       continue;
     }
     if (row.removed) {
@@ -522,6 +532,7 @@ export function PlanEntries({
         copies.map((e) => ({
           key: newKey(),
           date: e.date,
+          keptMonth: e.monthShifted ? budgetMonth(e.date, true) : null,
           subCategoryId: e.subCategoryId,
           description: e.description,
           accountId: e.accountId,
@@ -541,7 +552,7 @@ export function PlanEntries({
   const moveDay = () => {
     if (!Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 31) return;
     change((row) => {
-      const month = row.date.slice(0, 7);
+      const month = monthKept(row.date, row.keptMonth);
       const [y, m] = month.split("-").map(Number);
       const end = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
       return { date: `${month}-${String(Math.min(dayNumber, end)).padStart(2, "0")}` };
@@ -570,6 +581,7 @@ export function PlanEntries({
                     {
                       key: newKey(),
                       date: last?.date ?? `${year}-01-01`,
+                      keptMonth: null,
                       subCategoryId:
                         last?.subCategoryId ?? subCategories.find((s) => !s.archived)?.value ?? "",
                       description: "",
@@ -830,6 +842,7 @@ function ScheduleForm({
     (date) => ({
       key: newKey(),
       date,
+      keptMonth: null,
       subCategoryId: draft.subCategoryId,
       description: draft.description,
       accountId: draft.accountId,

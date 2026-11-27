@@ -11,6 +11,7 @@ import {
 import { and, count, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { BUDGET_MONTH, inBudgetYear } from "../db/budget-date.js";
 import { withUser, type Db } from "../db/client.js";
 import { book, bookAccount, category, journalEntry, nature, subCategory } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
@@ -23,10 +24,10 @@ const MONTH = sql<number>`extract(month from ${journalEntry.date})::int`;
  * The year dashboard of a book, mounted under /books/:bookId/dashboard: what
  * the grid of the page is made of, all in the book currency. Members read.
  *
- * - `cells`: what the entries hold per sub-category and month, transfers left out.
+ * - `cells`: what the entries hold per sub-category and budget month, transfers left out.
  * - `budgetLines`: the budget lines of the year per category and month, signed
  *   like the entries; 0 when used up or reconciled.
- * - `balances`: the balance of each bank account at the end of each month.
+ * - `balances`: the balance of each bank account at the end of each month, by date.
  */
 export function dashboardRoutes(db: Db) {
   return new Hono<AppEnv>().get("/", zValidator("query", dashboardQuerySchema), async (c) => {
@@ -51,7 +52,7 @@ export function dashboardRoutes(db: Db) {
         tx
           .select({
             subCategoryId: journalEntry.subCategoryId,
-            month: MONTH,
+            month: BUDGET_MONTH,
             total: sql<string>`sum(${journalEntry.bookAmount})`,
             entries: count(),
           })
@@ -59,8 +60,10 @@ export function dashboardRoutes(db: Db) {
           .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
           .innerJoin(category, eq(category.id, subCategory.categoryId))
           .innerJoin(nature, eq(nature.id, category.natureId))
-          .where(and(eq(journalEntry.bookId, bookId), thisYear, eq(nature.transfer, false)))
-          .groupBy(journalEntry.subCategoryId, MONTH),
+          .where(
+            and(eq(journalEntry.bookId, bookId), inBudgetYear(year), eq(nature.transfer, false)),
+          )
+          .groupBy(journalEntry.subCategoryId, BUDGET_MONTH),
         tx
           .select({
             id: bookAccount.id,

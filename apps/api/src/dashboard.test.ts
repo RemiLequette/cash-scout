@@ -107,6 +107,49 @@ describe("year dashboard", () => {
     });
   });
 
+  it("counts a shifted entry in its budget month, and in balances by its date", async () => {
+    const b = await setup();
+    await b.budgetFood();
+    const { id } = await b.post("/journal", {
+      date: "2026-10-31",
+      accountId: b.current.id,
+      subCategoryId: b.bakery.id,
+      amount: "-30",
+      monthShifted: true,
+    });
+    // December 2025 counted in January 2026.
+    await b.post("/journal", {
+      date: "2025-12-31",
+      accountId: b.current.id,
+      subCategoryId: b.bakery.id,
+      amount: "-10",
+      monthShifted: true,
+    });
+
+    const data = await json<Dashboard>(b.dashboard());
+    expect(data.cells.map((c) => [c.month, c.total]).sort()).toEqual([
+      [1, "-10.00"],
+      [11, "-30.00"],
+    ]);
+    expect(data.budgetLines[0]!.months[9]).toBe("-100.00");
+    expect(data.budgetLines[0]!.months[10]).toBe("-70.00");
+    // October's balance holds the entry: nine budget lines before it, then October's.
+    const { ends } = data.balances.find((a) => a.accountId === b.current.id)!;
+    expect(ends[9]).toBe("-1030.00");
+
+    const journal = `/books/${b.bookId}/journal`;
+    const november = await json<{ entries: { id: string }[] }>(
+      b.owner.request("GET", `${journal}?months=2026-11`),
+    );
+    expect(november.entries.map((e) => e.id)).toEqual([id]);
+
+    // A new date keeps the budget month, or drops the shift once inside it.
+    const moved = (date: string) =>
+      json<{ monthShifted: boolean }>(b.owner.request("PATCH", `${journal}/${id}`, { date }));
+    expect((await moved("2026-10-30")).monthShifted).toBe(true);
+    expect((await moved("2026-11-03")).monthShifted).toBe(false);
+  });
+
   it("gives the budget lines of each month, past ones included", async () => {
     const b = await setup();
     await b.budgetFood();

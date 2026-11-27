@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import {
   bookAmount,
+  budgetMonth,
   entryInputSchema,
   entryUpdateSchema,
   journalQuerySchema,
@@ -9,6 +10,7 @@ import {
   projectionQuerySchema,
   reconcileSchema,
   resolveRate,
+  shiftToKeep,
   toDecimalString,
 } from "@cash-scout/domain";
 import {
@@ -28,6 +30,7 @@ import {
 import { Hono } from "hono";
 import type { z } from "zod";
 import { HTTPException } from "hono/http-exception";
+import { BUDGET_DATE } from "../db/budget-date.js";
 import { withUser, type Db, type Tx } from "../db/client.js";
 import { book, bookAccount, journalEntry, paymentType, subCategory } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
@@ -105,6 +108,7 @@ export const entryColumns = {
   originalAmount: journalEntry.originalAmount,
   originalCurrency: journalEntry.originalCurrency,
   reconciled: journalEntry.reconciled,
+  monthShifted: journalEntry.monthShifted,
   scheduleId: journalEntry.scheduleId,
   transferId: journalEntry.transferId,
   transferLeg: journalEntry.transferLeg,
@@ -159,6 +163,7 @@ export async function createEntry(
       bookAmount: checked(() => bookAmount(amount, rate, bookCurrency)).minor,
       ...originalOf(input.originalAmount, input.originalCurrency),
       reconciled: input.reconciled ?? false,
+      monthShifted: input.monthShifted ?? false,
     })
     .returning(entryColumns);
   return outEntry(created!, account.currency, bookCurrency);
@@ -214,10 +219,17 @@ export async function updateEntry(
   const rate = checked(() =>
     resolveRate(current.currency, bookCurrency, input.exchangeRate ?? current.exchangeRate),
   );
+  // A shifted entry that changes date keeps its budget month, unless told otherwise.
+  const monthShifted =
+    input.monthShifted ??
+    (current.monthShifted && input.date !== undefined
+      ? shiftToKeep(input.date, budgetMonth(current.date, true))
+      : undefined);
   const [updated] = await tx
     .update(journalEntry)
     .set({
       date: input.date,
+      monthShifted,
       accountId: input.accountId,
       subCategoryId: input.subCategoryId,
       description: input.description,
@@ -279,7 +291,7 @@ export function journalRoutes(db: Db) {
           if (query.months) {
             filters.push(
               query.months.length > 0
-                ? inArray(sql`to_char(${journalEntry.date}, 'YYYY-MM')`, query.months)
+                ? inArray(sql`to_char(${BUDGET_DATE}, 'YYYY-MM')`, query.months)
                 : sql`false`,
             );
           }
@@ -397,11 +409,11 @@ export function journalRoutes(db: Db) {
         return c.json(result);
       })
 
-      // The months holding entries, with their number, for the period picker.
+      // The budget months holding entries, with their number, for the period picker.
       .get("/months", async (c) => {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
-        const month = sql<string>`to_char(${journalEntry.date}, 'YYYY-MM')`;
+        const month = sql<string>`to_char(${BUDGET_DATE}, 'YYYY-MM')`;
         const rows = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "viewer");
           return tx

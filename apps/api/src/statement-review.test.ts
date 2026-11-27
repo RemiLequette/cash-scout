@@ -110,7 +110,13 @@ describe("statement review and import", () => {
     const res = await b.run(id);
     expect(await res.json()).toEqual({ created: 0, matched: 1, openingSet: false });
     expect(await b.entries()).toEqual([
-      expect.objectContaining({ id: forecast, date: "2026-10-30", reconciled: true }),
+      // Planned in November, paid in October: still November's.
+      expect.objectContaining({
+        id: forecast,
+        date: "2026-10-30",
+        reconciled: true,
+        monthShifted: true,
+      }),
     ]);
     expect((await b.read(id)).lines.find((l) => l.id === line.id)).toMatchObject({
       status: "imported",
@@ -221,7 +227,12 @@ describe("statement review and import", () => {
     const res = await b.undo(id);
     expect(await res.json()).toEqual({ removed: 1, restored: 1, skipped: 0 });
     expect(await b.entries()).toEqual([
-      expect.objectContaining({ id: forecast, date: "2026-11-02", reconciled: false }),
+      expect.objectContaining({
+        id: forecast,
+        date: "2026-11-02",
+        reconciled: false,
+        monthShifted: false,
+      }),
     ]);
     const after = (await b.read(id)).lines;
     expect(after.filter((l) => l.status === "validated")).toHaveLength(2);
