@@ -346,7 +346,7 @@ describe("journal list and balances", () => {
 });
 
 describe("frequent descriptions", () => {
-  it("gives the most used ones with their latest entry, without forecasts", async () => {
+  it("gives the most used ones with their latest entry, without planned entries", async () => {
     const b = await bookWithReference();
     const daysAgo = (days: number) => {
       const date = new Date();
@@ -363,11 +363,14 @@ describe("frequent descriptions", () => {
     });
     await add("Carrefour", 40);
     await add("Carrefour", 50);
-    // Planned: a forecast carries the same description.
-    await add("Loyer", 15);
-    await add("Loyer", 45);
-    await add("Loyer", 75);
-    await add("Loyer", -5, { reconciled: false });
+    // Planned, then reconciled: changed or reconciled, not made again.
+    await add("Loyer", 15, { planned: true });
+    await add("Loyer", 45, { planned: true });
+    await add("Loyer", 75, { planned: true });
+    // Not reconciled yet: a forecast is not a habit.
+    await add("Café", 5, { reconciled: false });
+    await add("Café", 6, { reconciled: false });
+    await add("Café", 7, { reconciled: false });
     // Too old to count.
     for (const days of [400, 410, 420, 430]) await add("Ancien magasin", days);
     // No description.

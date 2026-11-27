@@ -28,7 +28,7 @@ An entry counts in the month of its date. When it falls just before or just afte
 
 ## Entering fast
 
-- **New entry** opens the form. **Start from a frequent entry** proposes the ones you use most in the last 12 months, dated today. A new entry is ticked **Reconciled**: untick it to enter a forecast.
+- **New entry** opens the form. **Start from a frequent entry** proposes the entries you made yourself most often in the last 12 months (planned ones are left out), dated today. A new entry is ticked **Reconciled**: untick it to enter a forecast.
 - The arrow of **New entry** also starts a **transfer** or a **compensation**.
 - **Duplicate** copies an existing entry.
 - **Mark reconciled** and **Mark as forecast** change the status of an entry from the list.

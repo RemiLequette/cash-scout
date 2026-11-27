@@ -354,18 +354,14 @@ export function journalRoutes(db: Db) {
       })
 
       // The descriptions most used in the last 12 months, each with its latest
-      // entry, to start a new entry from. Descriptions found on a forecast are
-      // left out: those are planned, not typed.
+      // entry, to start a new entry from. Only entries made in the journal count
+      // (planned amount 0): a planned entry is changed or reconciled, not made again.
       .get("/frequent", async (c) => {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
         const key = sql<string>`lower(btrim(${journalEntry.description}))`;
         const result = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "viewer");
-          const forecasts = tx
-            .select({ key })
-            .from(journalEntry)
-            .where(and(eq(journalEntry.bookId, bookId), eq(journalEntry.reconciled, false)));
           const top = await tx
             .select({ key, uses: count() })
             .from(journalEntry)
@@ -373,11 +369,11 @@ export function journalRoutes(db: Db) {
               and(
                 eq(journalEntry.bookId, bookId),
                 eq(journalEntry.reconciled, true),
+                eq(journalEntry.plannedAmount, 0n),
                 isNull(journalEntry.transferId),
                 isNull(journalEntry.compensationId),
                 sql`${key} <> ''`,
                 gte(journalEntry.date, sql`current_date - interval '12 months'`),
-                sql`${key} not in (${forecasts})`,
               ),
             )
             .groupBy(key)
@@ -393,6 +389,7 @@ export function journalRoutes(db: Db) {
                 and(
                   eq(journalEntry.bookId, bookId),
                   eq(journalEntry.reconciled, true),
+                  eq(journalEntry.plannedAmount, 0n),
                   isNull(journalEntry.transferId),
                   isNull(journalEntry.compensationId),
                   inArray(

@@ -28,7 +28,7 @@ Une écriture compte dans le mois de sa date. Quand elle tombe juste avant ou ju
 
 ## Saisir vite
 
-- **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose celles que vous utilisez le plus sur les 12 derniers mois, datées d'aujourd'hui. Une nouvelle écriture est cochée **Rapproché** : décochez pour saisir une prévision.
+- **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose les écritures que vous avez saisies vous-même le plus souvent sur les 12 derniers mois (les planifiées sont écartées), datées d'aujourd'hui. Une nouvelle écriture est cochée **Rapproché** : décochez pour saisir une prévision.
 - La flèche de **Nouvelle écriture** démarre aussi un **transfert** ou une **compensation**.
 - **Dupliquer** copie une écriture existante.
 - **Marquer rapprochées** et **Marquer en prévision** changent le statut d'une écriture depuis la liste.
