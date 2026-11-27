@@ -18,6 +18,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -374,6 +375,22 @@ export const compensation = pgTable(
 
 export const compensationSide = pgEnum("compensation_side", ["plus", "minus"]);
 
+/**
+ * One bank movement counting in several sub-categories (see docs/splits.md):
+ * journal entries, its parts, that share the account, date, month shift and
+ * reconciled state. The bank amount is their sum and is not stored.
+ */
+export const split = pgTable(
+  "split",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    ...timestamps,
+    version: version(),
+  },
+  (t) => [unique().on(t.id, t.bookId), index("split_book_idx").on(t.bookId)],
+);
+
 export const journalEntry = pgTable(
   "journal_entry",
   {
@@ -407,6 +424,10 @@ export const journalEntry = pgTable(
     /** The compensation this entry is one side of, and which side. */
     compensationId: uuid("compensation_id"),
     compensationSide: compensationSide("compensation_side"),
+    /** The split this entry is a part of. */
+    splitId: uuid("split_id"),
+    /** The part of a split that takes what the others leave of the bank amount. */
+    splitRemainder: boolean("split_remainder").notNull().default(false),
     /** The statement import that created the entry. */
     importBatchId: uuid("import_batch_id").references((): AnyPgColumn => importBatch.id, {
       onDelete: "set null",
@@ -437,6 +458,18 @@ export const journalEntry = pgTable(
       "journal_entry_account_check",
       sql`(${t.accountId} IS NULL) = (${t.compensationId} IS NOT NULL)`,
     ),
+    foreignKey({
+      columns: [t.splitId, t.bookId],
+      foreignColumns: [split.id, split.bookId],
+    }).onDelete("cascade"),
+    uniqueIndex("journal_entry_split_remainder_unique")
+      .on(t.splitId)
+      .where(sql`${t.splitRemainder}`),
+    check(
+      "journal_entry_split_check",
+      sql`(${t.splitId} IS NOT NULL OR NOT ${t.splitRemainder}) AND (${t.splitId} IS NULL OR (${t.transferId} IS NULL AND ${t.compensationId} IS NULL))`,
+    ),
+    index("journal_entry_split_idx").on(t.splitId),
     foreignKey({
       columns: [t.accountId, t.bookId],
       foreignColumns: [bookAccount.id, bookAccount.bookId],

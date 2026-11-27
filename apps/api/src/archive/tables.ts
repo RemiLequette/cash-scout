@@ -16,6 +16,7 @@ import {
   importRule,
   journalEntry,
   nature,
+  split,
   subCategory,
   transfer,
 } from "../db/schema.js";
@@ -39,6 +40,7 @@ export const ARCHIVED: readonly ArchivedTable[] = [
   { table: bookAccount, references: {} },
   { table: transfer, references: {} },
   { table: compensation, references: {} },
+  { table: split, references: {} },
   { table: importBatch, references: { accountId: bookAccount } },
   {
     table: journalEntry,
@@ -47,6 +49,7 @@ export const ARCHIVED: readonly ArchivedTable[] = [
       subCategoryId: subCategory,
       transferId: transfer,
       compensationId: compensation,
+      splitId: split,
       importBatchId: importBatch,
     },
   },

@@ -25,6 +25,8 @@ import {
   isNotNull,
   isNull,
   lte,
+  ne,
+  or,
   sql,
   type SQL,
 } from "drizzle-orm";
@@ -33,7 +35,15 @@ import type { z } from "zod";
 import { HTTPException } from "hono/http-exception";
 import { BUDGET_DATE } from "../db/budget-date.js";
 import { withUser, type Db, type Tx } from "../db/client.js";
-import { book, bookAccount, journalEntry, subCategory } from "../db/schema.js";
+import {
+  book,
+  bookAccount,
+  category,
+  journalEntry,
+  nature,
+  split,
+  subCategory,
+} from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
 import { monthEnds } from "./budget-months.js";
@@ -107,6 +117,8 @@ export const entryColumns = {
   transferLeg: journalEntry.transferLeg,
   compensationId: journalEntry.compensationId,
   compensationSide: journalEntry.compensationSide,
+  splitId: journalEntry.splitId,
+  splitRemainder: journalEntry.splitRemainder,
   createdAt: journalEntry.createdAt,
   updatedAt: journalEntry.updatedAt,
 };
@@ -127,6 +139,29 @@ export function outEntry(row: EntryRow, currency: string, bookCurrency: string) 
         ? null
         : text(row.originalAmount, row.originalCurrency),
   };
+}
+
+/** Marks a split changed: its revision moves with its parts. */
+export function touchSplit(tx: Tx, bookId: string, id: string) {
+  return tx
+    .update(split)
+    .set({ updatedAt: new Date() })
+    .where(and(eq(split.id, id), eq(split.bookId, bookId)));
+}
+
+/** A split is one bank movement counting in categories, never a transfer. */
+export async function refuseTransferSubCategory(tx: Tx, bookId: string, id: string) {
+  const [row] = await tx
+    .select({ transfer: nature.transfer })
+    .from(subCategory)
+    .innerJoin(category, eq(category.id, subCategory.categoryId))
+    .innerJoin(nature, eq(nature.id, category.natureId))
+    .where(and(eq(subCategory.id, id), eq(subCategory.bookId, bookId)));
+  if (row?.transfer) {
+    throw new HTTPException(400, {
+      message: "A split cannot use a sub-category of a transfer category",
+    });
+  }
 }
 
 /** Creates an entry; `planned` makes its planned amount the amount. */
@@ -205,6 +240,7 @@ export async function updateEntry(
   }
   if (input.subCategoryId && input.subCategoryId !== current.subCategoryId) {
     await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
+    if (current.splitId) await refuseTransferSubCategory(tx, bookId, input.subCategoryId);
   }
   const bookCurrency = await bookCurrencyOf(tx, bookId);
   const amount =
@@ -241,7 +277,53 @@ export async function updateEntry(
     .where(rowOf(journalEntry, bookId, id, version))
     .returning(entryColumns);
   if (!updated) return missing("Entry", version);
+  if (current.splitId) {
+    await shareWithParts(tx, bookId, current.splitId, id, updated, input);
+    await touchSplit(tx, bookId, current.splitId);
+  }
   return outEntry(updated, current.currency, bookCurrency);
+}
+
+/** Gives the other parts of a split what they share with the one just changed. */
+async function shareWithParts(
+  tx: Tx,
+  bookId: string,
+  splitId: string,
+  changedId: string,
+  changed: EntryRow,
+  input: Omit<z.output<typeof entryUpdateSchema>, "version">,
+) {
+  const moved = input.date !== undefined || input.monthShifted !== undefined;
+  const rated = input.exchangeRate !== undefined;
+  if (!moved && !rated && input.accountId === undefined && input.reconciled === undefined) return;
+  const others = await tx
+    .select({ id: journalEntry.id, amount: journalEntry.amount })
+    .from(journalEntry)
+    .where(
+      and(
+        eq(journalEntry.bookId, bookId),
+        eq(journalEntry.splitId, splitId),
+        ne(journalEntry.id, changedId),
+      ),
+    );
+  const bookCurrency = await bookCurrencyOf(tx, bookId);
+  const [account] = await accountOf(tx, bookId, changed.accountId!);
+  const currency = account!.currency;
+  for (const other of others) {
+    await tx
+      .update(journalEntry)
+      .set({
+        ...(moved && { date: changed.date, monthShifted: changed.monthShifted }),
+        accountId: input.accountId,
+        reconciled: input.reconciled,
+        ...(rated && {
+          exchangeRate: changed.exchangeRate,
+          bookAmount: bookAmount(money(other.amount, currency), changed.exchangeRate, bookCurrency)
+            .minor,
+        }),
+      })
+      .where(eq(journalEntry.id, other.id));
+  }
 }
 
 /** Deletes an entry that is not a side of a transfer or a compensation; with `version`, only if unchanged. */
@@ -250,9 +332,15 @@ export async function deleteEntry(tx: Tx, bookId: string, id: string, version?: 
     .select({
       transferId: journalEntry.transferId,
       compensationId: journalEntry.compensationId,
+      splitId: journalEntry.splitId,
     })
     .from(journalEntry)
     .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
+  if (found?.splitId) {
+    throw new HTTPException(400, {
+      message: "This entry is a part of a split: change or delete the split",
+    });
+  }
   if (found?.transferId) {
     throw new HTTPException(400, {
       message: "This entry is one side of a transfer: delete the transfer",
@@ -268,6 +356,36 @@ export async function deleteEntry(tx: Tx, bookId: string, id: string, version?: 
     .where(rowOf(journalEntry, bookId, id, version))
     .returning({ id: journalEntry.id });
   if (deleted.length === 0) return missing("Entry", version);
+}
+
+/** The parts of splits, by split. */
+export async function splitsOf(tx: Tx, bookId: string, ids: string[]) {
+  const parts = new Map<string, EntryRow[]>();
+  if (ids.length === 0) return parts;
+  const rows = await tx
+    .select(entryColumns)
+    .from(journalEntry)
+    .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.splitId, ids)))
+    // The remainder last, the others as they were made.
+    .orderBy(asc(journalEntry.splitRemainder), asc(journalEntry.createdAt), asc(journalEntry.id));
+  for (const row of rows) parts.set(row.splitId!, [...(parts.get(row.splitId!) ?? []), row]);
+  return parts;
+}
+
+/** What a part tells about its whole split: the bank amount and every part. */
+function outSplit(parts: EntryRow[], currency: string) {
+  const text = (minor: bigint) => toDecimalString(money(minor, currency));
+  return {
+    total: text(parts.reduce((sum, p) => sum + p.amount, 0n)),
+    parts: parts.map((p) => ({
+      id: p.id,
+      subCategoryId: p.subCategoryId,
+      description: p.description,
+      amount: text(p.amount),
+      plannedAmount: text(p.plannedAmount),
+      remainder: p.splitRemainder,
+    })),
+  };
 }
 
 /**
@@ -341,13 +459,20 @@ export function journalRoutes(db: Db) {
             tx.select({ n: count() }).from(journalEntry).where(where),
             bookCurrencyOf(tx, bookId),
           ]);
+          const splits = await splitsOf(
+            tx,
+            bookId,
+            rows.flatMap((row) => (row.splitId ? [row.splitId] : [])),
+          );
           return {
             total: total?.n ?? 0,
             bookCurrency,
             // Without an account, an entry is in the book currency.
-            entries: rows.map(({ currency, ...row }) =>
-              outEntry(row, currency ?? bookCurrency, bookCurrency),
-            ),
+            entries: rows.map(({ currency, ...row }) => ({
+              ...outEntry(row, currency ?? bookCurrency, bookCurrency),
+              // The whole movement, whatever the filters left of it.
+              split: row.splitId ? outSplit(splits.get(row.splitId)!, currency!) : null,
+            })),
           };
         });
         return c.json(result);
@@ -372,6 +497,7 @@ export function journalRoutes(db: Db) {
                 eq(journalEntry.plannedAmount, 0n),
                 isNull(journalEntry.transferId),
                 isNull(journalEntry.compensationId),
+                isNull(journalEntry.splitId),
                 sql`${key} <> ''`,
                 gte(journalEntry.date, sql`current_date - interval '12 months'`),
               ),
@@ -392,6 +518,7 @@ export function journalRoutes(db: Db) {
                   eq(journalEntry.plannedAmount, 0n),
                   isNull(journalEntry.transferId),
                   isNull(journalEntry.compensationId),
+                  isNull(journalEntry.splitId),
                   inArray(
                     key,
                     top.map((row) => row.key),
@@ -571,13 +698,28 @@ export function journalRoutes(db: Db) {
         const { ids, reconciled } = c.req.valid("json");
         const updated = await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
+          // A split is reconciled whole, whichever of its parts were picked.
+          const picked = await tx
+            .selectDistinct({ splitId: journalEntry.splitId })
+            .from(journalEntry)
+            .where(
+              and(
+                eq(journalEntry.bookId, bookId),
+                inArray(journalEntry.id, ids),
+                isNotNull(journalEntry.splitId),
+              ),
+            );
+          const splitIds = picked.map((row) => row.splitId!);
+          for (const id of splitIds) await touchSplit(tx, bookId, id);
           return tx
             .update(journalEntry)
             .set({ reconciled })
             .where(
               and(
                 eq(journalEntry.bookId, bookId),
-                inArray(journalEntry.id, ids),
+                splitIds.length > 0
+                  ? or(inArray(journalEntry.id, ids), inArray(journalEntry.splitId, splitIds))
+                  : inArray(journalEntry.id, ids),
                 // A compensation has nothing to reconcile.
                 isNull(journalEntry.compensationId),
               ),

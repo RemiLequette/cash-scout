@@ -20,7 +20,7 @@ Copy one book, to the same instance or another one. This also restores one book 
 | Book           | `book` (name, currency, default language), `book_language`                          |
 | Reference data | `category_group`, `nature`, `balance`, `balance_nature`, `category`, `sub_category` |
 | Accounts       | `book_account`, with opening balances                                               |
-| Journal        | `journal_entry`, `transfer`, `compensation`                                         |
+| Journal        | `journal_entry`, `transfer`, `compensation`, `split`                                |
 | Budgets        | `category_budget`, `budget_settlement`                                              |
 | Import         | `import_rule`, `import_batch`, `import_line`                                        |
 

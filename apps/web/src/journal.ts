@@ -4,6 +4,8 @@ import {
   type CompensationUpdate,
   type EntryInput,
   type EntryUpdate,
+  type SplitInput,
+  type SplitUpdate,
   type TransferInput,
   type TransferUpdate,
 } from "@cash-scout/domain";
@@ -30,6 +32,10 @@ export type YearTransfer = InferResponseType<typeof transfers.$get, 200>[number]
 const compensations = api.books[":bookId"].compensations;
 /** A compensation: its two journal entries. */
 export type Compensation = InferResponseType<(typeof compensations)[":id"]["$get"], 200>;
+
+const splits = api.books[":bookId"].splits;
+/** A split: one bank movement and its parts, each a journal entry. */
+export type Split = NonNullable<InferResponseType<(typeof splits)[":id"]["$get"], 200>>;
 
 const budgets = api.books[":bookId"].budgets;
 /** A budget line: what a month's grid amount still expects, at the month's end. */
@@ -99,6 +105,16 @@ export function useCompensation(bookId: string, id: string | undefined) {
   return useQuery({
     queryKey: ["books", bookId, "journal", "compensation", id],
     queryFn: () => unwrap(compensations[":id"].$get({ param: { bookId, id: id! } })),
+    enabled: id !== undefined,
+    gcTime: 0,
+  });
+}
+
+/** One split with all of its parts, loaded when its form opens. */
+export function useSplit(bookId: string, id: string | undefined) {
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "split", id],
+    queryFn: () => unwrap(splits[":id"].$get({ param: { bookId, id: id! } })),
     enabled: id !== undefined,
     gcTime: 0,
   });
@@ -190,7 +206,10 @@ export type JournalChange =
   | { action: "deleteTransfer"; id: string }
   | { action: "createCompensation"; body: CompensationInput }
   | { action: "updateCompensation"; id: string; body: CompensationUpdate }
-  | { action: "deleteCompensation"; id: string };
+  | { action: "deleteCompensation"; id: string }
+  | { action: "createSplit"; body: SplitInput }
+  | { action: "updateSplit"; id: string; body: SplitUpdate }
+  | { action: "deleteSplit"; id: string };
 
 /** Changes to the journal; the list and balances are reloaded after each. */
 export function useJournalChange(bookId: string) {
@@ -239,13 +258,29 @@ export function useJournalChange(bookId: string) {
           return;
         case "deleteCompensation":
           await unwrap(compensations[":id"].$delete({ param: { ...param, id: change.id } }));
+          return;
+        case "createSplit":
+          await unwrap(splits.$post({ param, json: change.body }));
+          return;
+        case "updateSplit":
+          await unwrap(
+            splits[":id"].$patch({ param: { ...param, id: change.id }, json: change.body }),
+          );
+          return;
+        case "deleteSplit":
+          await unwrap(splits[":id"].$delete({ param: { ...param, id: change.id } }));
       }
     },
     onSettled: (_data, error, change) => {
       // What was just deleted is not read again: it would only be retried, and
       // its form would stay open meanwhile.
+      // A split left with one part is gone too.
       const gone =
-        !error && (change.action === "deleteTransfer" || change.action === "deleteCompensation")
+        !error &&
+        (change.action === "deleteTransfer" ||
+          change.action === "deleteCompensation" ||
+          change.action === "deleteSplit" ||
+          (change.action === "updateSplit" && change.body.parts.length === 1))
           ? change.id
           : undefined;
       return Promise.all([

@@ -28,7 +28,8 @@ import {
 import type { AppEnv } from "../http.js";
 import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
 import { budgetColumns, loadYear, monthEnds } from "./budget-months.js";
-import { createEntry, deleteEntry, updateEntry } from "./journal.js";
+import { createEntry, updateEntry } from "./journal.js";
+import { createSplit, removePlanned } from "./splits.js";
 
 type BudgetRow = Omit<typeof categoryBudget.$inferSelect, "bookId" | "createdAt" | "updatedAt">;
 
@@ -269,14 +270,17 @@ export function budgetsRoutes(db: Db) {
       .post("/plan", zValidator("json", planSchema), async (c) => {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
-        const { budget, create, update, remove } = c.req.valid("json");
+        const { budget, create, splits, update, remove } = c.req.valid("json");
         await withUser(db, me, async (tx) => {
           await requireRole(tx, bookId, me, "editor");
           await saveBudgets(tx, bookId, budget);
-          for (const { id, version } of remove) await deleteEntry(tx, bookId, id, version);
-          for (const { id, version, ...change } of update) {
-            await updateEntry(tx, bookId, id, change, version);
+          // The parts of a split change together: all versions are checked first.
+          await removePlanned(tx, bookId, remove, update);
+          for (const { id, version: checkedAbove, ...change } of update) {
+            void checkedAbove;
+            await updateEntry(tx, bookId, id, change);
           }
+          for (const input of splits) await createSplit(tx, bookId, { ...input, planned: true });
           for (const entry of create) await createEntry(tx, bookId, { ...entry, planned: true });
         });
         return c.body(null, 204);

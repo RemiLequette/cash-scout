@@ -482,7 +482,7 @@
     "overdraftFrom": "est à découvert à partir du {from}, jusqu'à la fin du graphique (point bas {lowest} le {lowestDate}).",
     "overdue": "{count, plural, one {# écriture passée n'est pas rapprochée.} other {# écritures passées ne sont pas rapprochées.}}",
     "overdueShow": "Afficher",
-    "newMenu": "Nouveau transfert, compensation ou saisie fréquente"
+    "newMenu": "Nouvelle ventilation, transfert, compensation ou saisie fréquente"
   },
   "password": {
     "reset": "Définir un nouveau mot de passe",
@@ -561,5 +561,18 @@
       "minusSubCategoryId": "Choisissez une sous-catégorie, différente de la première.",
       "amount": "Saisissez un montant positif, avec au plus les décimales de la devise."
     }
+  },
+  "split": {
+    "new": "Nouvelle ventilation",
+    "edit": "Modifier la ventilation",
+    "action": "Ventiler",
+    "movement": "Mouvement de {total}",
+    "bankAmount": "Montant bancaire",
+    "remainder": "Solde",
+    "addPart": "Ajouter une part",
+    "removePart": "Retirer la part",
+    "otherPart": "Autre part",
+    "deleteConfirm": "Supprimer cette ventilation et toutes ses parts ?",
+    "invalid": "Complétez la date, le compte, le montant bancaire et chaque part."
   }
 }

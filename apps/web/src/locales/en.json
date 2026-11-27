@@ -482,7 +482,7 @@
     "overdraftFrom": "is overdrawn from {from}, to the end of the chart (lowest {lowest} on {lowestDate}).",
     "overdue": "{count, plural, one {# past entry is not reconciled.} other {# past entries are not reconciled.}}",
     "overdueShow": "Show",
-    "newMenu": "New transfer, compensation or entry"
+    "newMenu": "New split, transfer, compensation or frequent entry"
   },
   "password": {
     "reset": "Set a new password",
@@ -561,5 +561,18 @@
       "minusSubCategoryId": "Pick a sub-category, different from the first.",
       "amount": "Enter a positive amount with at most the currency's decimals."
     }
+  },
+  "split": {
+    "new": "New split",
+    "edit": "Edit split",
+    "action": "Split",
+    "movement": "Movement of {total}",
+    "bankAmount": "Bank amount",
+    "remainder": "Remainder",
+    "addPart": "Add a part",
+    "removePart": "Remove the part",
+    "otherPart": "Other part",
+    "deleteConfirm": "Delete this split and all its parts?",
+    "invalid": "Fill in the date, account, bank amount and every part."
   }
 }
