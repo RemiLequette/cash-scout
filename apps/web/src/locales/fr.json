@@ -303,6 +303,7 @@
     "rounded": "Arrondir",
     "expand": "Déplier",
     "collapse": "Replier",
+    "transfers": "Virements",
     "balances": "Soldes des comptes en fin de mois",
     "balanceTotal": "Tous les comptes",
     "empty": "Rien sur cette année.",
@@ -385,7 +386,17 @@
     },
     "problemEntries": "{count, plural, one {# écriture à corriger} other {# écritures à corriger}}",
     "createPlanned": "{count, plural, one {Créer # écriture} other {Créer # écritures}}",
-    "reload": "Recharger"
+    "reload": "Recharger",
+    "noPlannedTransfers": "Aucun virement planifié cette année.",
+    "transfers": {
+      "filter": "Filtrer (libellé, sous-catégorie, compte)",
+      "count": "{count, plural, =0 {Aucun virement} one {# virement} other {# virements}}",
+      "delay": "Délai (j)",
+      "copied": "{count, plural, =0 {Rien à copier} one {# virement copié} other {# virements copiés}}",
+      "skipped": "{count, plural, one {# virement entre devises non modifié} other {# virements entre devises non modifiés}}",
+      "problem": "{count, plural, one {# virement à corriger} other {# virements à corriger}}",
+      "create": "{count, plural, one {Créer # virement} other {Créer # virements}}"
+    }
   },
   "accountKinds": {
     "bank": "Bancaire",

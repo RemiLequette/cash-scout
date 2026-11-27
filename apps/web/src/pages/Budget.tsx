@@ -6,7 +6,6 @@ import {
   Button,
   Group,
   Loader,
-  Modal,
   Paper,
   Select,
   Stack,
@@ -24,11 +23,12 @@ import { api, unwrap } from "../api";
 import { useBudgetYear, type BudgetYear, type CategoryBudgetRow } from "../budget";
 import { entryChanges, invalidRows, PlanEntries, plannedByMonth, rowsOf } from "../budgetEntries";
 import { cellText, GridTools, useGrid } from "../budgetGrid";
+import { plannedCount, PlanTransfers } from "../budgetTransfers";
 import {
   decimalInput,
-  formatDate,
   useJournal,
   useMonthEnds,
+  useTransfers,
   type Entry,
   type MonthEnd,
   monthsOfYear,
@@ -36,7 +36,9 @@ import {
 import { useMonthNames } from "../options";
 import { useNameOf, useReference, type Reference } from "../reference";
 import { DataTable } from "../table";
-import { TransferForm } from "./TransferForm";
+
+/** What is planned when it is not a category: the transfers of the year. */
+const TRANSFERS = "transfers";
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i);
 
@@ -158,6 +160,30 @@ export function BudgetPage({
   const index = categories.findIndex((c) => c.id === planning);
   const category = categories[index];
   const text = (minor: bigint) => formatMoney(money(minor, bookCurrency), i18n.language);
+
+  if (planning === TRANSFERS) {
+    return (
+      <Stack>
+        {header}
+        {failure && <Alert color="red">{t("common.error", { message: failure.message })}</Alert>}
+        <Group gap="xs">
+          <Button size="xs" variant="default" onClick={() => leave(() => setPlanning(null))}>
+            {t("budget.allCategories")}
+          </Button>
+        </Group>
+        <PlanTransfers
+          key={`${year}|${revision}`}
+          bookId={bookId}
+          bookCurrency={bookCurrency}
+          canEdit={canEdit}
+          year={year}
+          reference={ref}
+          onDirty={setDirty}
+          onReload={() => setRevision((r) => r + 1)}
+        />
+      </Stack>
+    );
+  }
 
   if (category) {
     const go = (step: number) =>
@@ -304,13 +330,7 @@ export function BudgetPage({
         </DataTable>
       </Paper>
       {transferNatures.size > 0 && (
-        <PlannedTransfers
-          bookId={bookId}
-          bookCurrency={bookCurrency}
-          canEdit={canEdit}
-          year={year}
-          reference={ref}
-        />
+        <TransfersSummary bookId={bookId} year={year} onPlan={() => setPlanning(TRANSFERS)} />
       )}
       <Paper withBorder p="sm">
         <DataTable minWidth={360}>
@@ -699,115 +719,35 @@ function CategoryPlan({
 // Planned transfers: their two sides add up to zero, so they have no budget
 // ---------------------------------------------------------------------------
 
-function PlannedTransfers({
+function TransfersSummary({
   bookId,
-  bookCurrency,
-  canEdit,
   year,
-  reference,
+  onPlan,
 }: {
   bookId: string;
-  bookCurrency: string;
-  canEdit: boolean;
   year: number;
-  reference: Reference;
+  onPlan: () => void;
 }) {
-  const { t, i18n } = useTranslation();
-  const nameOf = useNameOf(reference.defaultLanguage);
-  const natures = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
-  const categories = new Set(
-    reference.categories.filter((c) => natures.has(c.natureId)).map((c) => c.id),
-  );
-  const subCategories = reference.subCategories.filter((s) => categories.has(s.categoryId));
-  const current = useJournal(bookId, {
-    from: `${year}-01-01`,
-    to: `${year}-12-31`,
-    subCategoryIds: subCategories.map((s) => s.id).join(","),
-    limit: 2000,
-    offset: 0,
-  });
-  /** A planned transfer being created (no id) or edited. */
-  const [transfer, setTransfer] = useState<{ id?: string } | null>(null);
-
-  const entries = (current.data?.entries ?? [])
-    .filter((entry) => Number(entry.plannedAmount) !== 0)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-  const format = (amount: string, currency: string) =>
-    formatMoney(parseAmount(amount, currency), i18n.language);
-  const subOf = new Map(reference.subCategories.map((s) => [s.id, s]));
-  const accountOf = new Map(reference.accounts.map((a) => [a.id, a]));
-
+  const { t } = useTranslation();
+  const transfers = useTransfers(bookId, year);
   return (
     <Paper withBorder p="sm">
-      <Stack>
-        <Group justify="space-between">
+      <Group justify="space-between">
+        <Group gap="xs">
           <Title order={4}>{t("budget.plannedTransfers", { year })}</Title>
-          {canEdit && (
-            <Button variant="default" size="xs" onClick={() => setTransfer({})}>
-              {t("budget.newPlannedTransfer")}
-            </Button>
+          {transfers.data && (
+            <Text size="sm" c="dimmed">
+              {t("budget.transfers.count", { count: plannedCount(transfers.data) })}
+            </Text>
           )}
         </Group>
-        {current.error && (
-          <Alert color="red">{t("common.error", { message: current.error.message })}</Alert>
-        )}
-        {entries.length === 0 && !current.isPending && (
-          <Text c="dimmed">{t("budget.noPlannedEntries")}</Text>
-        )}
-        {entries.length > 0 && (
-          <DataTable minWidth={700} verticalSpacing={4} highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th w={110}>{t("journal.date")}</Table.Th>
-                <Table.Th>{t("journal.subCategory")}</Table.Th>
-                <Table.Th>{t("journal.description")}</Table.Th>
-                <Table.Th>{t("journal.account")}</Table.Th>
-                <Table.Th w={110} ta="right">
-                  {t("budget.plannedAmount")}
-                </Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {entries.map((entry) => {
-                const editable = canEdit && !entry.reconciled && entry.transferId;
-                return (
-                  <Table.Tr
-                    key={entry.id}
-                    style={{ cursor: editable ? "pointer" : undefined }}
-                    c={entry.reconciled ? "dimmed" : undefined}
-                    onClick={() => editable && setTransfer({ id: entry.transferId! })}
-                  >
-                    <Table.Td>{formatDate(entry.date, i18n.language)}</Table.Td>
-                    <Table.Td>{nameOf(subOf.get(entry.subCategoryId)?.names ?? {})}</Table.Td>
-                    <Table.Td>{entry.description}</Table.Td>
-                    <Table.Td>{nameOf(accountOf.get(entry.accountId)?.names ?? {})}</Table.Td>
-                    <Table.Td ta="right">{format(entry.plannedAmount, entry.currency)}</Table.Td>
-                  </Table.Tr>
-                );
-              })}
-            </Table.Tbody>
-          </DataTable>
-        )}
-      </Stack>
-      <Modal
-        opened={transfer !== null}
-        onClose={() => setTransfer(null)}
-        title={transfer?.id ? t("transfer.edit") : t("budget.newPlannedTransfer")}
-        size="lg"
-      >
-        {transfer && (
-          <TransferForm
-            key={transfer.id ?? "new"}
-            bookId={bookId}
-            bookCurrency={bookCurrency}
-            reference={reference}
-            transferId={transfer.id}
-            planned
-            initialDate={`${year}-01-01`}
-            onClose={() => setTransfer(null)}
-          />
-        )}
-      </Modal>
+        <Button size="compact-xs" onClick={onPlan}>
+          {t("budget.plan")}
+        </Button>
+      </Group>
+      {transfers.error && (
+        <Alert color="red">{t("common.error", { message: transfers.error.message })}</Alert>
+      )}
     </Paper>
   );
 }
