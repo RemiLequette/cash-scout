@@ -2,6 +2,7 @@ import {
   Alert,
   Badge,
   Button,
+  FileInput,
   Group,
   Modal,
   Select,
@@ -16,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { api, unwrap } from "../api";
+import { api, ApiError, unwrap } from "../api";
 import { currencyOptions, languageOptions } from "../options";
 import { DataTable } from "../table";
 
@@ -93,16 +94,99 @@ function CreateBook({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** The name a book file gives its book; "" when it cannot be read there. */
+async function nameIn(file: File): Promise<string> {
+  try {
+    const content = JSON.parse(await file.text()) as { book?: { name?: unknown } };
+    return typeof content.book?.name === "string" ? content.book.name : "";
+  } catch {
+    return "";
+  }
+}
+
+/** A new book from a file another one was exported to. */
+function ImportBook({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [file, setFile] = useState<File | null>(null);
+  const [name, setName] = useState("");
+
+  const run = useMutation({
+    mutationFn: async () => {
+      const query = name.trim() ? `?name=${encodeURIComponent(name.trim())}` : "";
+      const response = await fetch(`/api/books/import${query}`, {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: file,
+      });
+      const body = (await response.json().catch(() => ({}))) as { id?: string; error?: unknown };
+      if (!response.ok || !body.id) {
+        const message = typeof body.error === "string" ? body.error : `HTTP ${response.status}`;
+        throw new ApiError(message, response.status);
+      }
+      return body.id;
+    },
+    onSuccess: async (bookId) => {
+      await queryClient.invalidateQueries({ queryKey: ["books"] });
+      onClose();
+      await navigate({ to: "/books/$bookId", params: { bookId } });
+    },
+  });
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    run.mutate();
+  }
+
+  return (
+    <Stack component="form" onSubmit={submit}>
+      {run.error && <Alert color="red">{t("common.error", { message: run.error.message })}</Alert>}
+      <FileInput
+        label={t("books.file")}
+        required
+        accept="application/json,.json"
+        value={file}
+        onChange={(chosen) => {
+          setFile(chosen);
+          run.reset();
+          if (chosen) void nameIn(chosen).then(setName);
+        }}
+      />
+      <TextInput
+        label={t("books.name")}
+        maxLength={100}
+        value={name}
+        onChange={(e) => setName(e.currentTarget.value)}
+      />
+      <Group justify="flex-end">
+        <Button variant="default" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button type="submit" disabled={!file} loading={run.isPending}>
+          {t("books.importAction")}
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
 export function Books() {
   const { t } = useTranslation();
   const books = useBooks();
   const [opened, { open, close }] = useDisclosure(false);
+  const [importing, importModal] = useDisclosure(false);
 
   return (
     <Stack>
       <Group justify="space-between">
         <Title order={2}>{t("books.title")}</Title>
-        <Button onClick={open}>{t("books.create")}</Button>
+        <Group gap="xs">
+          <Button variant="default" onClick={importModal.open}>
+            {t("books.import")}
+          </Button>
+          <Button onClick={open}>{t("books.create")}</Button>
+        </Group>
       </Group>
       {books.error && (
         <Alert color="red">{t("common.error", { message: books.error.message })}</Alert>
@@ -136,6 +220,9 @@ export function Books() {
       )}
       <Modal opened={opened} onClose={close} title={t("books.create")}>
         <CreateBook onClose={close} />
+      </Modal>
+      <Modal opened={importing} onClose={importModal.close} title={t("books.import")}>
+        <ImportBook onClose={importModal.close} />
       </Modal>
     </Stack>
   );

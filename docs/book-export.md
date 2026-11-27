@@ -1,6 +1,6 @@
 # Book export and import
 
-Design notes from a brainstorm. Nothing here is built yet. The [architecture](../ARCHITECTURE.md#backup) gives the intent; this note fixes the decisions and splits the work into steps that can be delivered one by one.
+Both are built: `apps/api/src/archive/`, with `GET /books/:bookId/export` and `POST /books/import`. The [architecture](../ARCHITECTURE.md#backup) gives the intent.
 
 ## Goal
 
@@ -32,25 +32,22 @@ Not exported: members and users. Whoever imports becomes the owner, and the auth
 
 Schedules are not built yet. When they are, they join the export.
 
-## Rules to confirm
-
-Proposed during the brainstorm, not yet confirmed.
+## Rules
 
 - Only an owner of the book can export it.
-- **Identifiers** are new on import, and every reference is remapped, so a book can be imported next to its original.
+- **Identifiers** are new on import, and every reference is remapped, so a book can be imported next to its original. A reference to a row the file does not hold is refused.
 - **Names:** the book name is proposed at import and can be changed.
-- **Format version:** an older file is converted, a file newer than the application is refused with a clear message.
-- **Safety:** the file is validated as untrusted input and written in one transaction. A failure leaves no partial book.
+- **Format version:** a file newer than the application is refused. A column added later takes its default when the file does not have it; a change that cannot be read this way raises the version and converts older files.
+- **Safety:** the shape of the file is checked, and the database constraints apply; it is written in one transaction, so a failure leaves no partial book. The other business rules of the application are not checked again: a file edited by hand only affects the book it creates.
 - **Exact values:** amounts and exchange rates are written as text, to lose no precision.
-- **Interface:** "Export" in the book's menu, "Import a book" on the list of books.
+- **Dates** of creation and update are carried over; revision numbers start again.
+- **Size:** a file up to 50 MB is accepted.
+- **Interface:** "Export the book" in the menu of the book, "Import a book" on the list of books.
 - The file holds account numbers and bank labels in clear text; the online help says so.
 
-## Steps
+## Tests
 
-1. **Export.** Includes a test that fails when a table belonging to a book is neither exported nor explicitly excluded, so that a table added later is not forgotten.
-2. **Import.** Includes a round-trip test: export, import, export again gives the same content (identifiers aside) and the same account balances.
-
-Until step 2 is delivered, an exported file is not a backup: keep using the database dump.
+`apps/api/src/archive.test.ts` fails when a table of a book is neither exported nor set apart, or when a reference between tables is not declared in `archive/tables.ts`. A round trip checks that export, import, export gives the same content (identifiers aside) and the same account balances.
 
 ## Out of scope for now
 
@@ -59,8 +56,3 @@ Until step 2 is delivered, an exported file is not a backup: keep using the data
 - "Duplicate this book" inside the application: a possible shortcut on the same code.
 - Scheduled or automatic exports.
 - CSV export of the journal for a spreadsheet: a separate need.
-
-## Open points
-
-- The largest file the import accepts.
-- Whether creation and update dates are carried over (they should be, unless something relies on them being new).
