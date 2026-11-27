@@ -23,6 +23,7 @@ export type Balance = InferResponseType<typeof journal.balances.$get, 200>[numbe
 const transfers = api.books[":bookId"].transfers;
 /** A transfer between two accounts: its two journal entries and the delay between them. */
 export type Transfer = InferResponseType<(typeof transfers)[":id"]["$get"], 200>;
+export type YearTransfer = InferResponseType<typeof transfers.$get, 200>[number];
 
 const budgets = api.books[":bookId"].budgets;
 /** A budget line: what a month's grid amount still expects, at the month's end. */
@@ -82,6 +83,16 @@ export function useTransfer(bookId: string, id: string | undefined) {
     queryFn: () => unwrap(transfers[":id"].$get({ param: { bookId, id: id! } })),
     enabled: id !== undefined,
     gcTime: 0,
+  });
+}
+
+/** The transfers of a year, both sides together, by the date they leave their source. */
+export function useTransfers(bookId: string, year: number) {
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "transfers", year],
+    queryFn: () => unwrap(transfers.$get({ param: { bookId }, query: { year: String(year) } })),
+    // A plan starts from what is stored now, not from what was read before.
+    refetchOnMount: "always",
   });
 }
 

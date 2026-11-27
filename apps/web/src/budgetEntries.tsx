@@ -65,7 +65,7 @@ export interface PlanRow {
 type Account = Reference["accounts"][number];
 
 let made = 0;
-const newKey = () => `new-${++made}`;
+export const newKey = () => `new-${++made}`;
 
 const plain = (amount: string) => amount.replace(/\.0+$/, "");
 
@@ -202,7 +202,7 @@ export function entryChanges(
   return { create, update, remove };
 }
 
-const field: CSSProperties = {
+export const field: CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
   font: "inherit",
@@ -212,10 +212,10 @@ const field: CSSProperties = {
   background: "var(--mantine-color-body)",
   color: "var(--mantine-color-text)",
 };
-const wrong = (bad: boolean): CSSProperties =>
+export const wrong = (bad: boolean): CSSProperties =>
   bad ? { ...field, borderColor: "var(--mantine-color-error)" } : field;
 
-interface Option {
+export interface Option {
   value: string;
   label: string;
 }
@@ -224,7 +224,7 @@ interface Option {
  * A date shown as in the journal, "5 Nov" (with the year when it is not the
  * budget's); a click turns it into the browser's date field.
  */
-function DateCell({
+export function DateCell({
   value,
   year,
   disabled,
@@ -273,7 +273,7 @@ function DateCell({
 }
 
 /** Up and down, or Enter, go to the same column of the next row. */
-function moveRows(event: KeyboardEvent<HTMLInputElement>) {
+export function moveRows(event: KeyboardEvent<HTMLInputElement>) {
   const step =
     event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" || event.key === "Enter" ? 1 : 0;
   if (!step) return;
@@ -414,6 +414,37 @@ const Row = memo(function Row({
 });
 
 /**
+ * The ticked rows of a list. A Shift+click ticks or unticks all the rows
+ * between it and the one clicked before, among those that can be.
+ */
+export function useTicks(tickable: string[]) {
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
+  const lastTicked = useRef<string | null>(null);
+  // The rows shown, for a Shift+click, read when it happens.
+  const visible = useRef<string[]>([]);
+  const tickedNow = useRef(ticked);
+  useLayoutEffect(() => {
+    visible.current = tickable;
+    tickedNow.current = ticked;
+  });
+  const onTick = useCallback((key: string, range: boolean) => {
+    const next = new Set(tickedNow.current);
+    const on = !next.has(key);
+    const from = range && lastTicked.current ? visible.current.indexOf(lastTicked.current) : -1;
+    const to = visible.current.indexOf(key);
+    const keys =
+      from < 0 ? [key] : visible.current.slice(Math.min(from, to), Math.max(from, to) + 1);
+    for (const k of keys) {
+      if (on) next.add(k);
+      else next.delete(k);
+    }
+    lastTicked.current = key;
+    setTicked(next);
+  }, []);
+  return { ticked, setTicked, onTick };
+}
+
+/**
  * The planned entries of one category and year, edited in place: copied from
  * the previous year, made from a schedule, and changed one by one or by the
  * ticked ones together. Nothing is saved here: the category's Save does it.
@@ -444,13 +475,11 @@ export function PlanEntries({
   const { t } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
   const [filter, setFilter] = useState("");
-  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [history, setHistory] = useState<PlanRow[][]>([]);
   const [note, setNote] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [amount, setAmount] = useState("");
   const [day, setDay] = useState("");
-  const lastTicked = useRef<string | null>(null);
 
   const accounts = new Map(reference.accounts.map((a) => [a.id, a]));
   const context: Context = { accounts, bookCurrency, year };
@@ -475,6 +504,7 @@ export function PlanEntries({
           .includes(search)),
   );
   const tickable = shown.filter((row) => !row.reconciled);
+  const { ticked, setTicked, onTick } = useTicks(tickable.map((row) => row.key));
   const selected = tickable.filter((row) => ticked.has(row.key));
   const selectedKeys = new Set(selected.map((row) => row.key));
   const allTicked = tickable.length > 0 && selected.length === tickable.length;
@@ -494,28 +524,6 @@ export function PlanEntries({
       setRows((old) => old.map((row) => (row.key === key ? { ...row, ...patch } : row))),
     [setRows],
   );
-
-  // The rows shown, for a Shift+click, read when it happens.
-  const visible = useRef<string[]>([]);
-  const tickedNow = useRef(ticked);
-  useLayoutEffect(() => {
-    visible.current = tickable.map((row) => row.key);
-    tickedNow.current = ticked;
-  });
-  const onTick = useCallback((key: string, range: boolean) => {
-    const next = new Set(tickedNow.current);
-    const on = !next.has(key);
-    const from = range && lastTicked.current ? visible.current.indexOf(lastTicked.current) : -1;
-    const to = visible.current.indexOf(key);
-    const keys =
-      from < 0 ? [key] : visible.current.slice(Math.min(from, to), Math.max(from, to) + 1);
-    for (const k of keys) {
-      if (on) next.add(k);
-      else next.delete(k);
-    }
-    lastTicked.current = key;
-    setTicked(next);
-  }, []);
 
   function copyPrevious() {
     if (!previous) return;

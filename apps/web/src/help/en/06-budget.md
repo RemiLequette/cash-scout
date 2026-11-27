@@ -66,7 +66,18 @@ Planned entries do not consume the grid: how they differ from their plan is thei
 
 ## Transfers
 
-Transfer categories have no grid, only planned transfers.
+Transfer categories have no grid, only planned transfers. At the bottom of the Budget page, **Plan** next to **Planned transfers** opens those of the year.
+
+The list has **one row per transfer** and is edited in place, like planned entries: leaving date, delay, sub-category, description, source and destination accounts, planned amount. A transfer belongs to the year it leaves its source account. The amount is typed without a sign. Between currencies, a second amount is the amount received; an account that is not in the book currency asks for its rate.
+
+The journal does not change until **Save**, which writes all or nothing.
+
+- **Copy the previous year** takes all the transfers of the year before, planned or not, one year later. The amount becomes the planned amount. A transfer already there (same date, sub-category, description and accounts) is not copied again, nor one using an archived account or sub-category.
+- **Schedule** creates a series of transfers. The series is not remembered: these are ordinary transfers.
+- **Tick** rows to give them a new amount or another day, change their source account, destination account or sub-category, duplicate or delete them. Shift+click ticks a range; the box in the titles ticks all the rows the **filter** shows. The new amount leaves transfers between currencies unchanged: type their two amounts on the row. A change of account is skipped on a row whose two accounts would become the same, or, for a stored transfer, whose currency would change.
+- **Undo** takes back the last copy, creation or action on the ticked rows.
+
+A transfer with a reconciled side is not changed here. The payment type is chosen in the schedule or in the [journal](05-transfers.md). Changing the planned amount also replaces the expected amount of both sides.
 
 ## Change of the accounts
 

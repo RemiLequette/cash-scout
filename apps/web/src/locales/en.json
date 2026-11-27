@@ -303,6 +303,7 @@
     "rounded": "Round",
     "expand": "Expand",
     "collapse": "Collapse",
+    "transfers": "Transfers",
     "balances": "Account balances at month end",
     "balanceTotal": "All accounts",
     "empty": "Nothing in this year.",
@@ -385,7 +386,17 @@
     },
     "problemEntries": "{count, plural, one {# entry to fix} other {# entries to fix}}",
     "createPlanned": "{count, plural, one {Create # entry} other {Create # entries}}",
-    "reload": "Reload"
+    "reload": "Reload",
+    "noPlannedTransfers": "No planned transfer this year.",
+    "transfers": {
+      "filter": "Filter (description, sub-category, account)",
+      "count": "{count, plural, =0 {No transfer} one {# transfer} other {# transfers}}",
+      "delay": "Delay (d)",
+      "copied": "{count, plural, =0 {Nothing to copy} one {# transfer copied} other {# transfers copied}}",
+      "skipped": "{count, plural, one {# transfer between currencies left unchanged} other {# transfers between currencies left unchanged}}",
+      "problem": "{count, plural, one {# transfer to fix} other {# transfers to fix}}",
+      "create": "{count, plural, one {Create # transfer} other {Create # transfers}}"
+    }
   },
   "accountKinds": {
     "bank": "Bank",

@@ -20,7 +20,7 @@ import {
 import { useNameOf, type Reference } from "../reference";
 
 /** What the form edits: an existing transfer (id) or a new one. */
-interface Draft {
+export interface TransferDraft {
   id?: string;
   /** Revision of the transfer as read, sent back with the change. */
   version?: number;
@@ -37,7 +37,7 @@ interface Draft {
   destinationRate: string;
 }
 
-const emptyDraft = (): Draft => ({
+const emptyDraft = (): TransferDraft => ({
   date: today(),
   delayDays: "0",
   sourceAccountId: null,
@@ -54,10 +54,7 @@ const emptyDraft = (): Draft => ({
 const unsigned = (amount: string) => amount.replace(/^[-+]/, "");
 const rateText = (rate: string) => (rate === "1" ? "" : rate);
 
-/** From the budget, the amounts asked for are the planned ones. */
-function draftOf(transfer: Transfer, planned: boolean): Draft {
-  const amountOf = (side: Transfer["source"]) =>
-    unsigned(planned && Number(side.plannedAmount) !== 0 ? side.plannedAmount : side.amount);
+function draftOf(transfer: Transfer): TransferDraft {
   return {
     id: transfer.id,
     version: transfer.version,
@@ -68,8 +65,8 @@ function draftOf(transfer: Transfer, planned: boolean): Draft {
     subCategoryId: transfer.source.subCategoryId,
     description: transfer.source.description,
     paymentTypeId: transfer.source.paymentTypeId,
-    amount: amountOf(transfer.source),
-    destinationAmount: amountOf(transfer.destination),
+    amount: unsigned(transfer.source.amount),
+    destinationAmount: unsigned(transfer.destination.amount),
     sourceRate: rateText(transfer.source.exchangeRate),
     destinationRate: rateText(transfer.destination.exchangeRate),
   };
@@ -90,9 +87,9 @@ type Field =
  * The accounts' currencies, for what the form asks: a destination amount when
  * they differ, and a rate for each account not in the book currency.
  */
-function needs(
+export function needs(
   reference: Reference,
-  draft: Draft,
+  draft: TransferDraft,
   bookCurrency: string,
 ): {
   sourceCurrency?: string;
@@ -118,8 +115,8 @@ function needs(
 }
 
 /** Checks the draft as the API will, and builds the request body. */
-function validate(
-  draft: Draft,
+export function validate(
+  draft: TransferDraft,
   reference: Reference,
   bookCurrency: string,
 ): { body?: TransferInput; errors: Partial<Record<Field, true>> } {
@@ -176,14 +173,12 @@ function TransferFields({
   bookCurrency,
   reference,
   initial,
-  planned,
   onClose,
 }: {
   bookId: string;
   bookCurrency: string;
   reference: Reference;
-  initial: Draft;
-  planned: boolean;
+  initial: TransferDraft;
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -191,7 +186,7 @@ function TransferFields({
   const change = useJournalChange(bookId);
   const [draft, setDraft] = useState(initial);
   const [shown, setShown] = useState<Partial<Record<Field, true>>>({});
-  const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch });
+  const set = (patch: Partial<TransferDraft>) => setDraft({ ...draft, ...patch });
 
   const editing = initial.id !== undefined;
   const wants = needs(reference, draft, bookCurrency);
@@ -239,33 +234,12 @@ function TransferFields({
       setShown(errors);
       return;
     }
-    if (draft.id) {
-      // From the budget, new planned amounts replace both amounts of both sides; left as
-      // they were, they change neither. The journal never touches the planned amounts.
-      const { amount, destinationAmount, ...rest } = body;
-      const replanned =
-        decimalInput(draft.amount) !== decimalInput(initial.amount) ||
-        decimalInput(draft.destinationAmount) !== decimalInput(initial.destinationAmount);
-      change.mutate(
-        {
-          action: "updateTransfer",
-          id: draft.id,
-          body: planned
-            ? {
-                ...rest,
-                version: draft.version,
-                ...(replanned && { amount, destinationAmount, planned: true }),
-              }
-            : { ...body, version: draft.version },
-        },
-        { onSuccess: onClose },
-      );
-    } else {
-      change.mutate(
-        { action: "createTransfer", body: planned ? { ...body, planned: true } : body },
-        { onSuccess: onClose },
-      );
-    }
+    change.mutate(
+      draft.id
+        ? { action: "updateTransfer", id: draft.id, body: { ...body, version: draft.version } }
+        : { action: "createTransfer", body },
+      { onSuccess: onClose },
+    );
   }
 
   return (
@@ -325,8 +299,8 @@ function TransferFields({
           <TextInput
             label={
               wants.sourceCurrency
-                ? `${t(planned ? "budget.plannedAmount" : "transfer.amount")} (${wants.sourceCurrency})`
-                : t(planned ? "budget.plannedAmount" : "transfer.amount")
+                ? `${t("transfer.amount")} (${wants.sourceCurrency})`
+                : t("transfer.amount")
             }
             description={t("transfer.amountHint")}
             required
@@ -447,17 +421,12 @@ export function TransferForm({
   bookCurrency,
   reference,
   transferId,
-  planned = false,
-  initialDate,
   onClose,
 }: {
   bookId: string;
   bookCurrency: string;
   reference: Reference;
   transferId?: string;
-  /** Opened from the budget: the amounts asked for are the planned ones. */
-  planned?: boolean;
-  initialDate?: string;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -473,12 +442,11 @@ export function TransferForm({
   }
   // A new transfer starts from what the book's transfers use most.
   const initial = loaded.data
-    ? draftOf(loaded.data, planned)
+    ? draftOf(loaded.data)
     : {
         ...emptyDraft(),
         subCategoryId: defaults.data?.subCategoryId ?? null,
         paymentTypeId: defaults.data?.paymentTypeId ?? null,
-        ...(initialDate && { date: initialDate }),
       };
   return (
     <TransferFields
@@ -486,7 +454,6 @@ export function TransferForm({
       bookCurrency={bookCurrency}
       reference={reference}
       initial={initial}
-      planned={planned}
       onClose={onClose}
     />
   );

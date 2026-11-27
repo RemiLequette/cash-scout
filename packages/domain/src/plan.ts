@@ -5,7 +5,12 @@
 import { z } from "zod";
 import { versionSchema } from "./book.js";
 import { budgetBatchSchema } from "./budget.js";
-import { entryInputSchema, entryUpdateSchema } from "./journal.js";
+import {
+  entryInputSchema,
+  entryUpdateSchema,
+  transferInputSchema,
+  transferUpdateSchema,
+} from "./journal.js";
 
 const MOST = 2000;
 
@@ -26,6 +31,23 @@ export const planSchema = z.object({
     .default([]),
 });
 export type PlanInput = z.input<typeof planSchema>;
+
+/**
+ * The planned transfers of a year, saved together, all or nothing: transfers to
+ * create (they are planned), to change and to delete.
+ */
+export const transferPlanSchema = z.object({
+  create: z.array(transferInputSchema).max(MOST).default([]),
+  update: z
+    .array(transferUpdateSchema.and(z.object({ id: z.uuid(), version: versionSchema })))
+    .max(MOST)
+    .default([]),
+  remove: z
+    .array(z.object({ id: z.uuid(), version: versionSchema }))
+    .max(MOST)
+    .default([]),
+});
+export type TransferPlanInput = z.input<typeof transferPlanSchema>;
 
 /** The same day one year later; 29 February becomes 28 February. */
 export function yearAhead(date: string): string {

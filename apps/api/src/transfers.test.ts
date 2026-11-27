@@ -263,10 +263,72 @@ describe("transfers", () => {
     expect((await defaults()).subCategoryId).toBe(b.internal.id);
   });
 
+  it("lists the transfers leaving their account in a year, both sides together", async () => {
+    const b = await bookWithAccounts();
+    const late = await b.create({ date: "2025-12-31" }); // arrives in 2026
+    const first = await b.create({ date: "2026-12-31" }); // arrives in 2027
+    const year = (y: number) => json<Transfer[]>(b.owner.request("GET", `${b.base}?year=${y}`));
+
+    expect((await year(2025)).map((t) => t.id)).toEqual([late.id]);
+    expect(await year(2026)).toEqual([first]);
+    expect(await year(2027)).toEqual([]);
+  });
+
+  it("saves the planned transfers together, or nothing", async () => {
+    const b = await bookWithAccounts();
+    const plan = (body: Record<string, unknown>) => b.owner.request("POST", `${b.base}/plan`, body);
+    const year = () => json<Transfer[]>(b.owner.request("GET", `${b.base}?year=2026`));
+    const input = (date: string) => ({
+      date,
+      sourceAccountId: b.current.id,
+      destinationAccountId: b.savings.id,
+      subCategoryId: b.internal.id,
+      amount: "100",
+    });
+
+    expect((await plan({ create: [input("2026-01-05"), input("2026-02-05")] })).status).toBe(204);
+    const [first, second] = await year();
+    expect(first!.source.plannedAmount).toBe("-100.00");
+    expect(first!.destination.plannedAmount).toBe("100.00");
+
+    const change = {
+      create: [input("2026-03-05")],
+      update: [{ id: first!.id, version: first!.version, amount: "120", planned: true }],
+      remove: [{ id: second!.id, version: second!.version + 1 }], // moved on
+    };
+    expect((await plan(change)).status).toBe(409);
+    expect((await year()).map((t) => t.source.amount)).toEqual(["-100.00", "-100.00"]);
+
+    change.remove = [{ id: second!.id, version: second!.version }];
+    expect((await plan(change)).status).toBe(204);
+    expect((await year()).map((t) => [t.source.date, t.destination.plannedAmount])).toEqual([
+      ["2026-01-05", "120.00"],
+      ["2026-03-05", "100.00"],
+    ]);
+  });
+
+  it("does not remove a reconciled transfer from the plan", async () => {
+    const b = await bookWithAccounts();
+    const t = await b.create({ planned: true });
+    await json(
+      b.owner.request("POST", `/books/${b.bookId}/journal/reconcile`, {
+        ids: [t.destination.id],
+        reconciled: true,
+      }),
+    );
+    const refused = await b.owner.request("POST", `${b.base}/plan`, {
+      remove: [{ id: t.id, version: t.version }],
+    });
+    expect(refused.status).toBe(400);
+    expect(await b.entries()).toHaveLength(2);
+  });
+
   it("is private to the members of the book", async () => {
     const b = await bookWithAccounts();
     const t = await b.create({});
     const stranger = await h.signedInUser();
+    expect((await stranger.request("GET", `${b.base}?year=2026`)).status).toBe(404);
+    expect((await stranger.request("POST", `${b.base}/plan`, {})).status).toBe(404);
     expect((await stranger.request("GET", `${b.base}/${t.id}`)).status).toBe(404);
     expect((await stranger.request("DELETE", `${b.base}/${t.id}`)).status).toBe(404);
   });

@@ -1,6 +1,6 @@
 # Budget planning
 
-Design notes from a brainstorm. Step 1, the grid's spreadsheet tools (without a fill handle) and the entry list are built; the copy of transfers is not. Once all is built, this model replaces the [Budgets and cash projection](../README.md#budgets-and-cash-projection) section of the README.
+Design notes from a brainstorm. Step 1, the grid's spreadsheet tools (without a fill handle), the entry list and the transfer list are built. Once all is built, this model replaces the [Budgets and cash projection](../README.md#budgets-and-cash-projection) section of the README.
 
 A [clickable mockup](https://claude.ai/artifact/8vXcbxfpCMEnHrkh8yFBrp) (private, fictitious data) shows the spreadsheet behaviour of the planning view. It predates the model below: it still has the budget type and does not show the budget line.
 
@@ -139,7 +139,7 @@ Beyond that, existing data is adjusted by hand.
 
 ## Transfers
 
-Categories of a transfer nature have no grid and no Budget sub-category, only planned transfers, created from the planning view as today from the budget page.
+Categories of a transfer nature have no grid and no Budget sub-category, only planned transfers. They have a planning view of their own, with one row per transfer, edited in place with the tools of the entry list, and saved together by **Save**, all or nothing (`POST /books/:bookId/transfers/plan`). A transfer belongs to the year it leaves its source account.
 
 ## Steps
 
