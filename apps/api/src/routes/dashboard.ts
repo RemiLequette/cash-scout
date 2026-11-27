@@ -27,6 +27,8 @@ const MONTH = sql<number>`extract(month from ${journalEntry.date})::int`;
  * - `cells`: what the entries hold per sub-category and budget month, transfers left out.
  * - `budgetLines`: the budget lines of the year per category and month, signed
  *   like the entries; 0 when used up or reconciled.
+ * - `transfers`: what the transfer entries moved in or out of each bank account
+ *   per month, by date; only the accounts they touch.
  * - `balances`: the balance of each bank account at the end of each month, by date.
  */
 export function dashboardRoutes(db: Db) {
@@ -48,7 +50,7 @@ export function dashboardRoutes(db: Db) {
       const current = currentMonthOf(year, today);
       const thisYear = sql`extract(year from ${journalEntry.date}) = ${year}`;
 
-      const [cells, accounts, opening, changes, lines] = await Promise.all([
+      const [cells, accounts, opening, changes, moves, lines] = await Promise.all([
         tx
           .select({
             subCategoryId: journalEntry.subCategoryId,
@@ -90,6 +92,18 @@ export function dashboardRoutes(db: Db) {
           })
           .from(journalEntry)
           .where(and(eq(journalEntry.bookId, bookId), thisYear))
+          .groupBy(journalEntry.accountId, MONTH),
+        tx
+          .select({
+            accountId: journalEntry.accountId,
+            month: MONTH,
+            total: sql<string>`sum(${journalEntry.bookAmount})`,
+          })
+          .from(journalEntry)
+          .innerJoin(subCategory, eq(subCategory.id, journalEntry.subCategoryId))
+          .innerJoin(category, eq(category.id, subCategory.categoryId))
+          .innerJoin(nature, eq(nature.id, category.natureId))
+          .where(and(eq(journalEntry.bookId, bookId), thisYear, eq(nature.transfer, true)))
           .groupBy(journalEntry.accountId, MONTH),
         monthEnds(tx, bookId, bookCurrency, year),
       ]);
@@ -135,6 +149,18 @@ export function dashboardRoutes(db: Db) {
         return [{ accountId: id, ends: ends.map(text) }];
       });
 
+      const movesOf = new Map<string, bigint[]>();
+      for (const row of moves) {
+        const months = movesOf.get(row.accountId) ?? Array<bigint>(MONTHS).fill(0n);
+        months[row.month - 1] = BigInt(row.total);
+        movesOf.set(row.accountId, months);
+      }
+      // Bank accounts only, as for the balances.
+      const transfers = accounts.flatMap(({ id }) => {
+        const months = movesOf.get(id);
+        return months ? [{ accountId: id, months: months.map(text) }] : [];
+      });
+
       return {
         year,
         bookCurrency,
@@ -149,6 +175,7 @@ export function dashboardRoutes(db: Db) {
           categoryId,
           months: months.map(text),
         })),
+        transfers,
         balances,
       };
     });
