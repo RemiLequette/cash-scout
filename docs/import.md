@@ -44,7 +44,7 @@ An existing group is matched by its name, a category by its code, a sub-category
 | Column                  | Required | Content                                                         |
 | ----------------------- | -------- | --------------------------------------------------------------- |
 | `name`                  | yes      | Account name                                                    |
-| `kind`                  | no       | `bank` (default) or `virtual`                                   |
+| `kind`                  | no       | Left from older files: empty or `bank`                          |
 | `currency`              | yes      | ISO 4217 code: `EUR`, `MYR`…                                    |
 | `low_balance_threshold` | no       | Warn below this projected balance, e.g. `-200` (bank accounts). |
 

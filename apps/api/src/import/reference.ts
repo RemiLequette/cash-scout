@@ -176,9 +176,9 @@ export async function importReference(
         summary.existing++;
         continue;
       }
-      const kind = (row.kind || "bank").toLowerCase();
-      if (kind !== "bank" && kind !== "virtual") {
-        throw new ImportError(`Line ${line}: unknown kind "${row.kind}" (bank or virtual)`);
+      // Older files have a column "kind": every account is now a bank account.
+      if (row.kind && row.kind.toLowerCase() !== "bank") {
+        throw new ImportError(`Line ${line}: unknown kind "${row.kind}" (only bank accounts)`);
       }
       const currency = currencySchema.safeParse(required(row, "currency", line).toUpperCase());
       if (!currency.success) {
@@ -195,7 +195,7 @@ export async function importReference(
       }
       await tx
         .insert(bookAccount)
-        .values({ bookId, names, kind, currency: currency.data, lowBalanceThreshold });
+        .values({ bookId, names, currency: currency.data, lowBalanceThreshold });
       existing.add(key(names));
       summary.created.accounts++;
     }

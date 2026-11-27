@@ -32,9 +32,20 @@ An entry counts in the month of its date. When it falls just before or just afte
 - **Duplicate** copies an existing entry.
 - **Mark reconciled** and **Mark as forecast** change the status of an entry from the list.
 
+## Compensations
+
+A **compensation** counts an amount in two sub-categories without any money moving. Example, in a shared book: a member pays 50 of groceries from their own account. **New compensation**, 50, with _Contribution_ in + and _Food_ in −.
+
+- It shows as two lines, with a **±** mark, no account and nothing to reconcile.
+- Open either line to change, duplicate or delete the whole compensation.
+- The amount is positive, in the book's currency. For a refund, swap the two sub-categories.
+- Both lines count in the totals and the dashboard, and use up the budget of their categories. No account balance moves.
+- Sub-categories of a transfer category are not offered.
+- Nothing is linked between books: in their own book, the member records their ordinary bank entry.
+
 ## Finding things
 
-Filter by period (year, months), account, category, sub-category, status and free-text search. The header shows the income, spending and net of what is displayed. A line marks **today** between past and future entries.
+Filter by period (year, months), account, category, sub-category, status and free-text search. The account cards filter on an account; the **Compensations** card shows only the compensations. The header shows the income, spending and net of what is displayed. A line marks **today** between past and future entries.
 
 ## Forecasts and reconciling
 

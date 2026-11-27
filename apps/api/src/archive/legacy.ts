@@ -39,3 +39,44 @@ export function withoutPaymentTypes(tables: Record<string, unknown[]>): Record<s
   }
   return kept;
 }
+
+const usedVirtual = "The file has a virtual account in use: they no longer exist";
+
+/** The columns that name an account. */
+const accountUses: [table: string, column: string][] = [
+  ["journal_entry", "accountId"],
+  ["category_budget", "accountId"],
+  ["import_batch", "accountId"],
+  ["import_line", "transferAccountId"],
+];
+
+/**
+ * Files exported while there were virtual accounts give each account a kind. An
+ * unused virtual account is left out; one that holds something cannot be read.
+ */
+export function withoutAccountKinds(
+  tables: Record<string, unknown[]>,
+  refuse: (message: string) => never,
+): Record<string, unknown[]> {
+  const accounts = tables.book_account ?? [];
+  const virtual = new Set<unknown>();
+  for (const row of accounts) {
+    if (!isRow(row) || row.kind !== "virtual") continue;
+    if (row.openingBalance != null && row.openingBalance !== "0") refuse(usedVirtual);
+    virtual.add(row.id);
+  }
+  for (const [table, column] of accountUses) {
+    if ((tables[table] ?? []).some((row) => isRow(row) && virtual.has(row[column]))) {
+      refuse(usedVirtual);
+    }
+  }
+  const kept = accounts
+    .filter((row) => !isRow(row) || !virtual.has(row.id))
+    .map((row) => {
+      if (!isRow(row)) return row;
+      const copy = { ...row };
+      delete copy.kind;
+      return copy;
+    });
+  return tables.book_account ? { ...tables, book_account: kept } : tables;
+}

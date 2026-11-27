@@ -73,7 +73,7 @@ export function dashboardRoutes(db: Db) {
             archived: sql<boolean>`${bookAccount.archivedAt} is not null`,
           })
           .from(bookAccount)
-          .where(and(eq(bookAccount.bookId, bookId), eq(bookAccount.kind, "bank"))),
+          .where(eq(bookAccount.bookId, bookId)),
         tx
           .select({
             accountId: journalEntry.accountId,
@@ -121,8 +121,10 @@ export function dashboardRoutes(db: Db) {
       const openingOf = new Map(
         accounts.map((a) => [a.id, a.openingBookAmount] as [string, bigint]),
       );
-      for (const row of opening) {
-        openingOf.set(row.accountId, (openingOf.get(row.accountId) ?? 0n) + BigInt(row.total));
+      // Compensations, without an account, move no balance.
+      for (const { accountId, total } of opening) {
+        if (accountId === null) continue;
+        openingOf.set(accountId, (openingOf.get(accountId) ?? 0n) + BigInt(total));
       }
       const changesOf = new Map<string, bigint[]>();
       const changeOf = (accountId: string) => {
@@ -131,6 +133,7 @@ export function dashboardRoutes(db: Db) {
         return months;
       };
       for (const row of changes) {
+        if (row.accountId === null) continue;
         const months = changeOf(row.accountId);
         months[row.month - 1] = months[row.month - 1]! + BigInt(row.total);
       }
@@ -151,11 +154,12 @@ export function dashboardRoutes(db: Db) {
 
       const movesOf = new Map<string, bigint[]>();
       for (const row of moves) {
+        if (row.accountId === null) continue;
         const months = movesOf.get(row.accountId) ?? Array<bigint>(MONTHS).fill(0n);
         months[row.month - 1] = BigInt(row.total);
         movesOf.set(row.accountId, months);
       }
-      // Bank accounts only, as for the balances.
+      // In the order of the accounts, as the balances.
       const transfers = accounts.flatMap(({ id }) => {
         const months = movesOf.get(id);
         return months ? [{ accountId: id, months: months.map(text) }] : [];

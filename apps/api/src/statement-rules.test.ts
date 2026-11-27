@@ -38,7 +38,6 @@ async function setup() {
   const ref = `/books/${bookId}/reference`;
   const accountId = await created(`${ref}/accounts`, {
     names: { fr: "Compte" },
-    kind: "bank",
     currency: "EUR",
   });
   const groupId = await created(`${ref}/groups`, { names: { fr: "Vie" } });

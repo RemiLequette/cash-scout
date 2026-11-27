@@ -67,7 +67,11 @@ import {
 import { currencyOptions } from "../options";
 import { useNameOf, useReference, useSubCategoryOptions, type Reference } from "../reference";
 import { AccountChart } from "./AccountChart";
+import { CompensationForm, type CompensationDraft } from "./CompensationForm";
 import { TransferForm } from "./TransferForm";
+
+/** The choice of the account cards that shows the compensations, which have no account. */
+const COMPENSATIONS = "compensations";
 
 function ErrorAlert({ error }: { error: Error | null }) {
   const { t } = useTranslation();
@@ -682,51 +686,67 @@ function BalanceCards({
     .sort((a, b) => nameOf(a.account!.names).localeCompare(nameOf(b.account!.names)));
   if (balances.error) return <ErrorAlert error={balances.error} />;
   if (rows.length === 0) return null;
+  const card = (id: string, title: string, children: ReactNode) => {
+    const active = selected === id;
+    return (
+      <UnstyledButton
+        key={id}
+        aria-pressed={active}
+        title={title}
+        style={{ flex: "1 0 auto" }}
+        onClick={() => onSelect(active ? null : id)}
+      >
+        <Paper
+          withBorder
+          px="sm"
+          py={6}
+          radius="md"
+          h="100%"
+          style={
+            active
+              ? {
+                  borderColor: "var(--mantine-color-blue-filled)",
+                  background: "var(--mantine-color-blue-light)",
+                }
+              : undefined
+          }
+        >
+          <Group gap="sm" justify="space-between" wrap="nowrap">
+            {children}
+          </Group>
+        </Paper>
+      </UnstyledButton>
+    );
+  };
   return (
     <Group gap="xs" wrap="nowrap" style={{ overflowX: "auto", scrollbarWidth: "none" }}>
-      {rows.map((row) => {
-        const active = selected === row.accountId;
-        return (
-          <UnstyledButton
-            key={row.accountId}
-            aria-pressed={active}
-            title={t("journal.filterOnAccount")}
-            style={{ flex: "1 0 auto" }}
-            onClick={() => onSelect(active ? null : row.accountId)}
-          >
-            <Paper
-              withBorder
-              px="sm"
-              py={6}
-              radius="md"
-              style={
-                active
-                  ? {
-                      borderColor: "var(--mantine-color-blue-filled)",
-                      background: "var(--mantine-color-blue-light)",
-                    }
-                  : undefined
-              }
+      {rows.map((row) =>
+        card(
+          row.accountId,
+          t("journal.filterOnAccount"),
+          <>
+            <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+              {nameOf(row.account!.names)}
+            </Text>
+            <Text
+              size="sm"
+              fw={700}
+              c={Number(row.reconciled) < 0 ? "red" : undefined}
+              title={t("journal.balanceReconciled")}
+              style={{ whiteSpace: "nowrap" }}
             >
-              <Group gap="sm" justify="space-between" wrap="nowrap">
-                <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                  {nameOf(row.account!.names)}
-                  {row.account!.kind === "virtual" && ` (${t("accountKinds.virtual")})`}
-                </Text>
-                <Text
-                  size="sm"
-                  fw={700}
-                  c={Number(row.reconciled) < 0 ? "red" : undefined}
-                  title={t("journal.balanceReconciled")}
-                  style={{ whiteSpace: "nowrap" }}
-                >
-                  {formatAmount(row.reconciled, row.currency)}
-                </Text>
-              </Group>
-            </Paper>
-          </UnstyledButton>
-        );
-      })}
+              {formatAmount(row.reconciled, row.currency)}
+            </Text>
+          </>,
+        ),
+      )}
+      {card(
+        COMPENSATIONS,
+        t("compensation.filter"),
+        <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+          {t("compensation.all")}
+        </Text>,
+      )}
     </Group>
   );
 }
@@ -851,6 +871,16 @@ function TransferBadge({ leg }: { leg: "source" | "destination" | null }) {
   return (
     <Badge variant="light" color="grape" size="xs" mr={6} title={label}>
       {leg === "source" ? "⇄ →" : leg === "destination" ? "→ ⇄" : "⇄"}
+    </Badge>
+  );
+}
+
+/** Marks one side of a compensation. */
+function CompensationBadge() {
+  const { t } = useTranslation();
+  return (
+    <Badge variant="light" color="indigo" size="xs" mr={6} title={t("compensation.badge")}>
+      ±
     </Badge>
   );
 }
@@ -1025,7 +1055,7 @@ function toRows(entries: Entry[], reference: Reference, language: string): Row[]
     .map((entry) => {
       const sub = subs.get(entry.subCategoryId);
       const category = sub && categories.get(sub.categoryId);
-      const account = accounts.get(entry.accountId);
+      const account = accounts.get(entry.accountId ?? "");
       return {
         entry,
         sub: sub ? nameOf(sub.names) : "",
@@ -1153,6 +1183,7 @@ const TableEntry = memo(function TableEntry({
       </Table.Td>
       <Table.Td>
         {entry.transferId && <TransferBadge leg={entry.transferLeg} />}
+        {entry.compensationId && <CompensationBadge />}
         {entry.description}
       </Table.Td>
       <Table.Td>
@@ -1164,11 +1195,14 @@ const TableEntry = memo(function TableEntry({
         <Amount row={row} bookCurrency={bookCurrency} />
       </Table.Td>
       <Table.Td onClick={(e) => e.stopPropagation()}>
-        <Status
-          reconciled={entry.reconciled}
-          canEdit={canEdit}
-          onToggle={() => onReconcile(entry.id, !entry.reconciled)}
-        />
+        {/* A compensation has nothing to reconcile. */}
+        {!entry.compensationId && (
+          <Status
+            reconciled={entry.reconciled}
+            canEdit={canEdit}
+            onToggle={() => onReconcile(entry.id, !entry.reconciled)}
+          />
+        )}
       </Table.Td>
     </Table.Tr>
   );
@@ -1194,6 +1228,7 @@ const CardEntry = memo(function CardEntry({
         >
           <Text size="sm" fw={500} truncate>
             {entry.transferId && <TransferBadge leg={entry.transferLeg} />}
+            {entry.compensationId && <CompensationBadge />}
             {entry.description || row.sub}
           </Text>
           <Text size="xs" c="dimmed" truncate>
@@ -1208,11 +1243,13 @@ const CardEntry = memo(function CardEntry({
         </UnstyledButton>
         <Stack gap={4} align="flex-end">
           <Amount row={row} bookCurrency={bookCurrency} />
-          <Status
-            reconciled={entry.reconciled}
-            canEdit={canEdit}
-            onToggle={() => onReconcile(entry.id, !entry.reconciled)}
-          />
+          {!entry.compensationId && (
+            <Status
+              reconciled={entry.reconciled}
+              canEdit={canEdit}
+              onToggle={() => onReconcile(entry.id, !entry.reconciled)}
+            />
+          )}
         </Stack>
       </Group>
     </Paper>
@@ -1369,6 +1406,34 @@ function NewTransferButton({
   );
 }
 
+function NewCompensationButton({
+  disabled,
+  compact,
+  onOpen,
+}: {
+  disabled: boolean;
+  compact: boolean;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  return compact ? (
+    <ActionIcon
+      size="md"
+      variant="default"
+      aria-label={t("compensation.new")}
+      title={t("compensation.new")}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      ±
+    </ActionIcon>
+  ) : (
+    <Button size="xs" variant="default" disabled={disabled} onClick={onOpen}>
+      {t("compensation.new")}
+    </Button>
+  );
+}
+
 function NewEntryButton({
   bookId,
   disabled,
@@ -1494,10 +1559,21 @@ export function Journal({
     setFormKey((key) => key + 1);
   }, []);
 
+  /** The compensation being created (no id) or edited, in its own form. */
+  const [compensation, setCompensation] = useState<{
+    id?: string;
+    from?: CompensationDraft;
+  } | null>(null);
+  const openCompensation = useCallback((id?: string, from?: CompensationDraft) => {
+    setCompensation({ id, from });
+    setFormKey((key) => key + 1);
+  }, []);
+
   // Newest first, so that the latest entries are the ones loaded; shown oldest first.
   const list = useJournal(bookId, {
     months: months ? [...months].join(",") : undefined,
-    accountId: accountId ?? undefined,
+    accountId: accountId === COMPENSATIONS ? undefined : (accountId ?? undefined),
+    compensations: accountId === COMPENSATIONS ? "true" : undefined,
     subCategoryIds: subCategories ? [...subCategories].join(",") : undefined,
     reconciled: status === "all" ? undefined : status,
     q: q || undefined,
@@ -1547,11 +1623,14 @@ export function Journal({
     (id: string, reconciled: boolean) => mutate({ action: "reconcile", ids: [id], reconciled }),
     [mutate],
   );
-  // A side of a transfer opens the whole transfer: both sides change together.
+  // A side of a transfer or a compensation opens the whole: both sides change together.
   const onOpen = useCallback(
-    (entry: Entry) =>
-      entry.transferId ? openTransfer(entry.transferId) : open(draftOf(entry, "edit")),
-    [open, openTransfer],
+    (entry: Entry) => {
+      if (entry.transferId) openTransfer(entry.transferId);
+      else if (entry.compensationId) openCompensation(entry.compensationId);
+      else open(draftOf(entry, "edit"));
+    },
+    [open, openTransfer, openCompensation],
   );
 
   // The filters stay above the table; its header sticks just under them.
@@ -1633,6 +1712,7 @@ export function Journal({
 
   const canAdd =
     ref.accounts.some((a) => !a.archived) && ref.subCategories.some((s) => !s.archived);
+  const canCompensate = ref.subCategories.filter((s) => !s.archived).length > 1;
   const activeFilters = [subCategories, status !== "all" ? status : null].filter(Boolean).length;
 
   const entryProps = (row: Row): EntryViewProps => ({
@@ -1693,6 +1773,13 @@ export function Journal({
             {canEdit && (
               <NewTransferButton disabled={!canAdd} compact onOpen={() => openTransfer()} />
             )}
+            {canEdit && (
+              <NewCompensationButton
+                disabled={!canCompensate}
+                compact
+                onOpen={() => openCompensation()}
+              />
+            )}
             {canEdit && <NewEntryButton bookId={bookId} disabled={!canAdd} compact onOpen={open} />}
           </Group>
           <Collapse expanded={filtersOpen}>
@@ -1718,6 +1805,13 @@ export function Journal({
           )}
           {canEdit && (
             <NewTransferButton disabled={!canAdd} compact={false} onOpen={() => openTransfer()} />
+          )}
+          {canEdit && (
+            <NewCompensationButton
+              disabled={!canCompensate}
+              compact={false}
+              onOpen={() => openCompensation()}
+            />
           )}
           {canEdit && (
             <NewEntryButton bookId={bookId} disabled={!canAdd} compact={false} onOpen={open} />
@@ -1894,7 +1988,10 @@ export function Journal({
         </Table>
       )}
 
-      <AccountChart bookId={bookId} reference={ref} accountId={accountId} />
+      {/* Compensations move no balance. */}
+      {accountId !== COMPENSATIONS && (
+        <AccountChart bookId={bookId} reference={ref} accountId={accountId} />
+      )}
 
       <Modal
         size="lg"
@@ -1929,6 +2026,26 @@ export function Journal({
             reference={ref}
             transferId={transfer.id}
             onClose={() => setTransfer(null)}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        size="lg"
+        opened={compensation !== null}
+        onClose={() => setCompensation(null)}
+        title={compensation?.id ? t("compensation.edit") : t("compensation.new")}
+      >
+        {compensation && (
+          <CompensationForm
+            key={formKey}
+            bookId={bookId}
+            bookCurrency={bookCurrency}
+            reference={ref}
+            compensationId={compensation.id}
+            from={compensation.from}
+            onClose={() => setCompensation(null)}
+            onDuplicate={(from) => openCompensation(undefined, from)}
           />
         )}
       </Modal>

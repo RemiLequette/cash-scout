@@ -1,9 +1,7 @@
 import {
-  accountKinds,
   formatMoney,
   groupColors,
   parseAmount,
-  type AccountKind,
   type GroupColor,
   type Names,
 } from "@cash-scout/domain";
@@ -779,21 +777,11 @@ function AccountsTab({
     version: item?.version,
     names: item?.names ?? {},
     fields: {
-      kind: item?.kind ?? "bank",
       currency: item?.currency ?? "EUR",
       lowBalanceThreshold: item?.lowBalanceThreshold ?? "",
     },
     extra: (fields, set) => (
       <>
-        <SegmentedControl
-          disabled={!!item}
-          data={accountKinds.map((k) => ({ value: k, label: t(`accountKinds.${k}`) }))}
-          value={fields.kind as string}
-          onChange={(value) => set({ kind: value as AccountKind })}
-        />
-        <Text size="xs" c="dimmed">
-          {t(`accountKinds.${fields.kind as AccountKind}Hint`)}
-        </Text>
         <Select
           label={t("books.currency")}
           description={t("reference.currencyHint")}
@@ -804,25 +792,23 @@ function AccountsTab({
           value={fields.currency as string}
           onChange={(value) => value && set({ currency: value })}
         />
-        {fields.kind === "bank" && (
-          <TextInput
-            label={t("reference.threshold")}
-            description={t("reference.thresholdHint")}
-            placeholder="-500"
-            value={fields.lowBalanceThreshold as string}
-            onChange={(e) => set({ lowBalanceThreshold: e.currentTarget.value })}
-          />
-        )}
+        <TextInput
+          label={t("reference.threshold")}
+          description={t("reference.thresholdHint")}
+          placeholder="-500"
+          value={fields.lowBalanceThreshold as string}
+          onChange={(e) => set({ lowBalanceThreshold: e.currentTarget.value })}
+        />
       </>
     ),
     body: (names, fields) => {
       const lowBalanceThreshold =
-        fields.kind === "bank" && fields.lowBalanceThreshold !== ""
+        fields.lowBalanceThreshold !== ""
           ? String(fields.lowBalanceThreshold).replace(",", ".")
           : null;
       return item
         ? { names, lowBalanceThreshold }
-        : { names, kind: fields.kind, currency: fields.currency, lowBalanceThreshold };
+        : { names, currency: fields.currency, lowBalanceThreshold };
     },
   });
 
@@ -839,7 +825,6 @@ function AccountsTab({
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t("reference.name")}</Table.Th>
-              <Table.Th>{t("reference.kind")}</Table.Th>
               <Table.Th>{t("books.currency")}</Table.Th>
               <Table.Th>{t("reference.threshold")}</Table.Th>
               <Table.Th>{t("reference.openingBalance")}</Table.Th>
@@ -855,7 +840,6 @@ function AccountsTab({
                     <ArchivedBadge archived={item.archived} />
                   </Group>
                 </Table.Td>
-                <Table.Td>{t(`accountKinds.${item.kind}`)}</Table.Td>
                 <Table.Td>{item.currency}</Table.Td>
                 <Table.Td>
                   {item.lowBalanceThreshold === null
@@ -866,8 +850,7 @@ function AccountsTab({
                       )}
                 </Table.Td>
                 <Table.Td>
-                  {item.kind === "bank" &&
-                    formatMoney(parseAmount(item.openingBalance, item.currency), i18n.language)}
+                  {formatMoney(parseAmount(item.openingBalance, item.currency), i18n.language)}
                 </Table.Td>
                 <Table.Td w={50}>
                   <ItemMenu
@@ -879,11 +862,9 @@ function AccountsTab({
                     canEdit={canEdit}
                     onEdit={() => openEditor(editor(item))}
                   >
-                    {item.kind === "bank" && (
-                      <Menu.Item onClick={() => setOpeningOf(item)}>
-                        {t("reference.setOpening")}
-                      </Menu.Item>
-                    )}
+                    <Menu.Item onClick={() => setOpeningOf(item)}>
+                      {t("reference.setOpening")}
+                    </Menu.Item>
                   </ItemMenu>
                 </Table.Td>
               </Table.Tr>

@@ -659,7 +659,7 @@ function CategoryPlan({
                 clearable={!budgeted}
                 error={problem === "budget.problemAccount"}
                 data={reference.accounts
-                  .filter((a) => (!a.archived && a.kind === "bank") || a.id === draft.accountId)
+                  .filter((a) => !a.archived || a.id === draft.accountId)
                   .map((a) => ({ value: a.id, label: `${nameOf(a.names)} (${a.currency})` }))}
                 value={draft.accountId}
                 onChange={(value) => update({ accountId: value, exchangeRate: "" })}

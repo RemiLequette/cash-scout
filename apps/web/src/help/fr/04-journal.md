@@ -32,9 +32,20 @@ Une écriture compte dans le mois de sa date. Quand elle tombe juste avant ou ju
 - **Dupliquer** copie une écriture existante.
 - **Marquer rapprochées** et **Marquer en prévision** changent le statut d'une écriture depuis la liste.
 
+## Compensations
+
+Une **compensation** compte un montant dans deux sous-catégories sans que de l'argent bouge. Exemple, dans un livre commun : un membre paie 50 d'alimentation avec son compte personnel. **Nouvelle compensation**, 50, avec _Contribution_ en + et _Alimentation_ en −.
+
+- Elle apparaît en deux lignes, marquées **±**, sans compte et sans rien à pointer.
+- Ouvrez l'une des lignes pour modifier, dupliquer ou supprimer toute la compensation.
+- Le montant est positif, dans la devise du livre. Pour un remboursement, inversez les deux sous-catégories.
+- Les deux lignes comptent dans les totaux et le tableau de bord, et consomment le budget de leurs catégories. Aucun solde de compte ne bouge.
+- Les sous-catégories d'une catégorie de transfert ne sont pas proposées.
+- Rien n'est lié entre les livres : dans le sien, le membre saisit son écriture bancaire ordinaire.
+
 ## Retrouver
 
-Filtrez par période (année, mois), compte, catégorie, sous-catégorie, statut et recherche texte. L'en-tête affiche les revenus, dépenses et le net de ce qui est affiché. Une ligne marque **aujourd'hui** entre les écritures passées et futures.
+Filtrez par période (année, mois), compte, catégorie, sous-catégorie, statut et recherche texte. Les cartes de compte filtrent sur un compte ; la carte **Compensations** ne montre que les compensations. L'en-tête affiche les revenus, dépenses et le net de ce qui est affiché. Une ligne marque **aujourd'hui** entre les écritures passées et futures.
 
 ## Prévisions et rapprochement
 

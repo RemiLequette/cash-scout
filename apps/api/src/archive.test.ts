@@ -58,7 +58,7 @@ async function filledBook() {
   });
   await create("/reference/balances", { names: { fr: "Courant" }, natureIds: [expense] });
   const account = (name: string) =>
-    create("/reference/accounts", { names: { fr: name }, kind: "bank", currency: "EUR" });
+    create("/reference/accounts", { names: { fr: name }, currency: "EUR" });
   const current = await account("Courant");
   const savings = await account("Épargne");
 
@@ -223,6 +223,33 @@ describe("book export and import", () => {
     expect(copy.tables.import_line!.filter((l) => l.ruleId).length).toBe(
       lines.slice(1).filter((l) => l.ruleId).length,
     );
+  });
+
+  it("reads a file with account kinds, leaving an unused virtual account out", async () => {
+    const { owner, bookId } = await filledBook();
+    const archive = await exportOf(owner, bookId);
+    const accounts = archive.tables.book_account!;
+    const virtual = { ...accounts[0], id: crypto.randomUUID(), openingBalance: "0" };
+    const old = (extra: Record<string, unknown[]> = {}) => ({
+      ...archive,
+      tables: {
+        ...archive.tables,
+        book_account: [
+          ...accounts.map((a) => ({ ...a, kind: "bank" })),
+          { ...virtual, kind: "virtual" },
+        ],
+        ...extra,
+      },
+    });
+
+    const { id } = await json<{ id: string }>(importFile(owner, old()), 201);
+    expect((await exportOf(owner, id)).tables.book_account).toHaveLength(accounts.length);
+
+    const [entry] = archive.tables.journal_entry!;
+    const used = old({ journal_entry: [{ ...entry, accountId: virtual.id }] });
+    const refused = await importFile(owner, used);
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain("virtual account in use");
   });
 
   it("is for owners to export", async () => {

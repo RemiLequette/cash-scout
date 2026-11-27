@@ -152,7 +152,6 @@ function useChoices(reference: Reference) {
     .map((s) => ({ value: s.id, label: nameOf(s.names), archived: s.archived }))
     .sort(byLabel);
   const accounts = reference.accounts
-    .filter((a) => a.kind === "bank")
     .map((a) => ({
       value: a.id,
       label: nameOf(a.names),

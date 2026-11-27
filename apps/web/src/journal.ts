@@ -1,5 +1,7 @@
 import {
   budgetMonth,
+  type CompensationInput,
+  type CompensationUpdate,
   type EntryInput,
   type EntryUpdate,
   type TransferInput,
@@ -25,6 +27,10 @@ const transfers = api.books[":bookId"].transfers;
 export type Transfer = InferResponseType<(typeof transfers)[":id"]["$get"], 200>;
 export type YearTransfer = InferResponseType<typeof transfers.$get, 200>[number];
 
+const compensations = api.books[":bookId"].compensations;
+/** A compensation: its two journal entries. */
+export type Compensation = InferResponseType<(typeof compensations)[":id"]["$get"], 200>;
+
 const budgets = api.books[":bookId"].budgets;
 /** A budget line: what a month's grid amount still expects, at the month's end. */
 export type MonthEnd = InferResponseType<(typeof budgets)["month-ends"]["$get"], 200>[number];
@@ -42,6 +48,8 @@ export interface JournalFilters {
   /** Comma-separated months ("2026-11"); "" shows nothing. */
   months?: string;
   reconciled?: "true" | "false";
+  /** Only the sides of compensations. */
+  compensations?: "true";
   q?: string;
   limit: number;
   offset: number;
@@ -81,6 +89,16 @@ export function useTransfer(bookId: string, id: string | undefined) {
   return useQuery({
     queryKey: ["books", bookId, "journal", "transfer", id],
     queryFn: () => unwrap(transfers[":id"].$get({ param: { bookId, id: id! } })),
+    enabled: id !== undefined,
+    gcTime: 0,
+  });
+}
+
+/** One compensation with both of its sides, loaded when its form opens. */
+export function useCompensation(bookId: string, id: string | undefined) {
+  return useQuery({
+    queryKey: ["books", bookId, "journal", "compensation", id],
+    queryFn: () => unwrap(compensations[":id"].$get({ param: { bookId, id: id! } })),
     enabled: id !== undefined,
     gcTime: 0,
   });
@@ -169,7 +187,10 @@ export type JournalChange =
   | { action: "reconcile"; ids: string[]; reconciled: boolean }
   | { action: "createTransfer"; body: TransferInput }
   | { action: "updateTransfer"; id: string; body: TransferUpdate }
-  | { action: "deleteTransfer"; id: string };
+  | { action: "deleteTransfer"; id: string }
+  | { action: "createCompensation"; body: CompensationInput }
+  | { action: "updateCompensation"; id: string; body: CompensationUpdate }
+  | { action: "deleteCompensation"; id: string };
 
 /** Changes to the journal; the list and balances are reloaded after each. */
 export function useJournalChange(bookId: string) {
@@ -207,14 +228,35 @@ export function useJournalChange(bookId: string) {
           return;
         case "deleteTransfer":
           await unwrap(transfers[":id"].$delete({ param: { ...param, id: change.id } }));
+          return;
+        case "createCompensation":
+          await unwrap(compensations.$post({ param, json: change.body }));
+          return;
+        case "updateCompensation":
+          await unwrap(
+            compensations[":id"].$patch({ param: { ...param, id: change.id }, json: change.body }),
+          );
+          return;
+        case "deleteCompensation":
+          await unwrap(compensations[":id"].$delete({ param: { ...param, id: change.id } }));
       }
     },
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["books", bookId, "journal"] }),
+    onSettled: (_data, error, change) => {
+      // What was just deleted is not read again: it would only be retried, and
+      // its form would stay open meanwhile.
+      const gone =
+        !error && (change.action === "deleteTransfer" || change.action === "deleteCompensation")
+          ? change.id
+          : undefined;
+      return Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["books", bookId, "journal"],
+          predicate: (query) => gone === undefined || !query.queryKey.includes(gone),
+        }),
         // The budgets read the journal: what an entry holds counts in them.
         queryClient.invalidateQueries({ queryKey: ["books", bookId, "budgets"] }),
-      ]),
+      ]);
+    },
   });
 }
 

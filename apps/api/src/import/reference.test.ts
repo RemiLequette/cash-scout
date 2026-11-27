@@ -28,7 +28,7 @@ const categories = [
 const accounts = [
   "name,name@en,kind,currency,low_balance_threshold",
   "Compte courant,Current account,bank,EUR,-200",
-  "Compensations,,virtual,EUR,",
+  "Livret,,,EUR,",
 ].join("\n");
 
 describe("parseCsv", () => {
@@ -63,7 +63,7 @@ describe("importReference", () => {
     const reference = (await (await owner.request("GET", `/books/${bookId}/reference`)).json()) as {
       natures: { id: string; names: Record<string, string> }[];
       categories: { code: string; natureId: string; names: object }[];
-      accounts: { kind: string; lowBalanceThreshold: string | null }[];
+      accounts: { lowBalanceThreshold: string | null }[];
     };
     const nature = (name: string) => reference.natures.find((n) => n.names.fr === name)!.id;
     expect(reference.categories).toEqual([
@@ -76,10 +76,18 @@ describe("importReference", () => {
     ]);
     expect(reference.accounts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: "bank", lowBalanceThreshold: "-200.00" }),
-        expect.objectContaining({ kind: "virtual", lowBalanceThreshold: null }),
+        expect.objectContaining({ lowBalanceThreshold: "-200.00" }),
+        expect.objectContaining({ lowBalanceThreshold: null }),
       ]),
     );
+  });
+
+  it("refuses a virtual account", async () => {
+    const { owner, bookId } = await bookOf();
+    const virtual = "name,kind,currency\nCompensations,virtual,EUR";
+    await expect(
+      withUser(h.db, owner.id, (tx) => importReference(tx, bookId, { accounts: virtual })),
+    ).rejects.toThrow('Line 2: unknown kind "virtual"');
   });
 
   it("reports the line of an error and imports nothing", async () => {

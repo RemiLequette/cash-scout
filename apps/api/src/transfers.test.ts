@@ -61,7 +61,7 @@ async function bookWithAccounts() {
   });
   const bakery = await post("/sub-categories", { categoryId: food.id, names: { fr: "Pain" } });
   const account = (name: string, currency: string) =>
-    post("/accounts", { names: { fr: name }, kind: "bank", currency });
+    post("/accounts", { names: { fr: name }, currency });
   const current = await account("Courant", "EUR");
   const savings = await account("Livret", "EUR");
   const ringgit = await account("Compte MYR", "MYR");

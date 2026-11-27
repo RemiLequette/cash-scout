@@ -44,12 +44,10 @@ async function setup() {
   });
   const current = await post("/reference/accounts", {
     names: { fr: "Compte courant" },
-    kind: "bank",
     currency: "EUR",
   });
   const ringgit = await post("/reference/accounts", {
     names: { fr: "Compte MYR" },
-    kind: "bank",
     currency: "MYR",
   });
 

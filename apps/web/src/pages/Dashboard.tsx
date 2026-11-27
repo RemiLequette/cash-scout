@@ -928,7 +928,9 @@ function DetailPanel({
                           {shiftText(entry, i18n.language)}
                         </Text>
                       </Table.Td>
-                      <Table.Td>{nameOf(accounts.get(entry.accountId)?.names ?? {})}</Table.Td>
+                      <Table.Td>
+                        {nameOf(accounts.get(entry.accountId ?? "")?.names ?? {})}
+                      </Table.Td>
                       <Table.Td>
                         {category && sub ? `${nameOf(category.names)} › ${nameOf(sub.names)}` : ""}
                       </Table.Td>

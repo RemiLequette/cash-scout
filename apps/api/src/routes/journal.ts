@@ -22,6 +22,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   lte,
   sql,
@@ -104,6 +105,8 @@ export const entryColumns = {
   scheduleId: journalEntry.scheduleId,
   transferId: journalEntry.transferId,
   transferLeg: journalEntry.transferLeg,
+  compensationId: journalEntry.compensationId,
+  compensationSide: journalEntry.compensationSide,
   createdAt: journalEntry.createdAt,
   updatedAt: journalEntry.updatedAt,
 };
@@ -165,14 +168,21 @@ export async function updateEntry(
   input: Omit<z.output<typeof entryUpdateSchema>, "version">,
   version?: number,
 ) {
-  const [current] = await tx
+  const [found] = await tx
     .select({ ...entryColumns, currency: bookAccount.currency })
     .from(journalEntry)
-    .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
+    .leftJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
     .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
-  if (!current) {
+  if (!found) {
     throw new HTTPException(404, { message: "Entry not found" });
   }
+  if (found.compensationId) {
+    throw new HTTPException(400, {
+      message: "This entry is one side of a compensation: change the compensation",
+    });
+  }
+  // Only a side of a compensation has no account.
+  const current = { ...found, currency: found.currency! };
   // A side of a transfer changes with the transfer; only its reconciling is its own.
   if (current.transferId && Object.keys(input).some((key) => key !== "reconciled")) {
     throw new HTTPException(400, {
@@ -234,15 +244,23 @@ export async function updateEntry(
   return outEntry(updated, current.currency, bookCurrency);
 }
 
-/** Deletes an entry that is not a side of a transfer; with `version`, only if unchanged. */
+/** Deletes an entry that is not a side of a transfer or a compensation; with `version`, only if unchanged. */
 export async function deleteEntry(tx: Tx, bookId: string, id: string, version?: number) {
   const [found] = await tx
-    .select({ transferId: journalEntry.transferId })
+    .select({
+      transferId: journalEntry.transferId,
+      compensationId: journalEntry.compensationId,
+    })
     .from(journalEntry)
     .where(and(eq(journalEntry.id, id), eq(journalEntry.bookId, bookId)));
   if (found?.transferId) {
     throw new HTTPException(400, {
       message: "This entry is one side of a transfer: delete the transfer",
+    });
+  }
+  if (found?.compensationId) {
+    throw new HTTPException(400, {
+      message: "This entry is one side of a compensation: delete the compensation",
     });
   }
   const deleted = await tx
@@ -269,6 +287,7 @@ export function journalRoutes(db: Db) {
           if (query.from) filters.push(gte(journalEntry.date, query.from));
           if (query.to) filters.push(lte(journalEntry.date, query.to));
           if (query.accountId) filters.push(eq(journalEntry.accountId, query.accountId));
+          if (query.compensations) filters.push(isNotNull(journalEntry.compensationId));
           if (query.subCategoryId) {
             filters.push(eq(journalEntry.subCategoryId, query.subCategoryId));
           }
@@ -314,7 +333,7 @@ export function journalRoutes(db: Db) {
             tx
               .select({ ...entryColumns, currency: bookAccount.currency })
               .from(journalEntry)
-              .innerJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
+              .leftJoin(bookAccount, eq(bookAccount.id, journalEntry.accountId))
               .where(where)
               .orderBy(desc(journalEntry.date), desc(journalEntry.createdAt), asc(journalEntry.id))
               .limit(query.limit)
@@ -325,7 +344,10 @@ export function journalRoutes(db: Db) {
           return {
             total: total?.n ?? 0,
             bookCurrency,
-            entries: rows.map(({ currency, ...row }) => outEntry(row, currency, bookCurrency)),
+            // Without an account, an entry is in the book currency.
+            entries: rows.map(({ currency, ...row }) =>
+              outEntry(row, currency ?? bookCurrency, bookCurrency),
+            ),
           };
         });
         return c.json(result);
@@ -352,6 +374,7 @@ export function journalRoutes(db: Db) {
                 eq(journalEntry.bookId, bookId),
                 eq(journalEntry.reconciled, true),
                 isNull(journalEntry.transferId),
+                isNull(journalEntry.compensationId),
                 sql`${key} <> ''`,
                 gte(journalEntry.date, sql`current_date - interval '12 months'`),
                 sql`${key} not in (${forecasts})`,
@@ -371,6 +394,7 @@ export function journalRoutes(db: Db) {
                   eq(journalEntry.bookId, bookId),
                   eq(journalEntry.reconciled, true),
                   isNull(journalEntry.transferId),
+                  isNull(journalEntry.compensationId),
                   inArray(
                     key,
                     top.map((row) => row.key),
@@ -494,8 +518,10 @@ export function journalRoutes(db: Db) {
           const openingOf = new Map(
             accounts.map((a) => [a.id, a.openingBalance] as [string, bigint]),
           );
-          for (const row of opening) {
-            openingOf.set(row.accountId, (openingOf.get(row.accountId) ?? 0n) + BigInt(row.total));
+          // Compensations, without an account, move no balance.
+          for (const { accountId, total } of opening) {
+            if (accountId === null) continue;
+            openingOf.set(accountId, (openingOf.get(accountId) ?? 0n) + BigInt(total));
           }
           const changes = new Map<string, Map<string, bigint>>();
           const addChange = (accountId: string, date: string, amount: bigint) => {
@@ -504,7 +530,9 @@ export function journalRoutes(db: Db) {
             changes.set(accountId, byDate);
           };
           const currencyOf = new Map(accounts.map((a) => [a.id, a.currency]));
-          for (const day of days) addChange(day.accountId, day.date, BigInt(day.total));
+          for (const { accountId, date, total } of days) {
+            if (accountId !== null) addChange(accountId, date, BigInt(total));
+          }
           for (const line of lines.flat()) {
             if (line.date < from || line.date > to) continue;
             addChange(
@@ -549,7 +577,14 @@ export function journalRoutes(db: Db) {
           return tx
             .update(journalEntry)
             .set({ reconciled })
-            .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.id, ids)))
+            .where(
+              and(
+                eq(journalEntry.bookId, bookId),
+                inArray(journalEntry.id, ids),
+                // A compensation has nothing to reconcile.
+                isNull(journalEntry.compensationId),
+              ),
+            )
             .returning({ id: journalEntry.id });
         });
         return c.json({ updated: updated.length });

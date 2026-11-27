@@ -27,7 +27,7 @@ import {
   type Names,
   makesCycle,
 } from "@cash-scout/domain";
-import { and, asc, desc, eq, inArray, lte, max, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lte, max, sql } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -236,7 +236,6 @@ const accountColumns = {
   version: bookAccount.version,
   id: bookAccount.id,
   names: bookAccount.names,
-  kind: bookAccount.kind,
   currency: bookAccount.currency,
   lowBalanceThreshold: bookAccount.lowBalanceThreshold,
   openingBalance: bookAccount.openingBalance,
@@ -260,7 +259,6 @@ const outAccount = (row: {
   id: string;
   version: number;
   names: Names;
-  kind: "bank" | "virtual";
   currency: string;
   lowBalanceThreshold: bigint | null;
   openingBalance: bigint;
@@ -671,6 +669,25 @@ export function referenceRoutes(db: Db) {
           if (!found.some((s) => s.id === targetId)) {
             throw new HTTPException(400, { message: "Unknown target sub-category" });
           }
+          // A compensation keeps two different sub-categories.
+          const both = await tx
+            .select({ id: journalEntry.compensationId })
+            .from(journalEntry)
+            .where(
+              and(
+                eq(journalEntry.bookId, bookId),
+                inArray(journalEntry.subCategoryId, [id, targetId]),
+                isNotNull(journalEntry.compensationId),
+              ),
+            )
+            .groupBy(journalEntry.compensationId)
+            .having(sql`count(*) > 1`)
+            .limit(1);
+          if (both.length > 0) {
+            throw new HTTPException(400, {
+              message: "A compensation uses both sub-categories: change it before merging",
+            });
+          }
           const entries = await tx
             .update(journalEntry)
             .set({ subCategoryId: targetId })
@@ -702,7 +719,6 @@ export function referenceRoutes(db: Db) {
             .values({
               bookId,
               names,
-              kind: input.kind,
               currency: input.currency,
               lowBalanceThreshold: threshold(input.lowBalanceThreshold, input.currency),
             })

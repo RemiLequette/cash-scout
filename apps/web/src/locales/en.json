@@ -152,7 +152,6 @@
     "moveHint": "Pick another category to move this sub-category.",
     "newAccount": "New account",
     "editAccount": "Edit account",
-    "kind": "Kind",
     "currencyHint": "Entries on this account are in this currency. It cannot be changed later.",
     "threshold": "Low balance warning",
     "thresholdHint": "Warn when the projected balance goes below this amount. Leave empty for no warning.",
@@ -393,12 +392,6 @@
       "create": "{count, plural, one {Create # transfer} other {Create # transfers}}"
     }
   },
-  "accountKinds": {
-    "bank": "Bank",
-    "virtual": "Virtual",
-    "bankHint": "A real account: reconciled with the bank and included in the cash projection.",
-    "virtualHint": "No bank behind it: holds compensations that add up to zero, left out of the cash projection."
-  },
   "journal": {
     "date": "Date",
     "account": "Account",
@@ -481,7 +474,7 @@
     "chartAhead": "{count} months from this one",
     "chartHide": "Hide",
     "chartShow": "Show",
-    "chartAllAccounts": "All bank accounts. Only the account filter acts here, not the period, category, status or search.",
+    "chartAllAccounts": "All accounts. Only the account filter acts here, not the period, category, status or search.",
     "chartOneAccount": "The selected account. Only the account filter acts here, not the period, category, status or search.",
     "chartEmpty": "No account to show.",
     "overdraftTitle": "Overdraft",
@@ -551,5 +544,21 @@
     "version": "Version {version}",
     "license": "Open source, MIT license.",
     "source": "Source code on GitHub"
+  },
+  "compensation": {
+    "new": "New compensation",
+    "edit": "Edit compensation",
+    "badge": "Compensation",
+    "all": "Compensations",
+    "filter": "Show only the compensations",
+    "plus": "Sub-category in +",
+    "minus": "Sub-category in −",
+    "deleteConfirm": "Delete this compensation and both of its lines?",
+    "invalid": {
+      "date": "Enter a date.",
+      "plusSubCategoryId": "Pick a sub-category.",
+      "minusSubCategoryId": "Pick a sub-category, different from the first.",
+      "amount": "Enter a positive amount with at most the currency's decimals."
+    }
   }
 }

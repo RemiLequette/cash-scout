@@ -194,7 +194,7 @@ function TransferFields({
   const accountOptions = (current: string | null, other: string | null) => {
     const currency = reference.accounts.find((a) => a.id === current)?.currency;
     return reference.accounts
-      .filter((a) => a.kind === "bank" && a.id !== other)
+      .filter((a) => a.id !== other)
       .filter((a) => !a.archived || a.id === current)
       .filter((a) => !editing || a.currency === currency)
       .map((a) => ({ value: a.id, label: `${nameOf(a.names)} (${a.currency})` }))

@@ -148,6 +148,38 @@ export const transferUpdateSchema = z
   );
 export type TransferUpdate = z.input<typeof transferUpdateSchema>;
 
+const compensationFields = {
+  date: entryDateSchema,
+  description: descriptionSchema,
+  /** Receives the amount. */
+  plusSubCategoryId: z.uuid(),
+  /** Receives its negation. */
+  minusSubCategoryId: z.uuid(),
+  /** In the book currency. */
+  amount: positiveAmountSchema,
+};
+
+const differentSides = {
+  message: "A compensation needs two different sub-categories",
+  path: ["minusSubCategoryId"],
+};
+
+/** Creating a compensation: its two sides are made together (see docs/compensations.md). */
+export const compensationInputSchema = z
+  .object({ ...compensationFields, description: descriptionSchema.default("") })
+  .refine((c) => c.plusSubCategoryId !== c.minusSubCategoryId, differentSides);
+export type CompensationInput = z.input<typeof compensationInputSchema>;
+
+/** Changing a compensation changes both of its sides. */
+export const compensationUpdateSchema = z
+  .object({ ...compensationFields, version: versionSchema })
+  .partial()
+  .refine(
+    (c) => c.plusSubCategoryId === undefined || c.plusSubCategoryId !== c.minusSubCategoryId,
+    differentSides,
+  );
+export type CompensationUpdate = z.input<typeof compensationUpdateSchema>;
+
 /** A calendar date moved by a number of days ("2026-11-30" + 2 = "2026-12-02"). */
 export function addDays(date: string, days: number): string {
   const moved = new Date(`${date}T00:00:00Z`);
@@ -186,6 +218,8 @@ export const journalQuerySchema = z.object({
     .pipe(z.array(z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)).max(1200))
     .optional(),
   reconciled: z.enum(["true", "false"]).optional(),
+  /** Only the sides of compensations. */
+  compensations: z.literal("true").optional(),
   /** Text contained in the description, ignoring case. */
   q: z.string().trim().max(100).optional(),
   /** Up to a few years of a household's entries in one page. */

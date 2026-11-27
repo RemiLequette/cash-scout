@@ -202,20 +202,18 @@ describe("categories", () => {
 describe("accounts", () => {
   it("stores the threshold in the account currency", async () => {
     const { owner, ref } = await bilingualBook();
-    const account = await json<{ id: string; lowBalanceThreshold: string; kind: string }>(
+    const account = await json<{ id: string; lowBalanceThreshold: string }>(
       owner.request("POST", ref("/accounts"), {
         names: { fr: "Compte courant" },
-        kind: "bank",
         currency: "EUR",
         lowBalanceThreshold: "-500",
       }),
       201,
     );
-    expect(account).toMatchObject({ kind: "bank", lowBalanceThreshold: "-500.00" });
+    expect(account).toMatchObject({ lowBalanceThreshold: "-500.00" });
 
     const yen = await owner.request("POST", ref("/accounts"), {
       names: { fr: "Compte JPY" },
-      kind: "bank",
       currency: "JPY",
       lowBalanceThreshold: "1.5",
     });
@@ -225,20 +223,6 @@ describe("accounts", () => {
       owner.request("PATCH", ref(`/accounts/${account.id}`), { lowBalanceThreshold: null }),
     );
     expect(cleared.lowBalanceThreshold).toBeNull();
-  });
-
-  it("creates virtual accounts", async () => {
-    const { owner, ref } = await bilingualBook();
-    await json(
-      owner.request("POST", ref("/accounts"), {
-        names: { fr: "Compensations" },
-        kind: "virtual",
-        currency: "EUR",
-      }),
-      201,
-    );
-    const reference = await json<{ accounts: unknown[] }>(owner.request("GET", ref()));
-    expect(reference.accounts).toHaveLength(1);
   });
 });
 
