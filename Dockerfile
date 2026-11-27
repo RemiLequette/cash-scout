@@ -9,6 +9,9 @@ COPY apps/web/package.json apps/web/
 COPY packages/domain/package.json packages/domain/
 RUN pnpm install --frozen-lockfile
 COPY . .
+# The release being built, shown in About: the image holds no repository to read it from.
+ARG APP_VERSION
+ENV APP_VERSION=$APP_VERSION
 RUN pnpm --filter @cash-scout/web --filter @cash-scout/api build \
  && pnpm --filter @cash-scout/api deploy --prod --legacy /out
 

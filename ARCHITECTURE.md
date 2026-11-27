@@ -122,6 +122,7 @@ Everything runs on the developer's machine before any server exists. Two modes, 
   - `db`: PostgreSQL, data on a named volume;
   - `backup` (optional but recommended): see [Backup](#backup).
 - Configuration through environment variables; migrations run at start.
+- A release is a Git tag `vX.Y.Z`, the only record of the version: `scripts/release.ps1` makes it from the workstation, `scripts/deploy.sh` installs the latest one and passes it to the image build, and About shows it.
 - HTTPS is left to the host's reverse proxy (Caddy, Traefik, nginx).
 - Step-by-step installation, update, data moves and restore: [Deploying to a server](docs/deployment.md).
 

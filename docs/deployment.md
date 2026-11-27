@@ -23,7 +23,7 @@ Requirements on the server: Docker with Compose 2.24 or later (`docker compose v
    docker exec <caddy-container> caddy reload --config /etc/caddy/Caddyfile
    ```
    Do not restart Caddy with an invalid file: it would loop at start, taking down every site it serves.
-5. **Start**: `scripts/deploy.sh`. It builds the image, starts the services and applies the migrations.
+5. **Start**: `scripts/deploy.sh`. It installs the latest [release](#releasing): builds the image, starts the services and applies the migrations.
 6. **Check**: open `https://cash.smith.lequette.eu` and sign in as the super user.
 7. **Backups**: add the nightly dump to the crontab (`crontab -e`):
    ```
@@ -31,13 +31,27 @@ Requirements on the server: Docker with Compose 2.24 or later (`docker compose v
    ```
    Dumps go to `backups/` and are kept 14 days. They stay on the server: copy them elsewhere regularly (for example `scp` or `rsync` from the workstation) until an off-site copy is automated.
 
+## Releasing
+
+A release is a Git tag `vX.Y.Z` on `main`; merging into `main` changes nothing in production. From the workstation, on an up to date `main`:
+
+```powershell
+scripts/release.ps1 0.2.0
+```
+
+It checks that CI passed on the commit, creates the tag and pushes it. Raise the last number for fixes, the middle one for new features. **About**, in the app, shows the version installed.
+
 ## Updating
 
 ```sh
 cd cash-scout && scripts/deploy.sh
 ```
 
-It pulls `main`, dumps the database as `backups/<date>-pre-deploy.dump`, rebuilds and restarts. Migrations run when the app starts.
+It fetches the tags, dumps the database as `backups/<date>-pre-deploy.dump`, checks out the latest release, rebuilds and restarts. Migrations run when the app starts. The clone is left on the tag, not on `main`.
+
+`scripts/deploy.sh v0.2.0` installs a given release. Going back to an earlier one does not undo the migrations made since: [restore](#restoring) the dump taken before them too.
+
+**Once, on an instance installed before releases existed**: run `git pull` before `scripts/deploy.sh`, so that the script that runs is the new one.
 
 ## Moving the data from dev to prod
 
