@@ -412,6 +412,7 @@
     "originalCurrency": "Original currency",
     "originalHint": "For information only.",
     "reconciled": "Reconciled",
+    "countIn": "Count in {month}",
     "reconciledHint": "Matched with the bank statement. An entry not reconciled is a forecast.",
     "reconciledShort": "Reconciled",
     "forecasts": "Forecasts",

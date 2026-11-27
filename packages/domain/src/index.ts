@@ -2,6 +2,7 @@ export * from "./book.js";
 export * from "./money.js";
 export * from "./reference.js";
 export * from "./journal.js";
+export * from "./budget-month.js";
 export * from "./budget.js";
 export * from "./grid.js";
 export * from "./plan.js";

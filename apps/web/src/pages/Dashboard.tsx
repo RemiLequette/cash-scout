@@ -22,13 +22,22 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useDashboard, type DashboardData } from "../dashboard";
-import { formatDate, useJournal, useMonthEnds, type JournalFilters } from "../journal";
+import {
+  formatDate,
+  monthsOfYear,
+  shiftText,
+  useJournal,
+  useMonthEnds,
+  type JournalFilters,
+} from "../journal";
 import { useMonthNames } from "../options";
 import { useNameOf, useReference } from "../reference";
 import classes from "./Dashboard.module.css";
 
 const PAGE_SIZE = 500;
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+const lastDay = (year: number, month: number) =>
+  new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const rowKey = (row: DashboardRow) => row.key;
@@ -623,9 +632,12 @@ function DetailPanel({
       : {
           ...(selection.kind === "account" ? { accountId: selection.accountId } : {}),
           ...(selection.kind === "row" ? { subCategoryIds: subIds.join(",") } : {}),
-          ...(month === null
-            ? { from: `${year}-01-01`, to: `${year}-12-31` }
-            : { months: `${year}-${pad(month)}` }),
+          // Cells add up budget months; account balances follow the dates.
+          ...(selection.kind === "account"
+            ? month === null
+              ? { from: `${year}-01-01`, to: `${year}-12-31` }
+              : { from: `${year}-${pad(month)}-01`, to: lastDay(year, month) }
+            : { months: month === null ? monthsOfYear(year) : `${year}-${pad(month)}` }),
           limit: PAGE_SIZE,
           offset: 0,
         };
@@ -794,6 +806,9 @@ function DetailPanel({
                     <Table.Tr key={entry.id}>
                       <Table.Td style={{ whiteSpace: "nowrap" }}>
                         {formatDate(entry.date, i18n.language)}
+                        <Text span size="xs" c="blue">
+                          {shiftText(entry, i18n.language)}
+                        </Text>
                       </Table.Td>
                       <Table.Td>{nameOf(accounts.get(entry.accountId)?.names ?? {})}</Table.Td>
                       <Table.Td>

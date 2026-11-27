@@ -412,6 +412,7 @@
     "originalCurrency": "Devise d'origine",
     "originalHint": "Pour information seulement.",
     "reconciled": "Rapproché",
+    "countIn": "Compter en {month}",
     "reconciledHint": "Pointé sur le relevé bancaire. Une écriture non rapprochée est une prévision.",
     "reconciledShort": "Rapprochées",
     "forecasts": "Prévisions",

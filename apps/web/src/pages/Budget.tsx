@@ -31,6 +31,7 @@ import {
   useMonthEnds,
   type Entry,
   type MonthEnd,
+  monthsOfYear,
 } from "../journal";
 import { useMonthNames } from "../options";
 import { useNameOf, useReference, type Reference } from "../reference";
@@ -390,8 +391,7 @@ function CategoryEditor(props: CategoryProps) {
     .map((s) => s.id)
     .join(",");
   const filters = (y: number) => ({
-    from: `${y}-01-01`,
-    to: `${y}-12-31`,
+    months: monthsOfYear(y),
     subCategoryIds,
     limit: 2000,
     offset: 0,

@@ -52,7 +52,7 @@ Dans une règle, **le libellé contient** cherche dans la contrepartie, le libel
 **Importer** écrit d'un coup les lignes validées dans le journal :
 
 - une nouvelle ligne devient une écriture **pointée**, à la date de la banque ;
-- une écriture rapprochée est **pointée** et prend la date de la banque, et pour une prévision le montant de la banque (le côté d'un virement garde sa date et son montant).
+- une écriture rapprochée est **pointée** et prend la date de la banque (une prévision garde son [mois du budget](04-journal.md)), et pour une prévision le montant de la banque (le côté d'un virement garde sa date et son montant).
 
 Quand plus aucune ligne n'est à revoir et que le relevé donne un solde, l'écran propose de **régler le solde initial** du compte pour que le compte corresponde au dernier solde du relevé. Il montre l'ancien et le nouveau montant ; la case n'est cochée d'office que si le compte n'a encore aucune écriture. Pour un compte dans une autre devise, indiquez le taux de change de l'import.
 

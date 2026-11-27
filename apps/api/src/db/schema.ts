@@ -395,6 +395,8 @@ export const journalEntry = pgTable(
     originalCurrency: char("original_currency", { length: 3 }),
     /** Matched with the bank statement; an unreconciled entry is a forecast. */
     reconciled: boolean("reconciled").notNull().default(false),
+    /** Counts in the budget of the month before or after its date's. */
+    monthShifted: boolean("month_shifted").notNull().default(false),
     /** Schedule that generated the entry (schedules come in a later version). */
     scheduleId: uuid("schedule_id"),
     /** The transfer this entry is one side of, and which side. */
@@ -560,6 +562,7 @@ export const importLine = pgTable(
     /** For a line matched to an entry: the entry's date and reconciled flag before the import, to undo it. */
     previousDate: date("previous_date", { mode: "string" }),
     previousReconciled: boolean("previous_reconciled"),
+    previousMonthShifted: boolean("previous_month_shifted"),
     /** The amount of a matched forecast before it took the bank's. */
     previousAmount: bigint("previous_amount", { mode: "bigint" }),
     ...timestamps,

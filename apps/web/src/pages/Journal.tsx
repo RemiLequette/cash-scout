@@ -1,6 +1,9 @@
 import {
   displayName,
+  budgetMonth,
+  entryDateSchema,
   entryInputSchema,
+  shiftToKeep,
   formatMoney,
   parseAmount,
   rateSchema,
@@ -58,6 +61,8 @@ import {
   useSettle,
   type Entry,
   type MonthEnd,
+  formatMonthName,
+  shiftText,
 } from "../journal";
 import { currencyOptions } from "../options";
 import { useNameOf, useReference, useSubCategoryOptions, type Reference } from "../reference";
@@ -95,6 +100,8 @@ export interface Draft {
   originalAmount: string;
   originalCurrency: string | null;
   reconciled: boolean;
+  /** The budget month a shifted entry is meant to count in, "2026-11". */
+  keptMonth: string | null;
   /** Shown read-only when editing. */
   plannedAmount?: string;
   variance?: string;
@@ -115,6 +122,7 @@ export function draftOf(entry: Entry, mode: "edit" | "duplicate"): Draft {
     originalAmount: entry.originalAmount ?? "",
     originalCurrency: entry.originalCurrency,
     reconciled: mode === "edit" ? entry.reconciled : false,
+    keptMonth: mode === "edit" && entry.monthShifted ? budgetMonth(entry.date, true) : null,
     ...(mode === "edit" && {
       plannedAmount: entry.plannedAmount,
       variance: entry.variance,
@@ -134,6 +142,7 @@ export const emptyDraft = (): Draft => ({
   originalAmount: "",
   originalCurrency: null,
   reconciled: false,
+  keptMonth: null,
 });
 
 type Field =
@@ -144,6 +153,10 @@ type Field =
   | "exchangeRate"
   | "originalAmount"
   | "originalCurrency";
+
+/** A kept month only shifts while the date is outside it and next to it. */
+const shifted = (draft: Draft) =>
+  draft.keptMonth !== null && shiftToKeep(draft.date, draft.keptMonth);
 
 /**
  * Checks the draft as the API will, and builds the request body.
@@ -170,6 +183,7 @@ function validate(
     originalAmount: originalAmount || null,
     originalCurrency: originalAmount ? draft.originalCurrency : null,
     reconciled: draft.reconciled,
+    monthShifted: shifted(draft),
   };
   const parsed = entryInputSchema.safeParse(candidate);
   if (!parsed.success) {
@@ -283,6 +297,17 @@ export function EntryForm({
             onChange={(value) => set({ accountId: value })}
           />
         </Group>
+        {entryDateSchema.safeParse(draft.date).success && (
+          <Checkbox
+            label={t("journal.countIn", {
+              month: formatMonthName(budgetMonth(draft.date, true), i18n.language),
+            })}
+            checked={shifted(draft)}
+            onChange={(e) =>
+              set({ keptMonth: e.currentTarget.checked ? budgetMonth(draft.date, true) : null })
+            }
+          />
+        )}
         <Select
           label={t("journal.subCategory")}
           description={t("journal.subCategoryHint")}
@@ -388,6 +413,7 @@ export function EntryForm({
                         id: undefined,
                         date: today(),
                         reconciled: false,
+                        keptMonth: null,
                         plannedAmount: undefined,
                         variance: undefined,
                         currency: undefined,
@@ -1118,6 +1144,16 @@ function CardMonth({
   );
 }
 
+/** After the date of a shifted entry, the month it counts in. */
+function ShiftMark({ entry }: { entry: Entry }) {
+  const { i18n } = useTranslation();
+  return (
+    <Text span size="xs" c="blue">
+      {shiftText(entry, i18n.language)}
+    </Text>
+  );
+}
+
 /** A table row; memoized so that a change to one entry does not redraw the others. */
 const TableEntry = memo(function TableEntry({
   row,
@@ -1133,7 +1169,10 @@ const TableEntry = memo(function TableEntry({
       style={canEdit ? { cursor: "pointer" } : undefined}
       onClick={canEdit ? () => onOpen(entry) : undefined}
     >
-      <Table.Td style={{ whiteSpace: "nowrap" }}>{formatDay(entry.date, i18n.language)}</Table.Td>
+      <Table.Td style={{ whiteSpace: "nowrap" }}>
+        {formatDay(entry.date, i18n.language)}
+        <ShiftMark entry={entry} />
+      </Table.Td>
       <Table.Td>
         {entry.transferId && <TransferBadge leg={entry.transferLeg} />}
         {entry.description}
@@ -1184,7 +1223,7 @@ const CardEntry = memo(function CardEntry({
           </Text>
           <Text size="xs" c="dimmed" truncate>
             {[
-              formatDay(entry.date, i18n.language),
+              formatDay(entry.date, i18n.language) + shiftText(entry, i18n.language),
               entry.description ? `${row.category} › ${row.sub}` : row.category,
               row.account,
             ]
@@ -1562,7 +1601,7 @@ export function Journal({
   const truncated = total > entries.length;
   const byMonth = new Map<string, Row[]>();
   for (const row of rows) {
-    const month = row.entry.date.slice(0, 7);
+    const month = budgetMonth(row.entry.date, row.entry.monthShifted);
     const inMonth = byMonth.get(month);
     if (inMonth) inMonth.push(row);
     else byMonth.set(month, [row]);
@@ -1606,9 +1645,10 @@ export function Journal({
     (line) => !line.reconciled && Number(line.amount) !== 0 && line.date < today(),
   );
   const overdueCount = (overdue.data?.total ?? 0) + overdueLines.length;
-  const overdueMonths = new Set(
-    [...(overdue.data?.entries ?? []), ...overdueLines].map((row) => row.date.slice(0, 7)),
-  );
+  const overdueMonths = new Set([
+    ...(overdue.data?.entries ?? []).map((e) => budgetMonth(e.date, e.monthShifted)),
+    ...overdueLines.map((line) => line.date.slice(0, 7)),
+  ]);
   // Only on a period holding today: elsewhere every entry is on the same side.
   const dividerAfter = containsToday(months) ? lastPastIndex(rows) : -1;
   const dividerId = rows[dividerAfter]?.entry.id;

@@ -1,6 +1,7 @@
 import {
   addDays,
   bookAmount,
+  budgetMonth,
   decide,
   firstRule,
   forecastWindowDays,
@@ -8,6 +9,7 @@ import {
   money,
   openingFromBalance,
   resolveRate,
+  shiftToKeep,
   takesAmount,
   type ImportRequest,
   type LineChange,
@@ -400,6 +402,7 @@ export async function importBatchLines(
       previousDate: string;
       previousReconciled: boolean;
       previousAmount: bigint;
+      previousMonthShifted: boolean;
     } | null = null;
     if (entryId) {
       const [entry] = await tx
@@ -410,6 +413,7 @@ export async function importBatchLines(
           date: journalEntry.date,
           reconciled: journalEntry.reconciled,
           exchangeRate: journalEntry.exchangeRate,
+          monthShifted: journalEntry.monthShifted,
         })
         .from(journalEntry)
         .where(and(eq(journalEntry.id, entryId), eq(journalEntry.bookId, bookId)));
@@ -422,7 +426,13 @@ export async function importBatchLines(
         .update(journalEntry)
         .set({
           reconciled: true,
-          ...(entry.transferId ? {} : { date: line.date }),
+          // Dated by the bank, it stays in the budget month it was planned in.
+          ...(entry.transferId
+            ? {}
+            : {
+                date: line.date,
+                monthShifted: shiftToKeep(line.date, budgetMonth(entry.date, entry.monthShifted)),
+              }),
           // A forecast takes the bank's amount, at its own rate; its planned amount stays.
           ...(entry.amount === line.amount
             ? {}
@@ -433,6 +443,7 @@ export async function importBatchLines(
         previousDate: entry.date,
         previousReconciled: entry.reconciled,
         previousAmount: entry.amount,
+        previousMonthShifted: entry.monthShifted,
       };
       matched++;
     } else {
@@ -570,6 +581,7 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
             previousDate: null,
             previousReconciled: null,
             previousAmount: null,
+            previousMonthShifted: null,
             ...(gone ? { entryId: null } : {}),
           })
           .where(eq(importLine.id, line.id));
@@ -598,6 +610,9 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
         .set({
           reconciled: line.previousReconciled,
           ...(line.previousDate === null ? {} : { date: line.previousDate }),
+          ...(line.previousMonthShifted === null
+            ? {}
+            : { monthShifted: line.previousMonthShifted }),
           ...(entry && line.previousAmount !== null && line.previousAmount !== line.amount
             ? amounts(line.previousAmount, batch.account.currency, entry.exchangeRate, bookCurrency)
             : {}),
@@ -621,6 +636,7 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
         previousDate: null,
         previousReconciled: null,
         previousAmount: null,
+        previousMonthShifted: null,
         ...(line.previousReconciled === null ? { entryId: null } : {}),
       })
       .where(eq(importLine.id, line.id));

@@ -1,4 +1,10 @@
-import type { EntryInput, EntryUpdate, TransferInput, TransferUpdate } from "@cash-scout/domain";
+import {
+  budgetMonth,
+  type EntryInput,
+  type EntryUpdate,
+  type TransferInput,
+  type TransferUpdate,
+} from "@cash-scout/domain";
 import {
   keepPreviousData,
   useMutation,
@@ -222,6 +228,26 @@ export function formatDay(date: string, locale: string): string {
     month: "short",
     timeZone: "UTC",
   }).format(new Date(`${date}T00:00:00Z`));
+}
+
+/** "November" from "2026-11". */
+export function formatMonthName(month: string, locale: string, style: "long" | "short" = "long") {
+  return new Intl.DateTimeFormat(locale, { month: style, timeZone: "UTC" }).format(
+    new Date(`${month}-01T00:00:00Z`),
+  );
+}
+
+/** " → Nov" for a shifted entry, empty otherwise. */
+export function shiftText(entry: { date: string; monthShifted: boolean }, locale: string): string {
+  if (!entry.monthShifted) return "";
+  return ` → ${formatMonthName(budgetMonth(entry.date, true), locale, "short")}`;
+}
+
+/** The 12 months of a year, as the journal's `months` filter takes them. */
+export function monthsOfYear(year: number): string {
+  return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`).join(
+    ",",
+  );
 }
 
 /** Accepts a decimal comma as typed in French: "-12,50" → "-12.50". */
