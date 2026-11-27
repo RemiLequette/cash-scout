@@ -1,8 +1,10 @@
 import {
   budgetMonth,
+  entryDateSchema,
   money,
   parseAmount,
   rateSchema,
+  shiftToKeep,
   splitInputSchema,
   splitRemainder,
   toDecimalString,
@@ -12,6 +14,7 @@ import {
   ActionIcon,
   Alert,
   Button,
+  Checkbox,
   Group,
   Loader,
   Radio,
@@ -24,7 +27,14 @@ import {
 } from "@mantine/core";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { decimalInput, today, useJournalChange, useSplit, type Split } from "../journal";
+import {
+  decimalInput,
+  formatMonthName,
+  today,
+  useJournalChange,
+  useSplit,
+  type Split,
+} from "../journal";
 import { useNameOf, useSubCategoryOptions, type Reference } from "../reference";
 import type { Draft } from "./Journal";
 
@@ -47,7 +57,8 @@ export interface SplitDraft {
   /** The bank amount, signed. */
   total: string;
   reconciled: boolean;
-  monthShifted: boolean;
+  /** The budget month a shifted split is meant to count in, "2026-11". */
+  keptMonth: string | null;
   parts: PartDraft[];
   /** The index of the part that takes the rest. */
   remainder: number;
@@ -62,7 +73,7 @@ const emptyDraft = (): SplitDraft => ({
   total: "",
   // Usually a movement the bank already shows.
   reconciled: true,
-  monthShifted: false,
+  keptMonth: null,
   parts: [newPart(), newPart()],
   remainder: 1,
 });
@@ -75,7 +86,7 @@ export function splitFromEntry(entry: Draft): SplitDraft {
     exchangeRate: entry.exchangeRate,
     total: entry.amount,
     reconciled: entry.reconciled,
-    monthShifted: entry.keptMonth !== null && budgetMonth(entry.date, true) === entry.keptMonth,
+    keptMonth: entry.keptMonth,
     parts: [
       newPart(),
       {
@@ -103,7 +114,7 @@ function draftOf(split: Split): SplitDraft {
     exchangeRate: first.exchangeRate === "1" ? "" : first.exchangeRate,
     total: toDecimalString(money(total, first.currency)),
     reconciled: first.reconciled,
-    monthShifted: first.monthShifted,
+    keptMonth: first.monthShifted ? budgetMonth(first.date, true) : null,
     parts: split.parts.map((part) => ({
       id: part.id,
       subCategoryId: part.subCategoryId,
@@ -146,7 +157,7 @@ function bodyOf(draft: SplitDraft, currency: string, bookCurrency: string) {
     accountId: draft.accountId ?? "",
     ...(needsRate && { exchangeRate }),
     reconciled: draft.reconciled,
-    monthShifted: draft.monthShifted,
+    monthShifted: draft.keptMonth !== null && shiftToKeep(draft.date, draft.keptMonth),
     parts: draft.parts.map((part, i) => ({
       id: part.id,
       subCategoryId: part.subCategoryId ?? "",
@@ -178,7 +189,7 @@ function Fields({
   onClose: () => void;
   onDuplicate: (draft: SplitDraft) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
   const change = useJournalChange(bookId);
   const [draft, setDraft] = useState(initial);
@@ -236,7 +247,7 @@ function Fields({
             label={t("journal.date")}
             required
             value={draft.date}
-            onChange={(e) => set({ date: e.currentTarget.value, monthShifted: false })}
+            onChange={(e) => set({ date: e.currentTarget.value })}
           />
           <Select
             label={t("journal.account")}
@@ -255,6 +266,17 @@ function Fields({
             data-autofocus
           />
         </Group>
+        {entryDateSchema.safeParse(draft.date).success && (
+          <Checkbox
+            label={t("journal.countIn", {
+              month: formatMonthName(budgetMonth(draft.date, true), i18n.language),
+            })}
+            checked={draft.keptMonth !== null && shiftToKeep(draft.date, draft.keptMonth)}
+            onChange={(e) =>
+              set({ keptMonth: e.currentTarget.checked ? budgetMonth(draft.date, true) : null })
+            }
+          />
+        )}
         {currency !== bookCurrency && (
           <TextInput
             label={t("journal.exchangeRate")}
@@ -376,7 +398,7 @@ function Fields({
                       version: undefined,
                       date: today(),
                       reconciled: false,
-                      monthShifted: false,
+                      keptMonth: null,
                       parts: initial.parts.map((p, i) => ({
                         ...p,
                         id: undefined,
