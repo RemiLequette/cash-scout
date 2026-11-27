@@ -29,12 +29,13 @@ An entry counts in the month of its date. When it falls just before or just afte
 ## Entering fast
 
 - **New entry** opens the form. **Start from a frequent entry** proposes the ones you use most in the last 12 months, dated today. A new entry is ticked **Reconciled**: untick it to enter a forecast.
+- The arrow of **New entry** also starts a **transfer** or a **compensation**.
 - **Duplicate** copies an existing entry.
 - **Mark reconciled** and **Mark as forecast** change the status of an entry from the list.
 
 ## Compensations
 
-A **compensation** counts an amount in two sub-categories without any money moving. Example, in a shared book: a member pays 50 of groceries from their own account. **New compensation**, 50, with _Contribution_ in + and _Food_ in −.
+A **compensation** counts an amount in two sub-categories without any money moving. Example, in a shared book: a member pays 50 of groceries from their own account. **New entry ▾ › New compensation**, 50, with _Contribution_ in + and _Food_ in −.
 
 - It shows as two lines, with a **±** mark, no account and nothing to reconcile.
 - Open either line to change, duplicate or delete the whole compensation.
@@ -45,7 +46,7 @@ A **compensation** counts an amount in two sub-categories without any money movi
 
 ## Finding things
 
-Filter by period (year, months), account, category, sub-category, status and free-text search. The account cards filter on an account; the **Compensations** card shows only the compensations. The header shows the income, spending and net of what is displayed. A line marks **today** between past and future entries.
+Filter by period (year, months), account, category, sub-category, status and free-text search. The account cards filter on an account. **Filters** opens the category and status choices; the status choice **Compensations** shows only the compensations. The header shows the income, spending and net of what is displayed. A line marks **today** between past and future entries.
 
 ## Forecasts and reconciling
 

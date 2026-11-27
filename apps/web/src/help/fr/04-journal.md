@@ -29,12 +29,13 @@ Une écriture compte dans le mois de sa date. Quand elle tombe juste avant ou ju
 ## Saisir vite
 
 - **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose celles que vous utilisez le plus sur les 12 derniers mois, datées d'aujourd'hui. Une nouvelle écriture est cochée **Rapproché** : décochez pour saisir une prévision.
+- La flèche de **Nouvelle écriture** démarre aussi un **transfert** ou une **compensation**.
 - **Dupliquer** copie une écriture existante.
 - **Marquer rapprochées** et **Marquer en prévision** changent le statut d'une écriture depuis la liste.
 
 ## Compensations
 
-Une **compensation** compte un montant dans deux sous-catégories sans que de l'argent bouge. Exemple, dans un livre commun : un membre paie 50 d'alimentation avec son compte personnel. **Nouvelle compensation**, 50, avec _Contribution_ en + et _Alimentation_ en −.
+Une **compensation** compte un montant dans deux sous-catégories sans que de l'argent bouge. Exemple, dans un livre commun : un membre paie 50 d'alimentation avec son compte personnel. **Nouvelle écriture ▾ › Nouvelle compensation**, 50, avec _Contribution_ en + et _Alimentation_ en −.
 
 - Elle apparaît en deux lignes, marquées **±**, sans compte et sans rien à pointer.
 - Ouvrez l'une des lignes pour modifier, dupliquer ou supprimer toute la compensation.
@@ -45,7 +46,7 @@ Une **compensation** compte un montant dans deux sous-catégories sans que de l'
 
 ## Retrouver
 
-Filtrez par période (année, mois), compte, catégorie, sous-catégorie, statut et recherche texte. Les cartes de compte filtrent sur un compte ; la carte **Compensations** ne montre que les compensations. L'en-tête affiche les revenus, dépenses et le net de ce qui est affiché. Une ligne marque **aujourd'hui** entre les écritures passées et futures.
+Filtrez par période (année, mois), compte, catégorie, sous-catégorie, statut et recherche texte. Les cartes de compte filtrent sur un compte. **Filtres** ouvre les choix de catégorie et de statut ; le statut **Compensations** ne montre que les compensations. L'en-tête affiche les revenus, dépenses et le net de ce qui est affiché. Une ligne marque **aujourd'hui** entre les écritures passées et futures.
 
 ## Prévisions et rapprochement
 
