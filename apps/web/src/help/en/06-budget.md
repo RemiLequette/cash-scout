@@ -48,7 +48,7 @@ Reconciled months do not change.
 
 The list under the grid is edited in place. It is saved with the grid by **Save**, all or nothing: until you save, the journal does not change.
 
-- **Copy the previous year** takes all of the category's entries of the year before, planned or not, one year later, with their description, sub-category, account and payment type. Their amount becomes the planned amount. An entry already there (same date, sub-category and description) is not copied again. Transfers are not copied.
+- **Copy the previous year** takes all of the category's entries of the year before, planned or not, one year later, with their description, sub-category and account. Their amount becomes the planned amount. An entry already there (same date, sub-category and description) is not copied again. Transfers are not copied.
 - **Schedule** creates a series of entries: first and last date, frequency, sub-category, description, account, amount. The series is not remembered: these are ordinary entries.
 - **Tick** rows to give them a new amount or another day, change their account or sub-category, duplicate or delete them. Shift+click ticks a range; the box in the titles ticks all the rows the **filter** shows.
 - The up and down arrows and Enter go from row to row.
@@ -77,7 +77,7 @@ The journal does not change until **Save**, which writes all or nothing.
 - **Tick** rows to give them a new amount or another day, change their source account, destination account or sub-category, duplicate or delete them. Shift+click ticks a range; the box in the titles ticks all the rows the **filter** shows. The new amount leaves transfers between currencies unchanged: type their two amounts on the row. A change of account is skipped on a row whose two accounts would become the same, or, for a stored transfer, whose currency would change.
 - **Undo** takes back the last copy, creation or action on the ticked rows.
 
-A transfer with a reconciled side is not changed here. The payment type is chosen in the schedule or in the [journal](05-transfers.md). Changing the planned amount also replaces the expected amount of both sides.
+A transfer with a reconciled side is not changed here. Changing the planned amount also replaces the expected amount of both sides.
 
 ## Change of the accounts
 

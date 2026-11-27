@@ -8,7 +8,7 @@ pnpm import:reference --book <book id> --user <email> --dir <folder>
 
 - `--book`: the book's id, as shown in its address (`/books/<id>`).
 - `--user`: the email of a user who is an editor or owner of the book. The import runs with this user's rights.
-- `--dir`: a folder holding any of the three files below. Keep it under `local/`, which Git ignores, when the data is real.
+- `--dir`: a folder holding either or both of the files below. Keep it under `local/`, which Git ignores, when the data is real.
 
 The import runs in one transaction: if a line is wrong, the command names the line and nothing is imported. Items that already exist are left as they are, so the import can be run again after adding lines.
 
@@ -48,13 +48,7 @@ An existing group is matched by its name, a category by its code, a sub-category
 | `currency`              | yes      | ISO 4217 code: `EUR`, `MYR`…                                    |
 | `low_balance_threshold` | no       | Warn below this projected balance, e.g. `-200` (bank accounts). |
 
-### payment_types.csv
-
-| Column | Required | Content           |
-| ------ | -------- | ----------------- |
-| `name` | yes      | Payment type name |
-
-An existing account or payment type is matched by its name.
+An existing account is matched by its name.
 
 # Importing a journal
 
@@ -68,7 +62,7 @@ pnpm import:journal --book <book id> --user <email> --file <journal.csv>
 
 The import runs in one transaction: if a line is wrong, the command names the line and nothing is imported. Each line becomes a new entry, so **running the same file twice imports its entries twice**.
 
-The file follows the same rules as above (header line, comma or semicolon, UTF-8). Accounts, sub-categories and payment types are matched by their name in the book's **default language**, ignoring case. Archived items are matched too, so old entries can use them.
+The file follows the same rules as above (header line, comma or semicolon, UTF-8). Accounts and sub-categories are matched by their name in the book's **default language**, ignoring case. Archived items are matched too, so old entries can use them. A column the table below does not name is ignored, such as the `payment_type` of older files.
 
 | Column              | Required | Content                                                                                                                                                    |
 | ------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -77,7 +71,6 @@ The file follows the same rules as above (header line, comma or semicolon, UTF-8
 | `sub_category`      | yes      | Sub-category name                                                                                                                                          |
 | `category_code`     | no       | Code of the sub-category's category (`C01`). Needed when two sub-categories have the same name.                                                            |
 | `description`       | no       | Free text                                                                                                                                                  |
-| `payment_type`      | no       | Payment type name                                                                                                                                          |
 | `amount`            | yes      | Signed amount, as on the bank statement: `-12.50`, `-12,50` and `-1 234,56` work. The sign is kept; the category decides whether it is spending or income. |
 | `planned_amount`    | no       | The amount planned (the sheets' budget column). Empty or missing means 0: the entry was not planned.                                                       |
 | `exchange_rate`     | no       | When the account is not in the book currency: 1 unit of the account currency = this many units of the book currency.                                       |
@@ -89,7 +82,7 @@ The file follows the same rules as above (header line, comma or semicolon, UTF-8
 An account in another currency than the book needs `exchange_rate` or `book_amount` on each line.
 
 ```csv
-date;account;sub_category;category_code;description;payment_type;amount;planned_amount;reconciled
-02/11/2026;Compte courant;Boulangerie;C01;Pain;Carte;-3,20;;oui
-25/11/2026;Compte courant;Paie;R01;Salaire;Virement;2000;1900;non
+date;account;sub_category;category_code;description;amount;planned_amount;reconciled
+02/11/2026;Compte courant;Boulangerie;C01;Pain;-3,20;;oui
+25/11/2026;Compte courant;Paie;R01;Salaire;2000;1900;non
 ```

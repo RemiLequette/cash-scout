@@ -39,9 +39,9 @@ describe("parseCsv", () => {
 });
 
 describe("importReference", () => {
-  it("creates the tree, accounts and payment types, and can be re-run", async () => {
+  it("creates the tree and accounts, and can be re-run", async () => {
     const { owner, bookId } = await bookOf();
-    const csv = { categories, accounts, paymentTypes: "name\nCarte\nChèque\n" };
+    const csv = { categories, accounts };
 
     const first = await withUser(h.db, owner.id, (tx) => importReference(tx, bookId, csv));
     expect(first.created).toEqual({
@@ -49,7 +49,6 @@ describe("importReference", () => {
       categories: 2,
       subCategories: 2,
       accounts: 2,
-      paymentTypes: 2,
     });
 
     const again = await withUser(h.db, owner.id, (tx) => importReference(tx, bookId, csv));
@@ -58,9 +57,8 @@ describe("importReference", () => {
       categories: 0,
       subCategories: 0,
       accounts: 0,
-      paymentTypes: 0,
     });
-    expect(again.existing).toBe(6);
+    expect(again.existing).toBe(4);
 
     const reference = (await (await owner.request("GET", `/books/${bookId}/reference`)).json()) as {
       natures: { id: string; names: Record<string, string> }[];
@@ -101,7 +99,7 @@ describe("importReference", () => {
     const { owner, bookId } = await bookOf();
     await expect(
       withUser(h.db, owner.id, (tx) =>
-        importReference(tx, bookId, { paymentTypes: "name,name@de\nCarte,Karte\n" }),
+        importReference(tx, bookId, { accounts: "name,name@de,currency\nCaisse,Kasse,EUR\n" }),
       ),
     ).rejects.toThrow(/Line 2: Languages not in the book: de/);
   });
@@ -111,7 +109,7 @@ describe("importReference", () => {
     const stranger = await h.signedInUser();
     await expect(
       withUser(h.db, stranger.id, (tx) =>
-        importReference(tx, bookId, { paymentTypes: "name\nCarte\n" }),
+        importReference(tx, bookId, { accounts: "name,currency\nCaisse,EUR\n" }),
       ),
     ).rejects.toThrow();
   });

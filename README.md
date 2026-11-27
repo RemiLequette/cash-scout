@@ -40,7 +40,7 @@ A **book** (_livre_ in French) is a fully separate set of finances, like a _mand
 
 - journal entries, schedules and budgets;
 - accounts;
-- reference data: groups, categories, sub-categories, payment types, import profiles.
+- reference data: groups, categories, sub-categories, import profiles.
 
 Nothing is shared between books. A typical setup is one private book per person plus one household book.
 
@@ -71,7 +71,6 @@ One entry per transaction, past or future, in a book:
 | Account         | One of the book's accounts; its currency is the entry's currency                                                                                                                                                     |
 | Sub-category    | Sets the category, the group and the nature                                                                                                                                                                          |
 | Description     | Free text, from the bank label on import                                                                                                                                                                             |
-| Payment type    | Card, transfer, direct debit, cash, ATM, cheque, deposit, fees…                                                                                                                                                      |
 | Amount          | Signed, in the account's currency. The expected amount until reconciled, then the bank amount                                                                                                                        |
 | Book amount     | The amount in the book's currency, at the entry's exchange rate. Same as the amount when the account is in the book's currency                                                                                       |
 | Original amount | Optional, for information: amount and currency actually paid, for example a purchase in US dollars paid from a ringgit account                                                                                       |
@@ -89,9 +88,9 @@ One entry per transaction, past or future, in a book:
 ### Reference data
 
 - A new book starts with **empty** reference data. Each book has its own, at the level of detail its users want: a household book may split food into bakery, butcher, supermarket…, while a private book keeps one food sub-category.
-- **Multilingual names**: a book lists its languages and its default language. Groups, categories, sub-categories, accounts and payment types can have a name in each of them; each member sees them in their own interface language, or in the book's default language when a translation is missing. A household whose members speak different languages shares one set of categories, each person reading it in their own language. Codes, rules and reports work on the item, never on its name.
+- **Multilingual names**: a book lists its languages and its default language. Groups, categories, sub-categories and accounts can have a name in each of them; each member sees them in their own interface language, or in the book's default language when a translation is missing. A household whose members speak different languages shares one set of categories, each person reading it in their own language. Codes, rules and reports work on the item, never on its name.
 - **Maintenance** has to be easy: create, rename, recode, move a sub-category to another category, merge two of them, archive what is no longer used. Moving or merging reassigns the existing entries; reports follow.
-- **Initialization from the existing sheets**: their reference lists (sub-category, category, group, nature, payment types, accounts) are imported first, then their journals.
+- **Initialization from the existing sheets**: their reference lists (sub-category, category, group, nature, accounts) are imported first, then their journals.
 
 ### Entering transactions
 
@@ -109,7 +108,7 @@ Two ways of working, both supported:
 A **transfer** moves money between two accounts of a book. It is two journal entries, a **source** (negative) and a **destination** (positive), that are created, changed and deleted together.
 
 - **Delay**: the transfer has a date, the source's, and a delay in days (0 to 60). The destination is dated the source's date plus the delay. Changing the date of the transfer moves both sides; changing the delay moves only the destination.
-- **One change, two entries**: the amount, the accounts, the sub-category, the description and the payment type are edited on the transfer, never on one side. A side opened from the journal opens the whole transfer. Only reconciling is a side's own: each side is matched with its own bank statement line.
+- **One change, two entries**: the amount, the accounts, the sub-category and the description are edited on the transfer, never on one side. A side opened from the journal opens the whole transfer. Only reconciling is a side's own: each side is matched with its own bank statement line.
 - **Currencies**: between accounts of the same currency one amount is entered. Between two currencies both amounts are kept, which gives the real rate; each account not in the book currency also has its rate into it, as for any entry.
 - **Sub-category**: a sub-category of a category of a _transfer_ nature, so both sides are left out of the totals.
 - **Planning**: a transfer can be part of the budget's plan, from the list of planned entries. Both sides then get a planned amount equal to their amount, which add up to zero, and the cash projection sees them on their own dates and accounts. A transfer category has no grid: it changes no total.
@@ -173,7 +172,7 @@ A section at the bottom of the journal, which can be hidden, charts the balance 
 ## Reports
 
 - **Yearly balance** (O1, O3): income, spending and saving, planned against actual.
-- **Pivot view** (O3): rows by group, category, sub-category, account or payment type; columns by month, quarter or year; measures: actual, planned, budget allocated, consumed, remaining, variance. Expand and collapse levels, filter by period, account and reconciled status, export to CSV.
+- **Pivot view** (O3): rows by group, category, sub-category or account; columns by month, quarter or year; measures: actual, planned, budget allocated, consumed, remaining, variance. Expand and collapse levels, filter by period, account and reconciled status, export to CSV.
 - **Year dashboard** (O3): per category, month by month, for a chosen year; see [Year dashboard](#year-dashboard).
 - **Budget planning** (O1): next year's budgets and scheduled entries per category and month, against this year.
 - **Multi-year history** (O3): totals per group and category per year, with charts.

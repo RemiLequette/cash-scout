@@ -16,14 +16,7 @@ export function useReference(bookId: string) {
 
 /** Kinds of reference items, as they appear in the API paths. */
 export type ReferenceKind =
-  | "groups"
-  | "categories"
-  | "sub-categories"
-  | "payment-types"
-  | "accounts"
-  | "natures"
-  | "balances"
-  | "lines";
+  "groups" | "categories" | "sub-categories" | "accounts" | "natures" | "balances" | "lines";
 
 /** Sends a change to the reference data API; the API validates the body. */
 async function send(bookId: string, method: string, path: string, body?: unknown) {
@@ -120,13 +113,4 @@ export function useSubCategoryOptions(reference: Reference, keep?: string, categ
         .sort((a, b) => a.label.localeCompare(b.label)),
     }))
     .filter((group) => group.items.length > 0);
-}
-
-/** The payment types to choose from; archived ones only if kept. */
-export function usePaymentTypeOptions(reference: Reference, keep?: string) {
-  const nameOf = useNameOf(reference.defaultLanguage);
-  return reference.paymentTypes
-    .filter((p) => !p.archived || p.id === keep)
-    .map((p) => ({ value: p.id, label: nameOf(p.names) }))
-    .sort((a, b) => a.label.localeCompare(b.label));
 }

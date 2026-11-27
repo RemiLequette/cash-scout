@@ -46,11 +46,6 @@ export const ruleInputSchema = z
       .uuid()
       .nullish()
       .transform((value) => value ?? null),
-    /** The payment type (card, transfer, cash...) of the entry. */
-    paymentTypeId: z
-      .uuid()
-      .nullish()
-      .transform((value) => value ?? null),
     /** The description of the entry, instead of the bank's counterparty. */
     description: optionalText(500),
     /** The line is proposed to be ignored. */
@@ -65,17 +60,12 @@ export const ruleInputSchema = z
       r.maxAmount !== null,
     { message: "A rule needs at least one condition", path: ["text"] },
   )
-  .refine(
-    (r) =>
-      r.ignore || r.subCategoryId !== null || r.paymentTypeId !== null || r.description !== null,
-    {
-      message:
-        "A rule needs an action: a sub-category, a payment type, a description, or ignoring the line",
-      path: ["subCategoryId"],
-    },
-  )
-  .refine((r) => !(r.ignore && (r.subCategoryId !== null || r.paymentTypeId !== null)), {
-    message: "A rule that ignores a line has no sub-category or payment type",
+  .refine((r) => r.ignore || r.subCategoryId !== null || r.description !== null, {
+    message: "A rule needs an action: a sub-category, a description, or ignoring the line",
+    path: ["subCategoryId"],
+  })
+  .refine((r) => !(r.ignore && r.subCategoryId !== null), {
+    message: "A rule that ignores a line has no sub-category",
     path: ["ignore"],
   })
   .refine(

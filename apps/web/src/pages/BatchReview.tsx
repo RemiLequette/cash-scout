@@ -23,13 +23,7 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  useNameOf,
-  usePaymentTypeOptions,
-  useReference,
-  useSubCategoryOptions,
-  type Reference,
-} from "../reference";
+import { useNameOf, useReference, useSubCategoryOptions, type Reference } from "../reference";
 import { QuickCreate, WithCreate, type Creatable } from "./QuickCreate";
 import { draftOf, RuleForm } from "./Rules";
 import {
@@ -105,7 +99,6 @@ function Review({
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const options = useSubCategoryOptions(reference);
-  const payments = usePaymentTypeOptions(reference);
   const nameOf = useNameOf(reference.defaultLanguage);
   // A transfer made from a line: the other accounts in its currency, and the sub-category to use.
   const transfers = {
@@ -322,7 +315,6 @@ function Review({
                 options={options}
                 transfers={transfers}
                 forecasts={batch.forecasts}
-                payments={payments}
                 rule={ruleOf(line)}
                 onCreateRule={() => setRuleFor(line)}
                 onCreate={(kind) =>
@@ -333,11 +325,7 @@ function Review({
                       kind === "subCategory" && !/categori/i.test(line.bankCategory)
                         ? line.bankCategory
                         : undefined,
-                    use: (id) =>
-                      saveLine(
-                        line,
-                        kind === "subCategory" ? { subCategoryId: id } : { paymentTypeId: id },
-                      ),
+                    use: (id) => saveLine(line, { subCategoryId: id }),
                   })
                 }
                 selected={selected.has(line.id)}
@@ -366,7 +354,6 @@ function Review({
           initial={draftOf({
             text: ruleFor.counterparty || ruleFor.label,
             subCategoryId: ruleFor.subCategoryId,
-            paymentTypeId: ruleFor.paymentTypeId,
             description: ruleFor.description,
           })}
           sample={{
@@ -401,7 +388,6 @@ function Line({
   options,
   transfers,
   forecasts,
-  payments,
   rule,
   onCreateRule,
   onCreate,
@@ -414,7 +400,6 @@ function Line({
   options: ReturnType<typeof useSubCategoryOptions>;
   transfers: Transfers;
   forecasts: MatchedEntry[];
-  payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
   onCreateRule: () => void;
   onCreate: (kind: Creatable) => void;
@@ -470,7 +455,6 @@ function Line({
           options={options}
           transfers={transfers}
           forecasts={forecasts}
-          payments={payments}
           rule={rule}
           onCreateRule={onCreateRule}
           onCreate={onCreate}
@@ -507,7 +491,6 @@ function Decision({
   options,
   transfers,
   forecasts,
-  payments,
   rule,
   onCreateRule,
   onCreate,
@@ -518,7 +501,6 @@ function Decision({
   options: ReturnType<typeof useSubCategoryOptions>;
   transfers: Transfers;
   forecasts: MatchedEntry[];
-  payments: ReturnType<typeof usePaymentTypeOptions>;
   rule: Rule | undefined;
   onCreateRule: () => void;
   onCreate: (kind: Creatable) => void;
@@ -657,20 +639,6 @@ function Decision({
             ? t("statements.review.ruleIgnores", { name: rule.name })
             : t("statements.review.ruleProposes", { name: rule.name })}
         </Text>
-      )}
-      {(line.subCategoryId || line.paymentTypeId) && (
-        <WithCreate label={t("reference.newPaymentType")} onCreate={() => onCreate("paymentType")}>
-          <Select
-            size="xs"
-            aria-label={t("statements.review.paymentType")}
-            placeholder={t("statements.review.paymentType")}
-            searchable
-            clearable
-            data={payments}
-            value={line.paymentTypeId}
-            onChange={(value) => onChange({ paymentTypeId: value })}
-          />
-        </WithCreate>
       )}
       {line.subCategoryId && (
         <TextInput

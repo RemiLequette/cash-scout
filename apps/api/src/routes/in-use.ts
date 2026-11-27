@@ -12,7 +12,6 @@ import {
   importBatch,
   journalEntry,
   nature,
-  paymentType,
   subCategory,
 } from "../db/schema.js";
 
@@ -70,7 +69,6 @@ const referring = new Map<PgTable, Referring[]>([
     ],
   ],
   [subCategory, [["entries", journalEntry, journalEntry.subCategoryId]]],
-  [paymentType, [["entries", journalEntry, journalEntry.paymentTypeId]]],
   [
     bookAccount,
     [

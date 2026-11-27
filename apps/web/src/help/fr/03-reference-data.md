@@ -51,7 +51,3 @@ Un nouveau livre démarre avec quatre natures : Revenus, Dépenses, Épargne et 
 - La **devise** d'un compte ne peut plus être changée une fois créé.
 - Le **solde initial** est ce que le solde du compte contient sans que le journal l'explique : ce qui précède la première écriture, et ce qui manque. Il n'est dans aucune catégorie, donc dans aucun total ni budget. Menu du compte, **Solde initial…** : saisissez le solde lu dans votre banque, il est calculé pour que les écritures pointées donnent ce solde, quelle que soit leur date.
 - L'**alerte de solde bas** est un montant : le graphique des comptes prévient quand le solde projeté passe en dessous.
-
-## Types de paiement
-
-Carte, virement, prélèvement, espèces, chèque, frais… Ajoutez ceux que vous utilisez.

@@ -118,8 +118,6 @@ export const lineChangeSchema = z
      * reconcile with the other statement. Goes with a sub-category of a transfer nature.
      */
     transferAccountId: z.uuid().nullable().optional(),
-    /** The payment type of the entry to create. */
-    paymentTypeId: z.uuid().nullable().optional(),
     description: z.string().trim().max(500).nullable().optional(),
   })
   .refine((c) => !(c.subCategoryId && c.entryId), {

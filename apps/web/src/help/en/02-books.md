@@ -20,7 +20,7 @@ The browser tab carries the name of the open book and of the page shown, and a b
 
 Open **Settings and members** in the book's menu. An owner can:
 
-- choose the **languages** of the book. Categories, accounts and payment types get a name in each; every member reads them in their own language, or in the book's default one when a translation is missing;
+- choose the **languages** of the book. Categories and accounts get a name in each; every member reads them in their own language, or in the book's default one when a translation is missing;
 - **add or remove members**. Users are created by the super user, on the **Users** page;
 - delete the book.
 

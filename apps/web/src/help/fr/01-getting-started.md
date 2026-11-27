@@ -5,7 +5,7 @@ cash-scout vous aide à **planifier** un budget annuel, à **projeter** le solde
 ## Vue d'ensemble
 
 - Tout vit dans un **livre** : un ensemble de finances séparé, par exemple votre argent personnel ou celui du foyer. Voir [Livres et membres](02-books.md).
-- Décrivez le livre une fois dans ses **données de référence** : comptes, types de paiement, et un arbre de groupes, catégories et sous-catégories. Voir [Données de référence](03-reference-data.md).
+- Décrivez le livre une fois dans ses **données de référence** : comptes, et un arbre de groupes, catégories et sous-catégories. Voir [Données de référence](03-reference-data.md).
 - Saisissez les opérations, passées et futures, dans le **journal**. Voir [Journal](04-journal.md).
 - Faites le **budget** de l'année ([Budget](06-budget.md)), puis lisez le résultat dans le **tableau de bord** ([Tableau de bord](07-dashboard.md)).
 

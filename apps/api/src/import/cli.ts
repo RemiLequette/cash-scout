@@ -3,7 +3,7 @@
  *
  *   pnpm import:reference --book <book id> --user <email> --dir <folder>
  *
- * The folder holds categories.csv, accounts.csv and payment_types.csv (any of
+ * The folder holds categories.csv and accounts.csv (either of
  * them). The import runs as the given user, who must be an editor or owner of
  * the book, and in one transaction: on any error nothing is imported.
  * See docs/import.md for the file format.
@@ -35,10 +35,9 @@ const read = (file: string) => {
 const csv = {
   categories: read("categories.csv"),
   accounts: read("accounts.csv"),
-  paymentTypes: read("payment_types.csv"),
 };
-if (!csv.categories && !csv.accounts && !csv.paymentTypes) {
-  console.error(`No categories.csv, accounts.csv or payment_types.csv in ${dir}`);
+if (!csv.categories && !csv.accounts) {
+  console.error(`No categories.csv or accounts.csv in ${dir}`);
   process.exit(2);
 }
 

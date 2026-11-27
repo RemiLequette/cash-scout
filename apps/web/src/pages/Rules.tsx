@@ -22,13 +22,7 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  useNameOf,
-  useReference,
-  usePaymentTypeOptions,
-  useSubCategoryOptions,
-  type Reference,
-} from "../reference";
+import { useNameOf, useReference, useSubCategoryOptions, type Reference } from "../reference";
 import { useDeleteRule, useOrderRules, useRules, useSaveRule, type Rule } from "../statements";
 import { QuickCreate, WithCreate } from "./QuickCreate";
 import { DataTable } from "../table";
@@ -60,7 +54,6 @@ interface Draft {
   minAmount: string;
   maxAmount: string;
   subCategoryId: string | null;
-  paymentTypeId: string | null;
   description: string;
   ignore: boolean;
 }
@@ -73,7 +66,6 @@ const blank: Draft = {
   minAmount: "",
   maxAmount: "",
   subCategoryId: null,
-  paymentTypeId: null,
   description: "",
   ignore: false,
 };
@@ -87,7 +79,6 @@ export function draftOf(rule: Partial<Rule>): Draft {
     minAmount: rule.minAmount ?? "",
     maxAmount: rule.maxAmount ?? "",
     subCategoryId: rule.subCategoryId ?? null,
-    paymentTypeId: rule.paymentTypeId ?? null,
     description: rule.description ?? "",
     ignore: rule.ignore ?? false,
   };
@@ -101,7 +92,6 @@ const input = (draft: Draft): RuleInput => ({
   minAmount: draft.minAmount.trim().replace(",", ".") || null,
   maxAmount: draft.maxAmount.trim().replace(",", ".") || null,
   subCategoryId: draft.ignore ? null : draft.subCategoryId,
-  paymentTypeId: draft.ignore ? null : draft.paymentTypeId,
   description: draft.description,
   ignore: draft.ignore,
 });
@@ -139,11 +129,10 @@ function RuleFormBody({
   const { t } = useTranslation();
   const save = useSaveRule(bookId);
   const [draft, setDraft] = useState(initial);
-  const [creating, setCreating] = useState<"subCategory" | "paymentType" | null>(null);
+  const [creating, setCreating] = useState(false);
   const set = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
 
   const options = useSubCategoryOptions(reference, initial.subCategoryId ?? undefined);
-  const payments = usePaymentTypeOptions(reference, initial.paymentTypeId ?? undefined);
   const parsed = ruleInputSchema.safeParse(input(draft));
   const touched =
     parsed.success && sample
@@ -220,10 +209,7 @@ function RuleFormBody({
           onChange={(e) => set({ ignore: e.currentTarget.checked })}
         />
         {!draft.ignore && (
-          <WithCreate
-            label={t("reference.newSubCategory")}
-            onCreate={() => setCreating("subCategory")}
-          >
+          <WithCreate label={t("reference.newSubCategory")} onCreate={() => setCreating(true)}>
             <Select
               label={t("statements.review.subCategory")}
               searchable
@@ -231,21 +217,6 @@ function RuleFormBody({
               data={options}
               value={draft.subCategoryId}
               onChange={(value) => set({ subCategoryId: value })}
-            />
-          </WithCreate>
-        )}
-        {!draft.ignore && (
-          <WithCreate
-            label={t("reference.newPaymentType")}
-            onCreate={() => setCreating("paymentType")}
-          >
-            <Select
-              label={t("statements.review.paymentType")}
-              searchable
-              clearable
-              data={payments}
-              value={draft.paymentTypeId}
-              onChange={(value) => set({ paymentTypeId: value })}
             />
           </WithCreate>
         )}
@@ -291,13 +262,11 @@ function RuleFormBody({
       </Stack>
       {creating && (
         <QuickCreate
-          kind={creating}
+          kind="subCategory"
           bookId={bookId}
-          initialName={creating === "subCategory" ? sample?.suggestedName : undefined}
-          onClose={() => setCreating(null)}
-          onCreated={(id) =>
-            set(creating === "subCategory" ? { subCategoryId: id } : { paymentTypeId: id })
-          }
+          initialName={sample?.suggestedName}
+          onClose={() => setCreating(false)}
+          onCreated={(id) => set({ subCategoryId: id })}
         />
       )}
     </Modal>
@@ -328,13 +297,10 @@ export function RulesPanel({ bookId }: { bookId: string }) {
     ]
       .filter(Boolean)
       .join(" · ");
-  const paymentName = (id: string) =>
-    nameOf(reference.data?.paymentTypes.find((p) => p.id === id)?.names ?? {});
   const actions = (rule: Rule) =>
     [
       rule.ignore && t("statements.rules.ignoreLine"),
       rule.subCategoryId && subName(rule.subCategoryId),
-      rule.paymentTypeId && paymentName(rule.paymentTypeId),
       rule.description && `« ${rule.description} »`,
     ]
       .filter(Boolean)

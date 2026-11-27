@@ -254,10 +254,8 @@ describe("transfers", () => {
   it("suggests the sub-category most used by the book's transfers", async () => {
     const b = await bookWithAccounts();
     const defaults = () =>
-      json<{ subCategoryId: string | null; paymentTypeId: string | null }>(
-        b.owner.request("GET", `${b.base}/defaults`),
-      );
-    expect(await defaults()).toEqual({ subCategoryId: null, paymentTypeId: null });
+      json<{ subCategoryId: string | null }>(b.owner.request("GET", `${b.base}/defaults`));
+    expect(await defaults()).toEqual({ subCategoryId: null });
     await b.create({});
     await b.create({});
     expect((await defaults()).subCategoryId).toBe(b.internal.id);

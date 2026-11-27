@@ -96,7 +96,7 @@ export function useTransfers(bookId: string, year: number) {
   });
 }
 
-/** The sub-category and payment type most used by transfers, to start a new one from. */
+/** The sub-category most used by transfers, to start a new one from. */
 export function useTransferDefaults(bookId: string, enabled: boolean) {
   return useQuery({
     queryKey: ["books", bookId, "journal", "transfer-defaults"],

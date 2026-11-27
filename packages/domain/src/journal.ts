@@ -40,7 +40,6 @@ export const entryInputSchema = z
     accountId: z.uuid(),
     subCategoryId: z.uuid(),
     description: descriptionSchema.default(""),
-    paymentTypeId: z.uuid().nullable().optional(),
     /** Signed, in the account's currency. */
     amount: amountTextSchema,
     /** Required when the account currency is not the book currency. */
@@ -73,7 +72,6 @@ export const entryUpdateSchema = z
     accountId: z.uuid(),
     subCategoryId: z.uuid(),
     description: descriptionSchema,
-    paymentTypeId: z.uuid().nullable(),
     amount: amountTextSchema,
     exchangeRate: rateSchema,
     originalAmount: amountTextSchema.nullable(),
@@ -109,7 +107,6 @@ const transferFields = {
   destinationAccountId: z.uuid(),
   subCategoryId: z.uuid(),
   description: descriptionSchema,
-  paymentTypeId: z.uuid().nullable(),
   /** Leaving the source account, in its currency. */
   amount: positiveAmountSchema,
   /** Reaching the destination account, in its currency; the amount when both have the same one. */
@@ -125,7 +122,6 @@ export const transferInputSchema = z
     ...transferFields,
     delayDays: transferFields.delayDays.default(0),
     description: transferFields.description.default(""),
-    paymentTypeId: transferFields.paymentTypeId.optional(),
     destinationAmount: transferFields.destinationAmount.optional(),
     sourceRate: transferFields.sourceRate.optional(),
     destinationRate: transferFields.destinationRate.optional(),

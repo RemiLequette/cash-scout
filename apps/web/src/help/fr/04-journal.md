@@ -10,7 +10,6 @@ Le journal contient une écriture par opération, **passée ou future**, pour le
 | Compte            | Sa devise est celle de l'écriture                                                                                             |
 | Sous-catégorie    | Donne la catégorie, le groupe et la nature                                                                                    |
 | Description       | Texte libre                                                                                                                   |
-| Type de paiement  | Carte, virement, espèces…                                                                                                     |
 | Montant           | **Signé**, comme sur le relevé : −12,50 pour un paiement                                                                      |
 | Taux de change    | Affiché quand le compte n'est pas dans la devise du livre. Conservé à l'enregistrement, donc les totaux passés ne bougent pas |
 | Montant d'origine | Facultatif, pour information : ce que vous avez réellement payé dans une autre devise                                         |

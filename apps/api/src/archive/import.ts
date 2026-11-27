@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Tx } from "../db/client.js";
 import { book, bookLanguage, bookMember } from "../db/schema.js";
 import { ARCHIVE_FORMAT, ARCHIVE_VERSION } from "./export.js";
+import { withoutPaymentTypes } from "./legacy.js";
 import { ARCHIVED, archivedColumns, tableName, type ArchivedTable } from "./tables.js";
 
 /** Rows written by one statement: the database limits its parameters. */
@@ -80,14 +81,15 @@ export function readArchive(content: unknown) {
   const parsed = archiveSchema.safeParse(content);
   if (!parsed.success) return refuse(`Invalid file: ${parsed.error.issues[0]!.path.join(".")}`);
 
+  const tables = withoutPaymentTypes(parsed.data.tables);
   const known = new Set(ARCHIVED.map(({ table }) => tableName(table)));
-  const unknown = Object.keys(parsed.data.tables).find((name) => !known.has(name));
+  const unknown = Object.keys(tables).find((name) => !known.has(name));
   if (unknown) return refuse(`Invalid file: unknown table ${unknown}`);
 
   const rows = new Map<ArchivedTable, Row[]>();
   for (const archived of ARCHIVED) {
     const name = tableName(archived.table);
-    const result = z.array(rowSchema(archived.table)).safeParse(parsed.data.tables[name] ?? []);
+    const result = z.array(rowSchema(archived.table)).safeParse(tables[name] ?? []);
     if (!result.success) {
       return refuse(`Invalid file: ${name}.${result.error.issues[0]!.path.join(".")}`);
     }

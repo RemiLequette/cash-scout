@@ -23,7 +23,6 @@ interface Line {
   counterparty: string;
   status: string;
   subCategoryId: string | null;
-  paymentTypeId: string | null;
   description: string | null;
   ruleId: string | null;
 }
@@ -51,7 +50,6 @@ async function setup() {
   });
   const sub = (name: string) =>
     created(`${ref}/sub-categories`, { categoryId, names: { fr: name } });
-  const payment = (name: string) => created(`${ref}/payment-types`, { names: { fr: name } });
   const rules = `/books/${bookId}/statements/rules`;
   const batches = `/books/${bookId}/statements/batches`;
   const keep = async () =>
@@ -72,7 +70,6 @@ async function setup() {
     rules,
     batches,
     sub,
-    payment,
     keep,
     lines,
     listed,
@@ -209,24 +206,22 @@ describe("import rules", () => {
     expect(await retry.json()).toEqual({ applied: 0 });
   });
 
-  it("gives the entry a payment type, and follows the rules when they change", async () => {
+  it("follows the rules when they change", async () => {
     const b = await setup();
     const food = await b.sub("Alimentation");
-    const card = await b.payment("Carte");
-    const transfer = await b.payment("Virement");
+    const other = await b.sub("Divers");
     const rule = (await (
-      await b.add({ name: "Super", text: "supermarche", subCategoryId: food, paymentTypeId: card })
+      await b.add({ name: "Super", text: "supermarche", subCategoryId: food })
     ).json()) as Rule;
-    // A payment type alone is an action.
-    await b.add({ name: "Cartes", text: "CARTE", paymentTypeId: card });
-    expect((await b.add({ name: "x", text: "a", paymentTypeId: crypto.randomUUID() })).status).toBe(
-      400,
-    );
+    const cards = (await (
+      await b.add({ name: "Cartes", text: "CARTE", description: "Carte" })
+    ).json()) as Rule;
 
     const batch = await b.keep();
     const line = async (name: string) =>
       (await b.lines(batch.id)).find((l) => l.counterparty.startsWith(name))!;
-    expect(await line("Supermarche")).toMatchObject({ subCategoryId: food, paymentTypeId: card });
+    const retry = () => b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {});
+    expect(await line("Supermarche")).toMatchObject({ subCategoryId: food, ruleId: rule.id });
 
     // Editing the rule reaches the proposal the user has not touched.
     const edit = (body: object) =>
@@ -236,43 +231,35 @@ describe("import rules", () => {
         subCategoryId: food,
         ...body,
       });
-    await edit({ paymentTypeId: transfer });
-    expect(
-      await (await b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {})).json(),
-    ).toEqual({
-      applied: 1,
-    });
-    expect(await line("Supermarche")).toMatchObject({ paymentTypeId: transfer, ruleId: rule.id });
+    await edit({ subCategoryId: other });
+    expect(await (await retry()).json()).toEqual({ applied: 1 });
+    expect(await line("Supermarche")).toMatchObject({ subCategoryId: other, ruleId: rule.id });
 
     // A change by hand is not a proposal any more, and the rules leave it alone.
     const l = await line("Supermarche");
     await b.owner.request("PATCH", `${b.batches}/${batch.id}/lines`, {
-      changes: [{ id: l.id, paymentTypeId: card }],
+      changes: [{ id: l.id, description: "Courses" }],
     });
-    await edit({ text: "supermarche", paymentTypeId: transfer, description: "Changed" });
-    await b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {});
-    expect(await line("Supermarche")).toMatchObject({ paymentTypeId: card, ruleId: null });
+    await edit({ description: "Changed" });
+    await retry();
+    expect(await line("Supermarche")).toMatchObject({ description: "Courses", ruleId: null });
 
     // A rule that no longer fits takes its proposal back.
-    const other = await line("Boulangerie");
-    expect(other).toMatchObject({ paymentTypeId: card });
-    await b.owner.request(
-      "DELETE",
-      `${b.rules}/${(await b.listed()).find((r) => r.name === "Cartes")!.id}`,
-    );
-    await b.owner.request("POST", `${b.batches}/${batch.id}/rules`, {});
-    expect(await line("Boulangerie")).toMatchObject({ paymentTypeId: null, ruleId: null });
+    expect(await line("Boulangerie")).toMatchObject({ description: "Carte", ruleId: cards.id });
+    await b.owner.request("DELETE", `${b.rules}/${cards.id}`);
+    await retry();
+    expect(await line("Boulangerie")).toMatchObject({ description: null, ruleId: null });
 
-    // Importing writes the payment type on the new entry.
+    // Importing writes the description on the new entry.
     const validated = await b.owner.request("PATCH", `${b.batches}/${batch.id}/lines`, {
       changes: [{ id: l.id, subCategoryId: food }],
     });
     expect(validated.status).toBe(204);
     await b.owner.request("POST", `${b.batches}/${batch.id}/import`, {});
     const journal = (await (await b.owner.request("GET", `/books/${b.bookId}/journal`)).json()) as {
-      entries: { paymentTypeId: string | null }[];
+      entries: { description: string }[];
     };
-    expect(journal.entries.map((e) => e.paymentTypeId)).toEqual([card]);
+    expect(journal.entries.map((e) => e.description)).toEqual(["Courses"]);
   });
 
   it("is closed to a stranger", async () => {

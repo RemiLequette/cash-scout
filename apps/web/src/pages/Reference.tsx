@@ -640,7 +640,7 @@ function CategoriesTab({ bookId, reference, canEdit, showArchived, openEditor }:
 }
 
 // ---------------------------------------------------------------------------
-// Accounts and payment types
+// Accounts
 // ---------------------------------------------------------------------------
 
 /**
@@ -909,60 +909,6 @@ function AccountsTab({
   );
 }
 
-function PaymentTypesTab({ bookId, reference, canEdit, showArchived, openEditor }: TabProps) {
-  const { t } = useTranslation();
-  const nameOf = useNameOf(reference.defaultLanguage);
-  const items = reference.paymentTypes
-    .filter((p) => showArchived || !p.archived)
-    .sort((a, b) => nameOf(a.names).localeCompare(nameOf(b.names)));
-
-  const editor = (item?: Reference["paymentTypes"][number]): EditorState => ({
-    title: item ? t("reference.editPaymentType") : t("reference.newPaymentType"),
-    kind: "payment-types",
-    id: item?.id,
-    version: item?.version,
-    names: item?.names ?? {},
-    fields: {},
-    body: (names) => ({ names }),
-  });
-
-  return (
-    <Stack>
-      {canEdit && (
-        <Group>
-          <Button onClick={() => openEditor(editor())}>{t("reference.newPaymentType")}</Button>
-        </Group>
-      )}
-      {items.length === 0 && <Text c="dimmed">{t("reference.emptyPaymentTypes")}</Text>}
-      <Table>
-        <Table.Tbody>
-          {items.map((item) => (
-            <Table.Tr key={item.id}>
-              <Table.Td>
-                <Group gap="xs">
-                  {nameOf(item.names)}
-                  <ArchivedBadge archived={item.archived} />
-                </Group>
-              </Table.Td>
-              <Table.Td w={50}>
-                <ItemMenu
-                  bookId={bookId}
-                  kind="payment-types"
-                  id={item.id}
-                  version={item.version}
-                  archived={item.archived}
-                  canEdit={canEdit}
-                  onEdit={() => openEditor(editor(item))}
-                />
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-    </Stack>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Natures and balances: one list, in the order the dashboard shows it
 // ---------------------------------------------------------------------------
@@ -1212,7 +1158,6 @@ export function ReferenceData({
             <Tabs.Tab value="categories">{t("reference.categories")}</Tabs.Tab>
             <Tabs.Tab value="natures">{t("reference.natures")}</Tabs.Tab>
             <Tabs.Tab value="accounts">{t("reference.accounts")}</Tabs.Tab>
-            <Tabs.Tab value="paymentTypes">{t("reference.paymentTypes")}</Tabs.Tab>
           </Tabs.List>
           <Switch
             label={t("reference.showArchived")}
@@ -1228,9 +1173,6 @@ export function ReferenceData({
         </Tabs.Panel>
         <Tabs.Panel value="accounts" pt="md">
           <AccountsTab {...props} />
-        </Tabs.Panel>
-        <Tabs.Panel value="paymentTypes" pt="md">
-          <PaymentTypesTab {...props} />
         </Tabs.Panel>
       </Tabs>
       <Modal opened={editor !== null} onClose={() => setEditor(null)} title={editor?.title}>

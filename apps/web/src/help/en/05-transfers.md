@@ -12,7 +12,7 @@ Use **New transfer** in the journal.
 
 ## Editing
 
-The amount, accounts, sub-category, description and payment type are edited on the transfer, never on one side: opening a side from the journal opens the whole transfer. Only **reconciling** is per side, since each side matches its own bank line.
+The amount, accounts, sub-category and description are edited on the transfer, never on one side: opening a side from the journal opens the whole transfer. Only **reconciling** is per side, since each side matches its own bank line.
 
 Transfers are left out of the totals, because they change no balance of the book overall.
 

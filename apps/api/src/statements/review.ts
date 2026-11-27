@@ -25,7 +25,6 @@ import {
   importRule,
   journalEntry,
   nature,
-  paymentType,
   subCategory,
   transfer,
 } from "../db/schema.js";
@@ -212,17 +211,6 @@ export async function applyChanges(
     if (found.length !== subIds.length) throw bad("Unknown sub-category");
     if (found.some((s) => s.archivedAt)) throw bad("The sub-category is archived");
   }
-  const paymentIds = [
-    ...new Set(changes.flatMap((c) => (c.paymentTypeId ? [c.paymentTypeId] : []))),
-  ];
-  if (paymentIds.length > 0) {
-    const found = await tx
-      .select({ id: paymentType.id, archivedAt: paymentType.archivedAt })
-      .from(paymentType)
-      .where(and(eq(paymentType.bookId, bookId), inArray(paymentType.id, paymentIds)));
-    if (found.length !== paymentIds.length) throw bad("Unknown payment type");
-    if (found.some((p) => p.archivedAt)) throw bad("The payment type is archived");
-  }
   const entryIds = [...new Set(changes.flatMap((c) => (c.entryId ? [c.entryId] : [])))];
   const entries = new Map(
     entryIds.length === 0
@@ -270,18 +258,15 @@ export async function applyChanges(
     if (next.entryId) claimed.set(next.entryId, line.id);
     const description =
       change.description === undefined ? line.description : change.description || null;
-    const paymentTypeId =
-      change.paymentTypeId === undefined ? line.paymentTypeId : change.paymentTypeId;
     // What the user changes by hand is no longer a rule's proposal; accepting one is not a change.
     const touched =
       (change.subCategoryId !== undefined && change.subCategoryId !== line.subCategoryId) ||
-      description !== line.description ||
-      paymentTypeId !== line.paymentTypeId;
+      description !== line.description;
     const ruleId = touched ? null : line.ruleId;
-    Object.assign(line, next, { description, paymentTypeId, ruleId });
+    Object.assign(line, next, { description, ruleId });
     await tx
       .update(importLine)
-      .set({ ...next, description, paymentTypeId, ruleId })
+      .set({ ...next, description, ruleId })
       .where(eq(importLine.id, line.id));
   }
 }
@@ -474,7 +459,6 @@ export async function importBatchLines(
           accountId: line.transferAccountId,
           subCategoryId: line.subCategoryId,
           description: description.slice(0, 500),
-          paymentTypeId: line.paymentTypeId,
           amount: -line.amount,
           plannedAmount: 0n,
           exchangeRate: rate,
@@ -490,7 +474,6 @@ export async function importBatchLines(
           accountId: batch.accountId,
           subCategoryId: line.subCategoryId,
           description: description.slice(0, 500),
-          paymentTypeId: line.paymentTypeId,
           amount: line.amount,
           plannedAmount: 0n,
           exchangeRate: rate,
@@ -646,7 +629,7 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
 
 /**
  * Proposes what the book's rules say for the lines of a batch: the first rule that
- * fits sets its sub-category, payment type and description, or marks the line to be
+ * fits sets its sub-category and description, or marks the line to be
  * ignored. It looks at the lines still to review that have no entry and nothing the
  * user typed, so it can be run again after the rules changed: a line a rule had
  * proposed something for is looked at again, and loses the proposal when no rule
@@ -663,32 +646,20 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
         .where(and(eq(subCategory.bookId, bookId), isNotNull(subCategory.archivedAt)))
     ).map((s) => s.id),
   );
-  const archivedPayments = new Set(
-    (
-      await tx
-        .select({ id: paymentType.id })
-        .from(paymentType)
-        .where(and(eq(paymentType.bookId, bookId), isNotNull(paymentType.archivedAt)))
-    ).map((p) => p.id),
-  );
   const rules = (
     await tx
       .select()
       .from(importRule)
       .where(eq(importRule.bookId, bookId))
       .orderBy(asc(importRule.position), asc(importRule.createdAt))
-  ).filter(
-    (rule) =>
-      !(rule.subCategoryId && archived.has(rule.subCategoryId)) &&
-      !(rule.paymentTypeId && archivedPayments.has(rule.paymentTypeId)),
-  );
+  ).filter((rule) => !(rule.subCategoryId && archived.has(rule.subCategoryId)));
 
   const same = (a: string | null, b: string | null) => a === b;
   const hits = new Map<string, string[]>();
   const cleared: string[] = [];
   for (const line of await linesOf(tx, batchId)) {
     if (line.status !== "review" || line.entryId) continue;
-    if (!line.ruleId && (line.subCategoryId || line.description || line.paymentTypeId)) continue;
+    if (!line.ruleId && (line.subCategoryId || line.description)) continue;
     const rule = firstRule(rules, {
       currency: batch.account.currency,
       amount: line.amount,
@@ -702,7 +673,6 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
     } else if (
       rule.id !== line.ruleId ||
       !same(rule.subCategoryId, line.subCategoryId) ||
-      !same(rule.paymentTypeId, line.paymentTypeId) ||
       !same(rule.description, line.description)
     ) {
       hits.set(rule.id, [...(hits.get(rule.id) ?? []), line.id]);
@@ -716,7 +686,6 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
       .set({
         ruleId,
         subCategoryId: rule.subCategoryId,
-        paymentTypeId: rule.paymentTypeId,
         description: rule.description,
       })
       .where(inArray(importLine.id, ids));
@@ -725,7 +694,7 @@ export async function applyRules(tx: Tx, bookId: string, batchId: string) {
   if (cleared.length > 0) {
     await tx
       .update(importLine)
-      .set({ ruleId: null, subCategoryId: null, paymentTypeId: null, description: null })
+      .set({ ruleId: null, subCategoryId: null, description: null })
       .where(inArray(importLine.id, cleared));
     changed += cleared.length;
   }

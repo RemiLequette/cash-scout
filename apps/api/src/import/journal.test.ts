@@ -21,9 +21,7 @@ async function bookOf() {
   const owner = await h.signedInUser();
   const created = await owner.request("POST", "/books", household);
   const { id: bookId } = (await created.json()) as { id: string };
-  await withUser(h.db, owner.id, (tx) =>
-    importReference(tx, bookId, { categories, accounts, paymentTypes: "name\nCarte\n" }),
-  );
+  await withUser(h.db, owner.id, (tx) => importReference(tx, bookId, { categories, accounts }));
   const run = (csv: string) => withUser(h.db, owner.id, (tx) => importJournal(tx, bookId, csv));
   const entries = () =>
     withUser(h.db, owner.id, (tx) => tx.select().from(journalEntry).orderBy(journalEntry.date));
@@ -47,10 +45,10 @@ describe("importJournal", () => {
   it("matches reference data by name and fills the amounts", async () => {
     const b = await bookOf();
     const csv = [
-      "date;account;sub_category;category_code;description;payment_type;amount;planned_amount;reconciled",
-      "02/11/2026;compte courant;Boulangerie;;Pain;carte;-3,20;;oui",
-      "2026-11-25;Compte courant;Paie;;Salaire;;2 000,00;1900;non",
-      "2026-11-03;Compte courant;Divers;C02;Cinéma;;-12;;",
+      "date;account;sub_category;category_code;description;amount;planned_amount;reconciled",
+      "02/11/2026;compte courant;Boulangerie;;Pain;-3,20;;oui",
+      "2026-11-25;Compte courant;Paie;;Salaire;2 000,00;1900;non",
+      "2026-11-03;Compte courant;Divers;C02;Cinéma;-12;;",
     ].join("\n");
     expect(await b.run(csv)).toEqual({ created: 3 });
 
@@ -63,7 +61,20 @@ describe("importJournal", () => {
       ["2026-11-03", -1200n, 0n, -1200n, false],
       ["2026-11-25", 200000n, 190000n, 200000n, false],
     ]);
-    expect(rows[0]!.paymentTypeId).not.toBeNull();
+  });
+
+  it("ignores the payment type column of older files", async () => {
+    const b = await bookOf();
+    const csv = [
+      "date;account;sub_category;description;payment_type;amount",
+      "2026-11-02;Compte courant;Boulangerie;Pain;Carte;-3,20",
+      "2026-11-03;Compte courant;Boulangerie;Tarte;;-12",
+    ].join("\n");
+    expect(await b.run(csv)).toEqual({ created: 2 });
+    expect((await b.entries()).map((r) => [r.description, r.amount])).toEqual([
+      ["Pain", -320n],
+      ["Tarte", -1200n],
+    ]);
   });
 
   it("takes a rate or a book amount for other currencies", async () => {

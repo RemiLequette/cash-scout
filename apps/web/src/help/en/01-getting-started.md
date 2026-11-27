@@ -5,7 +5,7 @@ cash-scout helps you **plan** a yearly budget, **project** your account balances
 ## The big picture
 
 - Everything lives in a **book**: a separate set of finances, such as your private money or the household's. See [Books and members](02-books.md).
-- Describe the book once in its **reference data**: accounts, payment types, and a tree of groups, categories and sub-categories. See [Reference data](03-reference-data.md).
+- Describe the book once in its **reference data**: accounts, and a tree of groups, categories and sub-categories. See [Reference data](03-reference-data.md).
 - Record transactions, past and future, in the **journal**. See [Journal](04-journal.md).
 - Make the year's **budget** ([Budget](06-budget.md)), then read the result in the **dashboard** ([Dashboard](07-dashboard.md)).
 

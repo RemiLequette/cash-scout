@@ -20,7 +20,7 @@ L'onglet du navigateur porte le nom du livre ouvert et de la page affichée : un
 
 Ouvrez **Paramètres et membres** dans le menu du livre. Un propriétaire peut :
 
-- choisir les **langues** du livre. Les catégories, comptes et types de paiement ont un nom dans chacune ; chaque membre les lit dans sa langue, ou dans la langue par défaut du livre quand une traduction manque ;
+- choisir les **langues** du livre. Les catégories et comptes ont un nom dans chacune ; chaque membre les lit dans sa langue, ou dans la langue par défaut du livre quand une traduction manque ;
 - **ajouter ou retirer des membres**. Les utilisateurs sont créés par le super utilisateur, sur la page **Utilisateurs** ;
 - supprimer le livre.
 
