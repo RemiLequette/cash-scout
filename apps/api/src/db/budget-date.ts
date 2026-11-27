@@ -15,4 +15,6 @@ end)`;
 
 export const BUDGET_MONTH = sql<number>`extract(month from ${BUDGET_DATE})::int`;
 
+export const BUDGET_YEAR = sql<number>`extract(year from ${BUDGET_DATE})::int`;
+
 export const inBudgetYear = (year: number) => sql`extract(year from ${BUDGET_DATE}) = ${year}`;

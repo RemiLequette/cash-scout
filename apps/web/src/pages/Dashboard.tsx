@@ -73,7 +73,7 @@ const clampHeight = (height: number) =>
 const ROUNDED_KEY = "dashboardRounded";
 
 /** Whether the grid shows whole amounts, kept between visits; on unless turned off. */
-function useRounded() {
+export function useRounded() {
   const [rounded, setRounded] = useState(() => localStorage.getItem(ROUNDED_KEY) !== "false");
   useEffect(() => localStorage.setItem(ROUNDED_KEY, String(rounded)), [rounded]);
   return [rounded, setRounded] as const;
@@ -261,17 +261,35 @@ export function Dashboard({ bookId, bookCurrency }: { bookId: string; bookCurren
 // The grid: categories, then the balances of the accounts
 // ---------------------------------------------------------------------------
 
-const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(" ");
+export const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(" ");
 /** Negative amounts read in red, the text only. */
-const negative = (minor: bigint) => minor < 0n && classes.negative;
+export const negative = (minor: bigint) => minor < 0n && classes.negative;
 /** A twelfth of a year's amount, half away from zero. */
-const perMonth = (total: bigint) => (total * 2n + (total < 0n ? -12n : 12n)) / 24n;
+export const perMonth = (total: bigint) => (total * 2n + (total < 0n ? -12n : 12n)) / 24n;
+
+/**
+ * The background of a row, when it has one. A group's is tinted over the page's
+ * own colour, so that the frozen label stays opaque while the columns scroll
+ * under it.
+ */
+export function rowTint(row: DashboardRow, color: string | null): string | null {
+  if (row.kind === "balance") {
+    return "light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3))";
+  }
+  if (row.kind === "nature") {
+    return "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4))";
+  }
+  if (row.kind !== "group") return null;
+  return color
+    ? `color-mix(in srgb, var(--mantine-color-${color}-6) 14%, var(--mantine-color-body))`
+    : "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))";
+}
 
 /**
  * A grid amount without its currency (the page says it once): a dash for zero.
  * Rounded, it shows whole units, half away from zero.
  */
-function useAmount(currency: string, rounded: boolean) {
+export function useAmount(currency: string, rounded: boolean) {
   const { i18n } = useTranslation();
   const digits = rounded ? 0 : currencyDigits(currency);
   const format = new Intl.NumberFormat(i18n.language, {
@@ -414,18 +432,7 @@ function Grid(props: {
           // Natures, balances and groups are bold; categories and below are not.
           const bold = top || row.kind === "group";
           const color = colorOf(row);
-          // A group's line is tinted: over the page's own colour, so that the frozen
-          // label stays opaque while the months scroll under it.
-          const tint =
-            row.kind === "balance"
-              ? "light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3))"
-              : row.kind === "nature"
-                ? "light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4))"
-                : row.kind === "group"
-                  ? color
-                    ? `color-mix(in srgb, var(--mantine-color-${color}-6) 14%, var(--mantine-color-body))`
-                    : "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))"
-                  : null;
+          const tint = rowTint(row, color);
           return (
             <tr
               key={key}

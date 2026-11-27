@@ -215,10 +215,51 @@ describe("year dashboard", () => {
     expect(ends[11]).toBe("800.00");
   });
 
+  it("gives every year at once, balances ending like December of each", async () => {
+    const b = await setup();
+    await b.budgetFood();
+    await b.entry(b.current.id, b.bakery.id, "2024-12-20", "-100");
+    await b.entry(b.current.id, b.pay.id, "2026-03-05", "2000");
+    await b.entry(b.saving.id, b.move.id, "2026-03-06", "500");
+    // December 2025 counted in January 2026, but paid in 2025.
+    await b.post("/journal", {
+      date: "2025-12-31",
+      accountId: b.current.id,
+      subCategoryId: b.bakery.id,
+      amount: "-10",
+      monthShifted: true,
+    });
+
+    const data = await json<{
+      years: number[];
+      currentYear: number;
+      cells: { subCategoryId: string; year: number; total: string }[];
+      budgetLines: { categoryId: string; year: number; total: string }[];
+      transfers: { accountId: string; years: string[] }[];
+      balances: { accountId: string; ends: string[] }[];
+    }>(b.owner.request("GET", `/books/${b.bookId}/dashboard/years?today=2026-11-23`));
+    expect(data.years).toEqual([2024, 2025, 2026]);
+    expect(data.currentYear).toBe(2026);
+    expect(data.cells.map((c) => [c.year, c.total]).sort()).toEqual([
+      [2024, "-100.00"],
+      [2026, "-10.00"],
+      [2026, "2000.00"],
+    ]);
+    // January's budget line is used by 10, the other eleven are whole.
+    expect(data.budgetLines).toEqual([{ categoryId: b.food.id, year: 2026, total: "-1190.00" }]);
+    expect(data.transfers).toEqual([{ accountId: b.saving.id, years: ["0.00", "0.00", "500.00"] }]);
+    const { ends } = data.balances.find((a) => a.accountId === b.current.id)!;
+    expect(ends).toEqual(["-100.00", "-110.00", "700.00"]);
+    const december = await json<Dashboard>(b.dashboard());
+    expect(december.balances.find((a) => a.accountId === b.current.id)!.ends[11]).toBe(ends[2]);
+  });
+
   it("is open to members and closed to others", async () => {
     const b = await setup();
     const stranger = await h.signedInUser();
     expect((await b.dashboard(stranger)).status).toBe(404);
+    const years = `/books/${b.bookId}/dashboard/years?today=2026-11-23`;
+    expect((await stranger.request("GET", years)).status).toBe(404);
     expect((await b.dashboard(b.owner, "year=1999&today=2026-11-23")).status).toBe(400);
   });
 });

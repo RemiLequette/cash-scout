@@ -20,3 +20,16 @@ export function useDashboard(bookId: string, year: number) {
     placeholderData: keepPreviousData,
   });
 }
+
+const yearlyEndpoint = api.books[":bookId"].dashboard.years.$get;
+/** The figures of every year of a book, one amount per year. */
+export type YearlyData = InferResponseType<typeof yearlyEndpoint, 200>;
+
+/** Under the budgets' key too, to be reloaded with them. */
+export function useYearly(bookId: string) {
+  const now = today();
+  return useQuery({
+    queryKey: ["books", bookId, "budgets", "yearly", now],
+    queryFn: () => unwrap(yearlyEndpoint({ param: { bookId }, query: { today: now } })),
+  });
+}
