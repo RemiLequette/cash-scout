@@ -63,11 +63,11 @@ Totals keep adding journal entries by sub-category, so they need no new source.
 
 Everything happens in the journal: there is **no page of its own**.
 
-- **Create:** a _New compensation_ button beside the new transfer button, which opens a form: date, description, plus sub-category, minus sub-category, amount.
+- **Create:** _New compensation_ in the menu of the _New entry_ button, which opens a form: date, description, plus sub-category, minus sub-category, amount.
 - A compensation shows as **two lines**, one per sub-category, with an empty account and no reconciled checkbox.
 - **Edit, duplicate, delete:** opening either line opens the form with the whole compensation.
 - Neither line can be changed or reconciled on its own, including in a selection of several entries.
-- **Filter:** a _Compensations_ card beside the account cards, which are the journal's account filter. It has no balance. When it is selected, only compensations show: no budget line and no account chart.
+- **Filter:** a _Compensations_ choice in the journal's status filter. When it is selected, only compensations show: no budget line and no account chart.
 - Editors and owners change compensations; viewers read them.
 - No explanatory text in the form: it goes in the online help.
 

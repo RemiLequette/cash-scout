@@ -70,9 +70,6 @@ import { AccountChart } from "./AccountChart";
 import { CompensationForm, type CompensationDraft } from "./CompensationForm";
 import { TransferForm } from "./TransferForm";
 
-/** The choice of the account cards that shows the compensations, which have no account. */
-const COMPENSATIONS = "compensations";
-
 function ErrorAlert({ error }: { error: Error | null }) {
   const { t } = useTranslation();
   return error ? <Alert color="red">{t("common.error", { message: error.message })}</Alert> : null;
@@ -699,7 +696,7 @@ function BalanceCards({
         <Paper
           withBorder
           px="sm"
-          py={6}
+          py={3}
           radius="md"
           h="100%"
           style={
@@ -739,13 +736,6 @@ function BalanceCards({
             </Text>
           </>,
         ),
-      )}
-      {card(
-        COMPENSATIONS,
-        t("compensation.filter"),
-        <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-          {t("compensation.all")}
-        </Text>,
       )}
     </Group>
   );
@@ -794,6 +784,9 @@ function MonthTotals({ rows, bookCurrency }: { rows: Row[]; bookCurrency: string
   const format = (money: { minor: bigint; currency: string }) => formatMoney(money, i18n.language);
   return (
     <Group gap="md" wrap="wrap">
+      <Text size="xs" c="dimmed">
+        {t("journal.count", { count: rows.length })}
+      </Text>
       <Text size="sm" c="teal">
         {t("journal.income", { amount: format(totals.income) })}
       </Text>
@@ -1378,72 +1371,25 @@ const MonthEndCard = memo(function MonthEndCard(props: MonthEndViewProps) {
  * "New entry", with an arrow that lists the descriptions most used lately:
  * picking one starts a new entry from the latest one, dated today.
  */
-function NewTransferButton({
-  disabled,
-  compact,
-  onOpen,
-}: {
-  disabled: boolean;
-  compact: boolean;
-  onOpen: () => void;
-}) {
-  const { t } = useTranslation();
-  return compact ? (
-    <ActionIcon
-      size="md"
-      variant="default"
-      aria-label={t("transfer.new")}
-      title={t("transfer.new")}
-      disabled={disabled}
-      onClick={onOpen}
-    >
-      ⇄
-    </ActionIcon>
-  ) : (
-    <Button size="xs" variant="default" disabled={disabled} onClick={onOpen}>
-      {t("transfer.new")}
-    </Button>
-  );
-}
-
-function NewCompensationButton({
-  disabled,
-  compact,
-  onOpen,
-}: {
-  disabled: boolean;
-  compact: boolean;
-  onOpen: () => void;
-}) {
-  const { t } = useTranslation();
-  return compact ? (
-    <ActionIcon
-      size="md"
-      variant="default"
-      aria-label={t("compensation.new")}
-      title={t("compensation.new")}
-      disabled={disabled}
-      onClick={onOpen}
-    >
-      ±
-    </ActionIcon>
-  ) : (
-    <Button size="xs" variant="default" disabled={disabled} onClick={onOpen}>
-      {t("compensation.new")}
-    </Button>
-  );
-}
-
 function NewEntryButton({
   bookId,
   disabled,
+  canTransfer,
+  canCompensate,
   compact,
   onOpen,
+  onTransfer,
+  onCompensate,
 }: {
   bookId: string;
+  /** No entry can be made yet: the button itself waits. */
   disabled: boolean;
+  canTransfer: boolean;
+  canCompensate: boolean;
   compact: boolean;
   onOpen: (draft: Draft) => void;
+  onTransfer: () => void;
+  onCompensate: () => void;
 }) {
   const { t } = useTranslation();
   const formatAmount = useMoney();
@@ -1475,9 +1421,9 @@ function NewEntryButton({
         <Menu.Target>
           <ActionIcon
             size={compact ? "md" : 30}
-            disabled={disabled}
-            aria-label={t("journal.frequent")}
-            title={t("journal.frequent")}
+            disabled={disabled && !canCompensate}
+            aria-label={t("journal.newMenu")}
+            title={t("journal.newMenu")}
             style={{
               borderTopLeftRadius: 0,
               borderBottomLeftRadius: 0,
@@ -1488,6 +1434,13 @@ function NewEntryButton({
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
+          <Menu.Item disabled={!canTransfer} onClick={onTransfer} leftSection="⇄">
+            {t("transfer.new")}
+          </Menu.Item>
+          <Menu.Item disabled={!canCompensate} onClick={onCompensate} leftSection="±">
+            {t("compensation.new")}
+          </Menu.Item>
+          <Menu.Divider />
           <Menu.Label>{t("journal.frequentHint")}</Menu.Label>
           {frequent.isPending && <Menu.Item disabled>…</Menu.Item>}
           {frequent.data?.length === 0 && <Menu.Item disabled>{t("journal.noFrequent")}</Menu.Item>}
@@ -1541,7 +1494,7 @@ export function Journal({
   const [months, setMonths] = useState<Months>(currentAndNextMonth);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [subCategories, setSubCategories] = useState<Set<string> | null>(null);
-  const [status, setStatus] = useState<"all" | "true" | "false">("all");
+  const [status, setStatus] = useState<"all" | "true" | "false" | "compensations">("all");
   const [search, setSearch] = useState("");
   const [q] = useDebouncedValue(search, 300);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1572,10 +1525,10 @@ export function Journal({
   // Newest first, so that the latest entries are the ones loaded; shown oldest first.
   const list = useJournal(bookId, {
     months: months ? [...months].join(",") : undefined,
-    accountId: accountId === COMPENSATIONS ? undefined : (accountId ?? undefined),
-    compensations: accountId === COMPENSATIONS ? "true" : undefined,
+    accountId: accountId ?? undefined,
+    compensations: status === "compensations" ? "true" : undefined,
     subCategoryIds: subCategories ? [...subCategories].join(",") : undefined,
-    reconciled: status === "all" ? undefined : status,
+    reconciled: status === "all" || status === "compensations" ? undefined : status,
     q: q || undefined,
     limit: LOAD_LIMIT,
     offset: 0,
@@ -1735,11 +1688,12 @@ export function Journal({
         size="xs"
         aria-label={t("journal.status")}
         allowDeselect={false}
-        w={isMobile ? undefined : 130}
+        w={isMobile ? undefined : 150}
         data={[
           { value: "all", label: t("journal.allStatuses") },
           { value: "true", label: t("journal.reconciledShort") },
           { value: "false", label: t("journal.forecasts") },
+          { value: "compensations", label: t("compensation.all") },
         ]}
         value={status}
         onChange={(value) => value && setStatus(value as typeof status)}
@@ -1771,16 +1725,17 @@ export function Journal({
                 : t("journal.filters")}
             </Button>
             {canEdit && (
-              <NewTransferButton disabled={!canAdd} compact onOpen={() => openTransfer()} />
-            )}
-            {canEdit && (
-              <NewCompensationButton
-                disabled={!canCompensate}
-                compact
-                onOpen={() => openCompensation()}
+              <NewEntryButton
+                bookId={bookId}
+                disabled={!canAdd}
+                canTransfer={canAdd}
+                canCompensate={canCompensate}
+                compact={true}
+                onOpen={open}
+                onTransfer={() => openTransfer()}
+                onCompensate={() => openCompensation()}
               />
             )}
-            {canEdit && <NewEntryButton bookId={bookId} disabled={!canAdd} compact onOpen={open} />}
           </Group>
           <Collapse expanded={filtersOpen}>
             <Stack gap={6}>{moreFilters}</Stack>
@@ -1797,26 +1752,33 @@ export function Journal({
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
           />
-          {moreFilters}
-          {list.data && !truncated && (
-            <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-              {t("journal.count", { count: total })}
-            </Text>
-          )}
+          <Button
+            size="xs"
+            variant={activeFilters > 0 ? "light" : "default"}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+          >
+            {activeFilters > 0
+              ? `${t("journal.filters")} (${activeFilters})`
+              : t("journal.filters")}
+          </Button>
           {canEdit && (
-            <NewTransferButton disabled={!canAdd} compact={false} onOpen={() => openTransfer()} />
-          )}
-          {canEdit && (
-            <NewCompensationButton
-              disabled={!canCompensate}
+            <NewEntryButton
+              bookId={bookId}
+              disabled={!canAdd}
+              canTransfer={canAdd}
+              canCompensate={canCompensate}
               compact={false}
-              onOpen={() => openCompensation()}
+              onOpen={open}
+              onTransfer={() => openTransfer()}
+              onCompensate={() => openCompensation()}
             />
           )}
-          {canEdit && (
-            <NewEntryButton bookId={bookId} disabled={!canAdd} compact={false} onOpen={open} />
-          )}
         </Group>
+      )}
+      {!isMobile && (
+        <Collapse expanded={filtersOpen}>
+          <Group gap="xs">{moreFilters}</Group>
+        </Collapse>
       )}
       {canEdit && !canAdd && <Text c="dimmed">{t("journal.needsReference")}</Text>}
       <ErrorAlert error={list.error ?? change.error ?? monthEnds.error} />
@@ -1989,7 +1951,7 @@ export function Journal({
       )}
 
       {/* Compensations move no balance. */}
-      {accountId !== COMPENSATIONS && (
+      {status !== "compensations" && (
         <AccountChart bookId={bookId} reference={ref} accountId={accountId} />
       )}
 

@@ -481,7 +481,8 @@
     "overdraftBetween": "est à découvert du {from} au {until} (point bas {lowest} le {lowestDate}).",
     "overdraftFrom": "est à découvert à partir du {from}, jusqu'à la fin du graphique (point bas {lowest} le {lowestDate}).",
     "overdue": "{count, plural, one {# écriture passée n'est pas rapprochée.} other {# écritures passées ne sont pas rapprochées.}}",
-    "overdueShow": "Afficher"
+    "overdueShow": "Afficher",
+    "newMenu": "Nouveau transfert, compensation ou saisie fréquente"
   },
   "password": {
     "reset": "Définir un nouveau mot de passe",
