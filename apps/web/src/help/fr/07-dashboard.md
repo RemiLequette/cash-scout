@@ -15,3 +15,13 @@ Le **tableau de bord** lit une année d'un coup d'œil. Il ne modifie jamais les
 ## Panneau de détail
 
 Sélectionnez une cellule : le panneau du bas liste les **écritures** correspondantes, en lecture seule. Redimensionnez-le ou masquez-le, et ouvrez le journal depuis là.
+
+## Évolution
+
+La page **Évolution** reprend les lignes du tableau de bord avec une colonne par année, de la première à la dernière année qui a des écritures ou un budget.
+
+- **Depuis** choisit la première année affichée et cache les précédentes. Le choix est conservé. Les soldes comptent toujours les années cachées.
+- Chaque colonne est le total de l'année, prévisions et lignes Budget comprises. L'année en cours est surlignée, les années futures sont affichées autrement.
+- **Par an / Par mois** : le total de l'année, ou son douzième. Les soldes ne changent pas.
+- **Soldes des comptes en fin d'année** reprend le solde de décembre du tableau de bord.
+- Le **graphique**, sous le tableau, montre pour chaque année une colonne par nature, empilée par groupe de premier niveau avec la couleur du groupe. Un groupe négatif est dessiné sous zéro. Survolez une colonne pour son détail. Les cases à gauche choisissent les natures montrées dans le graphique ; le tableau les garde toutes, et le choix est conservé.

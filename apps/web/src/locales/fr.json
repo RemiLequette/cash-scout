@@ -48,6 +48,7 @@
     "open": "Ouvrir"
   },
   "book": {
+    "evolution": "Évolution",
     "export": "Exporter le livre",
     "dashboard": "Tableau de bord",
     "settings": "Paramètres",
@@ -309,6 +310,15 @@
     "hideDetail": "Masquer les écritures",
     "resize": "Redimensionner les écritures",
     "budgetRow": "Budget"
+  },
+  "evolution": {
+    "natures": "Natures du graphique",
+    "since": "Depuis {year}",
+    "firstYear": "Première année affichée",
+    "perYear": "Par an",
+    "balances": "Soldes des comptes en fin d’année",
+    "chart": "Montants par nature et par groupe",
+    "empty": "Rien à montrer."
   },
   "budget": {
     "title": "Budget {year}",

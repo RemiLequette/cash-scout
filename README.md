@@ -192,6 +192,10 @@ A page for reading and analysing one year, replacing the yearly tabs of the shee
 - **Detail panel**: a section at the bottom, resizable and hideable, lists the entries behind the selected cell: a row and a month, a row's year total, or an account's month. Its columns are the journal's, it is read-only, and each entry links to the journal.
 - **Access**: any member of the book, viewers included.
 
+### Evolution
+
+The year dashboard's rows with one column per year, to compare years. The user picks the first year shown. A year is its total, per year or per month (a twelfth); balances are given at year end, as December's in the year dashboard. No detail panel. Under the table, a chart aligned on the year columns shows, for each year, one column per nature stacked by top-level group; the user picks the natures it shows.
+
 ## Decisions
 
 Functional decisions. Technical choices are in [ARCHITECTURE.md](ARCHITECTURE.md).

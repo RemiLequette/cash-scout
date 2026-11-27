@@ -15,3 +15,13 @@ The **Dashboard** reads one year at a glance. It never changes data, and every m
 ## Detail panel
 
 Select a cell: the panel at the bottom lists the **entries** behind it, read-only. Resize or hide it, and open the journal from there.
+
+## Evolution
+
+The **Evolution** page takes the rows of the dashboard with one column per year, from the first to the last year holding entries or a budget.
+
+- **From** picks the first year shown and hides the earlier ones. The choice is kept. Balances still count the hidden years.
+- Each column is the year's total, forecasts and Budget lines included. The current year is shaded, years ahead are shown differently.
+- **Per year / Per month**: the year's total, or a twelfth of it. Balances do not change.
+- **Account balances at year end** is December's balance of the dashboard.
+- The **chart**, under the table, shows for each year one column per nature, stacked by top-level group in the group's colour. A negative group is drawn below zero. Point at a column for its detail. The boxes on the left pick the natures the chart shows; the table keeps them all, and the choice is kept.

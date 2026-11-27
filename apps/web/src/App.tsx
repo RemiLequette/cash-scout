@@ -67,9 +67,11 @@ function useViewName(view: BookView): string | undefined {
         ? "book.budget"
         : view === "dashboard"
           ? "book.dashboard"
-          : view === "import"
-            ? "book.import"
-            : "book.settingsAndMembers",
+          : view === "evolution"
+            ? "book.evolution"
+            : view === "import"
+              ? "book.import"
+              : "book.settingsAndMembers",
   );
 }
 
@@ -148,6 +150,9 @@ function NavMenu({
             </Menu.Item>
             <Menu.Item leftSection={mark(view === "dashboard")} onClick={() => open("dashboard")}>
               {t("book.dashboard")}
+            </Menu.Item>
+            <Menu.Item leftSection={mark(view === "evolution")} onClick={() => open("evolution")}>
+              {t("book.evolution")}
             </Menu.Item>
             <Menu.Item leftSection={mark(view === "budget")} onClick={() => open("budget")}>
               {t("book.budget")}
@@ -282,8 +287,8 @@ function Layout() {
         </Container>
       </AppShell.Header>
       <AppShell.Main>
-        {/* The dashboard's grid has 14 columns: it takes the whole width. */}
-        <Container size="lg" fluid={view === "dashboard"}>
+        {/* The dashboard's grid has 14 columns: it takes the whole width, as the evolution. */}
+        <Container size="lg" fluid={view === "dashboard" || view === "evolution"}>
           <HealthAlert />
           {session ? <Outlet /> : <SignIn />}
         </Container>
@@ -316,6 +321,7 @@ const bookRoute = createRoute({
   path: "/books/$bookId",
   validateSearch: (search: Record<string, unknown>): { view?: Exclude<BookView, "journal"> } =>
     search.view === "dashboard" ||
+    search.view === "evolution" ||
     search.view === "budget" ||
     search.view === "reference" ||
     search.view === "import" ||

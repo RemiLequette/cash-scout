@@ -78,7 +78,7 @@ export interface DashboardRow {
   parentId: string | null;
   parentKind: "nature" | "group" | "category" | null;
   depth: number;
-  /** 12 monthly amounts, in minor units. */
+  /** One amount per column, in minor units: the 12 months, or the years of `yearlyLines`. */
   months: bigint[];
   total: bigint;
 }
@@ -97,7 +97,7 @@ function withKeys(rows: readonly BareRow[], nature: string | null): DashboardRow
   }));
 }
 
-const zeros = () => Array<bigint>(MONTHS).fill(0n);
+const zeros = (columns: number) => Array<bigint>(columns).fill(0n);
 
 function addInto(target: bigint[], source: readonly bigint[]) {
   source.forEach((amount, index) => (target[index] = target[index]! + amount));
@@ -117,17 +117,18 @@ export function dashboardRows(
   cells: readonly DashboardCell[],
   budgets: readonly DashboardBudget[],
 ): DashboardRow[] {
-  return withKeys(bareRows(structure, cells, budgets), null);
+  return withKeys(bareRows(structure, cells, budgets, MONTHS), null);
 }
 
 function bareRows(
   structure: DashboardStructure,
   cells: readonly DashboardCell[],
   budgets: readonly DashboardBudget[],
+  columns: number,
 ): BareRow[] {
   const bySub = new Map<string, bigint[]>();
   for (const cell of cells) {
-    const months = bySub.get(cell.subCategoryId) ?? zeros();
+    const months = bySub.get(cell.subCategoryId) ?? zeros(columns);
     months[cell.month - 1] = months[cell.month - 1]! + cell.total;
     bySub.set(cell.subCategoryId, months);
   }
@@ -145,14 +146,14 @@ function bareRows(
     parent: string | null,
     depth: number,
   ): { rows: BareRow[]; months: bigint[] } {
-    const groupMonths = zeros();
+    const groupMonths = zeros(columns);
     const inGroup: BareRow[] = [];
     if (inProgress.has(group.id)) return { rows: inGroup, months: groupMonths };
     inProgress.add(group.id);
 
     for (const category of structure.categories) {
       if (category.groupId !== group.id) continue;
-      const categoryMonths = zeros();
+      const categoryMonths = zeros(columns);
       const inCategory: BareRow[] = [];
       for (const sub of structure.subCategories) {
         const months = bySub.get(sub.id);
@@ -260,6 +261,7 @@ export function dashboardLines(
   lines: DashboardLines,
   cells: readonly DashboardCell[],
   budgets: readonly DashboardBudget[],
+  columns: number = MONTHS,
 ): DashboardRow[] {
   const shown = new Map<string, { rows: DashboardRow[]; raw: bigint[] }>();
   for (const nature of lines.natures) {
@@ -268,9 +270,10 @@ export function dashboardLines(
       { ...structure, categories: structure.categories.filter((c) => c.natureId === nature.id) },
       cells,
       budgets,
+      columns,
     );
     if (rows.length === 0) continue;
-    const raw = zeros();
+    const raw = zeros(columns);
     for (const row of rows) if (row.depth === 0) addInto(raw, row.months);
     const sign = BigInt(nature.sign);
     shown.set(nature.id, {
@@ -308,7 +311,7 @@ export function dashboardLines(
       .natureIds.map((n) => shown.get(n))
       .filter((part) => part !== undefined);
     if (parts.length === 0) return [];
-    const months = zeros();
+    const months = zeros(columns);
     for (const part of parts) addInto(months, part.raw);
     return withKeys(
       [
@@ -325,4 +328,56 @@ export function dashboardLines(
       null,
     );
   });
+}
+
+// ---------------------------------------------------------------------------
+// Year by year
+// ---------------------------------------------------------------------------
+
+/** What the entries of a sub-category hold in a budget year. */
+export interface YearCell {
+  subCategoryId: string;
+  year: number;
+  total: bigint;
+}
+
+/** What a category's budget lines of a year hold, signed like the entries. */
+export interface YearBudget {
+  categoryId: string;
+  year: number;
+  total: bigint;
+}
+
+/**
+ * `dashboardLines` with one column per year instead of per month: `months`
+ * holds an amount per year of `years`, in that order. What belongs to another
+ * year is left out, and with it the rows that hold nothing in `years`.
+ */
+export function yearlyLines(
+  structure: DashboardStructure,
+  lines: DashboardLines,
+  cells: readonly YearCell[],
+  budgets: readonly YearBudget[],
+  years: readonly number[],
+): DashboardRow[] {
+  const columnOf = new Map(years.map((year, index) => [year, index]));
+  const columnCells = cells.flatMap(({ subCategoryId, year, total }) => {
+    const column = columnOf.get(year);
+    return column === undefined ? [] : [{ subCategoryId, month: column + 1, total }];
+  });
+  const byCategory = new Map<string, bigint[]>();
+  for (const { categoryId, year, total } of budgets) {
+    const column = columnOf.get(year);
+    if (column === undefined) continue;
+    const amounts = byCategory.get(categoryId) ?? zeros(years.length);
+    amounts[column] = amounts[column]! + total;
+    byCategory.set(categoryId, amounts);
+  }
+  return dashboardLines(
+    structure,
+    lines,
+    columnCells,
+    [...byCategory].map(([categoryId, months]) => ({ categoryId, months })),
+    years.length,
+  );
 }

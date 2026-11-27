@@ -7,6 +7,7 @@ import {
   type DashboardLines,
   monthEndBalances,
   type DashboardStructure,
+  yearlyLines,
 } from "./dashboard.js";
 
 describe("currentMonthOf", () => {
@@ -331,5 +332,37 @@ describe("orderedLines", () => {
       balances: [{ id: "b", natureIds: ["n0"], position: 1 }],
     });
     expect(order.map((l) => l.id)).toEqual(["n0", "n1", "b"]);
+  });
+});
+
+describe("yearlyLines", () => {
+  const structure: DashboardStructure = {
+    groups: [{ id: "g" }],
+    categories: [{ id: "c", groupId: "g", natureId: "spending" }],
+    subCategories: [{ id: "s", categoryId: "c" }],
+  };
+  const lines: DashboardLines = {
+    natures: [{ id: "spending", transfer: false, sign: -1, position: 0 }],
+    balances: [],
+  };
+  const cells = [
+    { subCategoryId: "s", year: 2024, total: -10n },
+    { subCategoryId: "s", year: 2026, total: -30n },
+  ];
+  const budgets = [{ categoryId: "c", year: 2026, total: -5n }];
+
+  it("gives one amount per year shown, budget lines included", () => {
+    const rows = yearlyLines(structure, lines, cells, budgets, [2024, 2025, 2026]);
+    expect(rows.map((r) => [r.kind, r.months])).toEqual([
+      ["nature", [10n, 0n, 35n]],
+      ["group", [10n, 0n, 35n]],
+      ["category", [10n, 0n, 35n]],
+      ["sub", [10n, 0n, 30n]],
+      ["budget", [0n, 0n, 5n]],
+    ]);
+  });
+
+  it("leaves out what only belongs to other years", () => {
+    expect(yearlyLines(structure, lines, cells, budgets, [2025])).toEqual([]);
   });
 });

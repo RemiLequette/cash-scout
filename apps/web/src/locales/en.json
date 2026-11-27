@@ -48,6 +48,7 @@
     "open": "Open"
   },
   "book": {
+    "evolution": "Evolution",
     "export": "Export the book",
     "dashboard": "Dashboard",
     "settings": "Settings",
@@ -309,6 +310,15 @@
     "hideDetail": "Hide the entries",
     "resize": "Resize the entries",
     "budgetRow": "Budget"
+  },
+  "evolution": {
+    "natures": "Natures in the chart",
+    "since": "From {year}",
+    "firstYear": "First year shown",
+    "perYear": "Per year",
+    "balances": "Account balances at year end",
+    "chart": "Amounts by nature and group",
+    "empty": "Nothing to show."
   },
   "budget": {
     "title": "Budget {year}",
