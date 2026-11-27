@@ -48,7 +48,7 @@ Les mois rapprochés ne changent pas.
 
 La liste sous la grille se modifie en place. Elle s'enregistre avec la grille par **Enregistrer**, tout ou rien : tant que vous n'avez pas enregistré, le journal ne change pas.
 
-- **Copier l'année précédente** reprend toutes les écritures de la catégorie de l'année d'avant, prévues ou non, un an plus tard, avec leur libellé, sous-catégorie, compte et type de paiement. Leur montant devient le montant prévu. Une écriture déjà là (même date, sous-catégorie et libellé) n'est pas recopiée. Les virements ne sont pas copiés.
+- **Copier l'année précédente** reprend toutes les écritures de la catégorie de l'année d'avant, prévues ou non, un an plus tard, avec leur libellé, sous-catégorie, compte et type de paiement. Leur montant devient le montant prévu. Une écriture déjà là (même date, sous-catégorie et libellé) n'est pas recopiée. Les transferts ne sont pas copiés.
 - **Échéancier** crée une série d'écritures : première et dernière date, fréquence, sous-catégorie, libellé, compte, montant. La série n'est pas mémorisée : ce sont des écritures ordinaires.
 - **Cochez** des lignes pour leur donner un nouveau montant ou un autre jour, changer leur compte ou leur sous-catégorie, les dupliquer ou les supprimer. Maj+clic coche une plage ; la case du titre coche toutes les lignes affichées par le **filtre**.
 - Les flèches haut et bas et Entrée passent d'une ligne à l'autre.
@@ -64,20 +64,20 @@ Les écritures planifiées ne consomment pas la grille : leur différence avec l
 
 **Rapprocher** la ligne abandonne le reste et verrouille la case du mois. Tant qu'elle n'est pas rapprochée, le reste est attendu, même pour un mois passé. Rien n'est reporté d'un mois à l'autre.
 
-## Virements
+## Transferts
 
-Les catégories de virement n'ont pas de grille, seulement des virements planifiés. En bas de la page Budget, **Planifier** à côté de **Virements planifiés** ouvre ceux de l'année.
+Les catégories de transfert n'ont pas de grille, seulement des transferts planifiés. En bas de la page Budget, **Planifier** à côté de **Transferts planifiés** ouvre ceux de l'année.
 
-La liste a **une ligne par virement** et se modifie en place, comme les écritures planifiées : date de départ, délai, sous-catégorie, libellé, comptes source et destination, montant prévu. Un virement est de l'année où il quitte le compte source. Le montant se saisit sans signe. Entre devises différentes, un second montant est le montant reçu ; un compte qui n'est pas dans la devise du livre demande son taux.
+La liste a **une ligne par transfert** et se modifie en place, comme les écritures planifiées : date de départ, délai, sous-catégorie, libellé, comptes source et destination, montant prévu. Un transfert est de l'année où il quitte le compte source. Le montant se saisit sans signe. Entre devises différentes, un second montant est le montant reçu ; un compte qui n'est pas dans la devise du livre demande son taux.
 
 Rien ne change dans le journal avant **Enregistrer**, qui écrit tout ou rien.
 
-- **Copier l'année précédente** reprend tous les virements de l'année d'avant, prévus ou non, un an plus tard. Le montant devient le montant prévu. Un virement déjà là (même date, sous-catégorie, libellé et comptes) n'est pas recopié, ni un virement d'un compte ou d'une sous-catégorie archivés.
-- **Échéancier** crée une série de virements. La série n'est pas mémorisée : ce sont des virements ordinaires.
-- **Cochez** des lignes pour leur donner un nouveau montant ou un autre jour, changer leur compte source, leur compte destination ou leur sous-catégorie, les dupliquer ou les supprimer. Maj+clic coche une plage ; la case du titre coche toutes les lignes affichées par le **filtre**. Le nouveau montant ne touche pas les virements entre devises différentes : saisissez leurs deux montants sur la ligne. Un changement de compte est ignoré sur une ligne dont les deux comptes deviendraient identiques, ou, pour un virement déjà enregistré, dont la devise changerait.
+- **Copier l'année précédente** reprend tous les transferts de l'année d'avant, prévus ou non, un an plus tard. Le montant devient le montant prévu. Un transfert déjà là (même date, sous-catégorie, libellé et comptes) n'est pas recopié, ni un transfert d'un compte ou d'une sous-catégorie archivés.
+- **Échéancier** crée une série de transferts. La série n'est pas mémorisée : ce sont des transferts ordinaires.
+- **Cochez** des lignes pour leur donner un nouveau montant ou un autre jour, changer leur compte source, leur compte destination ou leur sous-catégorie, les dupliquer ou les supprimer. Maj+clic coche une plage ; la case du titre coche toutes les lignes affichées par le **filtre**. Le nouveau montant ne touche pas les transferts entre devises différentes : saisissez leurs deux montants sur la ligne. Un changement de compte est ignoré sur une ligne dont les deux comptes deviendraient identiques, ou, pour un transfert déjà enregistré, dont la devise changerait.
 - **Annuler** revient sur la dernière copie, création ou action sur les lignes cochées.
 
-Un virement dont un côté est rapproché ne se modifie pas ici. Le type de paiement se choisit dans l'échéancier ou dans le [journal](05-transfers.md). Changer le montant prévu remplace aussi le montant attendu des deux côtés.
+Un transfert dont un côté est rapproché ne se modifie pas ici. Le type de paiement se choisit dans l'échéancier ou dans le [journal](05-transfers.md). Changer le montant prévu remplace aussi le montant attendu des deux côtés.
 
 ## Variation des comptes
 
