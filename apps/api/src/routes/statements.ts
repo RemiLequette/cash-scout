@@ -211,11 +211,18 @@ export function statementRoutes(db: Db) {
         const outEntry = (entry: CandidateEntry) => ({
           id: entry.id,
           date: entry.date,
+          // Of a split, the bank amount of the whole.
           amount: text(entry.amount),
           description: entry.description,
           subCategoryId: entry.subCategoryId,
           reconciled: entry.reconciled,
           transfer: entry.transferId !== null,
+          split:
+            entry.split?.map((part) => ({
+              subCategoryId: part.subCategoryId,
+              description: part.description,
+              amount: text(part.amount),
+            })) ?? null,
         });
         const entryOf = (entryId: string) => outEntry(entries.get(entryId)!);
         return c.json({

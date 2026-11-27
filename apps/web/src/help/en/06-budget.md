@@ -48,8 +48,9 @@ Reconciled months do not change.
 
 The list under the grid is edited in place. It is saved with the grid by **Save**, all or nothing: until you save, the journal does not change.
 
-- **Copy the previous year** takes all of the category's entries of the year before, planned or not, one year later, with their description, sub-category and account. Their amount becomes the planned amount. An entry already there (same date, sub-category and description) is not copied again. Transfers are not copied.
-- **Schedule** creates a series of entries: first and last date, frequency, sub-category, description, account, amount. The series is not remembered: these are ordinary entries.
+- A line marked **⑂** is a part of a split, whose other parts may be in other categories (hover the mark). Its amount and sub-category change here, but its **day**, **account**, **duplicating** and **deleting** apply to the whole split.
+- **Copy the previous year** takes all of the category's entries of the year before, planned or not, one year later, with their description, sub-category and account. Their amount becomes the planned amount. An entry already there (same date, sub-category and description) is not copied again. A split is copied whole, once, whichever of its categories you copy it from. Transfers are not copied.
+- **Schedule** creates a series of entries: first and last date, frequency, sub-category, description, account, amount. The series is not remembered: these are ordinary entries. **Add a part** creates a series of [splits](04-journal.md): a line per other sub-category, with its planned amount, and the **remainder** that will take the difference with the bank.
 - **Tick** rows to give them a new amount or another day, change their account or sub-category, duplicate or delete them. Shift+click ticks a range; the box in the titles ticks all the rows the **filter** shows.
 - The up and down arrows and Enter go from row to row.
 - **Undo** takes back the last copy, creation or action on the ticked rows.

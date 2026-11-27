@@ -2,7 +2,7 @@
 
 Design notes from a brainstorm.
 
-**Built so far:** the model and API (`/books/:bookId/splits`), the journal (create, edit, delete, split an entry, reconcile whole), the Schedule tool and the planned entries list of a category, and the book export. **Not built yet:** the statement import (matching on the bank amount, the remainder taking the difference, undo), copying the previous year, the online help and the README. Until the import is built, it sees the parts as ordinary entries.
+**Built:** the model and API (`/books/:bookId/splits`), the journal (create, edit, delete, split an entry, reconcile whole), the Schedule tool and the planned entries list of a category, copying the previous year, the statement import (a split is matched by its remainder on the bank amount, the remainder takes the difference, undo), the book export, the online help and the README.
 
 ## Intent
 

@@ -29,9 +29,20 @@ An entry counts in the month of its date. When it falls just before or just afte
 ## Entering fast
 
 - **New entry** opens the form. **Start from a frequent entry** proposes the entries you made yourself most often in the last 12 months (planned ones are left out), dated today. A new entry is ticked **Reconciled**: untick it to enter a forecast.
-- The arrow of **New entry** also starts a **transfer** or a **compensation**.
+- The arrow of **New entry** also starts a **split**, a **transfer** or a **compensation**.
 - **Duplicate** copies an existing entry.
 - **Mark reconciled** and **Mark as forecast** change the status of an entry from the list.
+
+## Splits
+
+A **split** counts one bank movement in several sub-categories. Example: a manager pays you 850 of net rent, which you record as 1000 of gross rent and −150 of management fees. **New entry ▾ › New split**, the account, the **bank amount** (850) and a line per part.
+
+- One of the parts is the **remainder**: its amount is the bank's minus the other parts, and is worked out for you. Pick it with the round button.
+- Each part is an ordinary entry, marked **⑂** with the bank amount. The date, account and reconciled state are those of the whole split. Open one of the parts to change the split, add or remove parts, duplicate it or delete it whole.
+- **Split** (in the form of an ordinary entry) makes an existing entry, an imported one for instance, the remainder of a split: its bank amount does not change, and the statement line stays linked to it.
+- A split changes neither the totals nor the balances: each part counts in its own category, and the account moves by the bank amount.
+- Sub-categories of a transfer category are not offered. For a loan, split the capital and the interest into two sub-categories.
+- Plan them with the budget's [Schedule](06-budget.md). When a statement is imported, a line is matched to the planned split and the remainder takes the difference (see [Bank statements](08-bank-statements.md)).
 
 ## Compensations
 

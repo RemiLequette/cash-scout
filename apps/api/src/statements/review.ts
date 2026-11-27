@@ -79,8 +79,61 @@ const entryColumns = {
   description: journalEntry.description,
   subCategoryId: journalEntry.subCategoryId,
   transferId: journalEntry.transferId,
+  splitId: journalEntry.splitId,
+  splitRemainder: journalEntry.splitRemainder,
 };
-export type CandidateEntry = Awaited<ReturnType<typeof entriesByIds>>[number];
+type EntryRow = Awaited<ReturnType<typeof entriesByIds>>[number];
+
+/** A part of a split, as the review lists it. */
+export interface SplitPart {
+  subCategoryId: string;
+  description: string;
+  amount: bigint;
+}
+
+/**
+ * An entry a line may be. A split is one candidate, its remainder: its amount is
+ * the bank amount, the sum of its parts, which are listed.
+ */
+export type CandidateEntry = EntryRow & { split: SplitPart[] | null };
+
+/** The parts of splits, by split, the remainder last. */
+export async function splitParts(tx: Tx, bookId: string, ids: readonly string[]) {
+  const parts = new Map<string, (SplitPart & { id: string; remainder: boolean })[]>();
+  if (ids.length === 0) return parts;
+  const rows = await tx
+    .select({
+      id: journalEntry.id,
+      splitId: journalEntry.splitId,
+      subCategoryId: journalEntry.subCategoryId,
+      description: journalEntry.description,
+      amount: journalEntry.amount,
+      remainder: journalEntry.splitRemainder,
+    })
+    .from(journalEntry)
+    .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.splitId, [...ids])))
+    .orderBy(asc(journalEntry.splitRemainder), asc(journalEntry.createdAt), asc(journalEntry.id));
+  for (const { splitId, ...part } of rows) {
+    parts.set(splitId!, [...(parts.get(splitId!) ?? []), part]);
+  }
+  return parts;
+}
+
+const total = (parts: readonly { amount: bigint }[]) =>
+  parts.reduce((sum, p) => sum + p.amount, 0n);
+
+/** Entries as candidates: those that are a split are given the bank amount and their parts. */
+async function asCandidates(tx: Tx, bookId: string, rows: readonly EntryRow[]) {
+  const parts = await splitParts(
+    tx,
+    bookId,
+    rows.flatMap((row) => (row.splitId ? [row.splitId] : [])),
+  );
+  return rows.map((row): CandidateEntry => {
+    const of = row.splitId ? parts.get(row.splitId) : undefined;
+    return of ? { ...row, amount: total(of), split: of } : { ...row, split: null };
+  });
+}
 
 function entriesByIds(tx: Tx, bookId: string, ids: string[]) {
   return tx
@@ -128,7 +181,12 @@ export async function proposals(tx: Tx, bookId: string, accountId: string, lines
         ),
       )
       .orderBy(asc(journalEntry.date));
-    const free = around.filter((e) => !claimed.has(e.id));
+    // A split is one candidate, by its remainder, with the bank amount of the whole.
+    const free = await asCandidates(
+      tx,
+      bookId,
+      around.filter((e) => !claimed.has(e.id) && (!e.splitId || e.splitRemainder)),
+    );
     matches = matchLines(
       lines.filter((l) => l.status === "review"),
       free.map((e) => ({ ...e, transfer: e.transferId !== null })),
@@ -142,7 +200,8 @@ export async function proposals(tx: Tx, bookId: string, accountId: string, lines
   }
   const chosen = lines.flatMap((l) => (l.entryId ? [l.entryId] : []));
   if (chosen.length > 0) {
-    for (const entry of await entriesByIds(tx, bookId, chosen)) entries.set(entry.id, entry);
+    const rows = await entriesByIds(tx, bookId, chosen);
+    for (const entry of await asCandidates(tx, bookId, rows)) entries.set(entry.id, entry);
   }
   return { matches, entries, forecasts, unmatched };
 }
@@ -228,10 +287,20 @@ export async function applyChanges(
               amount: journalEntry.amount,
               reconciled: journalEntry.reconciled,
               transferId: journalEntry.transferId,
+              splitId: journalEntry.splitId,
+              splitRemainder: journalEntry.splitRemainder,
             })
             .from(journalEntry)
             .where(and(eq(journalEntry.bookId, bookId), inArray(journalEntry.id, entryIds)))
         ).map((e) => [e.id, e]),
+  );
+  // A split is matched by its remainder, for the bank amount of the whole.
+  const splitTotals = new Map(
+    [
+      ...(await splitParts(tx, bookId, [
+        ...new Set([...entries.values()].flatMap((e) => (e.splitId ? [e.splitId] : []))),
+      ])),
+    ].map(([id, parts]) => [id, total(parts)] as const),
   );
 
   const transferAccounts = await usableTransferAccounts(tx, bookId, batch);
@@ -250,7 +319,14 @@ export async function applyChanges(
       }
     }
     if (change.entryId) {
-      const entry = entries.get(change.entryId);
+      const found = entries.get(change.entryId);
+      if (found?.splitId && !found.splitRemainder) {
+        throw bad("This entry is a part of a split: the split is matched by its remainder");
+      }
+      const entry = found && {
+        ...found,
+        amount: found.splitId ? splitTotals.get(found.splitId)! : found.amount,
+      };
       if (!entry || !lineMayBe(line, batch.accountId, entry)) {
         throw bad("The entry is not of this account, or its amount cannot change");
       }
@@ -404,14 +480,25 @@ export async function importBatchLines(
           reconciled: journalEntry.reconciled,
           exchangeRate: journalEntry.exchangeRate,
           monthShifted: journalEntry.monthShifted,
+          splitId: journalEntry.splitId,
+          splitRemainder: journalEntry.splitRemainder,
         })
         .from(journalEntry)
         .where(and(eq(journalEntry.id, entryId), eq(journalEntry.bookId, bookId)));
-      if (!entry || !lineMayBe(line, batch.accountId, entry)) {
+      // A split is matched by its remainder, for the bank amount of the whole.
+      const bank = entry?.splitId
+        ? total((await splitParts(tx, bookId, [entry.splitId])).get(entry.splitId) ?? [])
+        : entry?.amount;
+      if (
+        !entry ||
+        (entry.splitId && !entry.splitRemainder) ||
+        !lineMayBe(line, batch.accountId, { ...entry, amount: bank! })
+      ) {
         throw new HTTPException(409, {
           message: `The entry matched to the line of ${line.date} has changed: review it again`,
         });
       }
+      // The parts of a split are reconciled and dated together.
       await tx
         .update(journalEntry)
         .set({
@@ -423,12 +510,27 @@ export async function importBatchLines(
                 date: line.date,
                 monthShifted: shiftToKeep(line.date, budgetMonth(entry.date, entry.monthShifted)),
               }),
-          // A forecast takes the bank's amount, at its own rate; its planned amount stays.
-          ...(entry.amount === line.amount
-            ? {}
-            : amounts(line.amount, currency, entry.exchangeRate, bookCurrency)),
         })
-        .where(eq(journalEntry.id, entryId));
+        .where(
+          entry.splitId
+            ? and(eq(journalEntry.bookId, bookId), eq(journalEntry.splitId, entry.splitId))
+            : eq(journalEntry.id, entryId),
+        );
+      // A forecast takes the bank's amount, at its own rate; its planned amount stays.
+      // In a split the remainder takes the difference: the other parts keep theirs.
+      if (bank !== line.amount) {
+        await tx
+          .update(journalEntry)
+          .set(
+            amounts(
+              entry.amount + (line.amount - bank!),
+              currency,
+              entry.exchangeRate,
+              bookCurrency,
+            ),
+          )
+          .where(eq(journalEntry.id, entryId));
+      }
       previous = {
         previousDate: entry.date,
         previousReconciled: entry.reconciled,
@@ -590,31 +692,48 @@ export async function undoImport(tx: Tx, bookId: string, batchId: string) {
       else skipped++;
     } else {
       const [entry] = await tx
-        .select({ exchangeRate: journalEntry.exchangeRate })
+        .select({
+          exchangeRate: journalEntry.exchangeRate,
+          amount: journalEntry.amount,
+          splitId: journalEntry.splitId,
+        })
         .from(journalEntry)
         .where(and(eq(journalEntry.id, line.entryId), eq(journalEntry.bookId, bookId)));
-      const back = await tx
-        .update(journalEntry)
-        .set({
-          reconciled: line.previousReconciled,
-          ...(line.previousDate === null ? {} : { date: line.previousDate }),
-          ...(line.previousMonthShifted === null
-            ? {}
-            : { monthShifted: line.previousMonthShifted }),
-          ...(entry && line.previousAmount !== null && line.previousAmount !== line.amount
-            ? amounts(line.previousAmount, batch.account.currency, entry.exchangeRate, bookCurrency)
-            : {}),
-        })
-        .where(
-          and(
-            eq(journalEntry.id, line.entryId),
-            eq(journalEntry.bookId, bookId),
-            eq(journalEntry.amount, line.amount),
-          ),
-        )
-        .returning({ id: journalEntry.id, transferId: journalEntry.transferId });
-      if (back.length > 0) restored++;
-      else skipped++;
+      // Still what the import wrote: for a split, the whole movement is the line's amount.
+      const bank = entry?.splitId
+        ? total((await splitParts(tx, bookId, [entry.splitId])).get(entry.splitId) ?? [])
+        : entry?.amount;
+      if (entry && bank === line.amount) {
+        // The parts of a split are given their date and flag back together.
+        await tx
+          .update(journalEntry)
+          .set({
+            reconciled: line.previousReconciled,
+            ...(line.previousDate === null ? {} : { date: line.previousDate }),
+            ...(line.previousMonthShifted === null
+              ? {}
+              : { monthShifted: line.previousMonthShifted }),
+          })
+          .where(
+            entry.splitId
+              ? and(eq(journalEntry.bookId, bookId), eq(journalEntry.splitId, entry.splitId))
+              : eq(journalEntry.id, line.entryId),
+          );
+        if (line.previousAmount !== null && line.previousAmount !== entry.amount) {
+          await tx
+            .update(journalEntry)
+            .set(
+              amounts(
+                line.previousAmount,
+                batch.account.currency,
+                entry.exchangeRate,
+                bookCurrency,
+              ),
+            )
+            .where(eq(journalEntry.id, line.entryId));
+        }
+        restored++;
+      } else skipped++;
     }
     // A created entry is gone, its line goes back to choosing a sub-category; a matched one is still the line's entry.
     await tx

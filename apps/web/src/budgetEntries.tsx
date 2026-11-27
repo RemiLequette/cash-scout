@@ -10,6 +10,7 @@ import {
   shiftToKeep,
   splitRemainder,
   toDecimalString,
+  yearAhead,
   type PlanInput,
 } from "@cash-scout/domain";
 import {
@@ -674,30 +675,59 @@ export function PlanEntries({
       (e) =>
         !e.transferId &&
         !e.compensationId &&
-        // Copying a split whole is not built yet: none of its parts is copied.
-        !e.splitId &&
         Number(e.amount) !== 0 &&
         !accounts.get(e.accountId!)?.archived &&
-        subCategories.some((s) => s.value === e.subCategoryId && !s.archived),
+        subCategories.some((s) => s.value === e.subCategoryId && !s.archived) &&
+        // A split is copied whole, so every part must still be usable.
+        (!e.split ||
+          e.split.parts.every((p) => {
+            const sub = reference.subCategories.find((s) => s.id === p.subCategoryId);
+            return sub !== undefined && !sub.archived;
+          })),
     );
-    const copies = entriesToCopy(usable, [...rows.filter((r) => !r.removed), ...unplanned]);
-    if (copies.length > 0) {
-      add(
-        copies.map((e) => ({
-          key: newKey(),
-          date: e.date,
-          keptMonth: e.monthShifted ? budgetMonth(e.date, true) : null,
-          subCategoryId: e.subCategoryId,
-          description: e.description,
-          accountId: e.accountId!,
-          // What was paid, or is expected, becomes the plan.
-          amount: plain(e.amount),
-          exchangeRate: e.exchangeRate,
-          reconciled: false,
-          removed: false,
-        })),
+    const existing = [...rows.filter((r) => !r.removed), ...unplanned];
+    const plain1 = usable.filter((e) => !e.splitId);
+    const asRow = (e: Entry): PlanRow => ({
+      key: newKey(),
+      date: e.date,
+      keptMonth: e.monthShifted ? budgetMonth(e.date, true) : null,
+      subCategoryId: e.subCategoryId,
+      description: e.description,
+      accountId: e.accountId!,
+      // What was paid, or is expected, becomes the plan.
+      amount: plain(e.amount),
+      exchangeRate: e.exchangeRate,
+      reconciled: false,
+      removed: false,
+    });
+    const copies = entriesToCopy(plain1, existing).map(asRow);
+    // A split is copied once, whole: unless one of its parts is already there.
+    const splits = new Map<string, Entry[]>();
+    for (const e of usable) {
+      if (e.splitId) splits.set(e.splitId, [...(splits.get(e.splitId) ?? []), e]);
+    }
+    for (const own of splits.values()) {
+      if (entriesToCopy(own, existing).length !== own.length) continue;
+      const group = newKey();
+      const ids = new Set(own.map((e) => e.id));
+      const elsewhere = own[0]!
+        .split!.parts.filter((p) => !ids.has(p.id))
+        .map((p) => ({
+          subCategoryId: p.subCategoryId,
+          description: p.description,
+          amount: plain(p.amount),
+          remainder: p.remainder,
+        }));
+      own.forEach((e, i) =>
+        copies.push({
+          ...asRow({ ...e, date: yearAhead(e.date) }),
+          group,
+          remainder: e.splitRemainder,
+          others: i === 0 ? elsewhere : undefined,
+        }),
       );
     }
+    if (copies.length > 0) add(copies);
     setNote(t("budget.entries.copied", { count: copies.length }));
   }
 
