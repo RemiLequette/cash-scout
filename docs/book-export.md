@@ -20,7 +20,7 @@ Copy one book, to the same instance or another one. This also restores one book 
 | Book           | `book` (name, currency, default language), `book_language`                          |
 | Reference data | `category_group`, `nature`, `balance`, `balance_nature`, `category`, `sub_category` |
 | Accounts       | `book_account`, with opening balances                                               |
-| Journal        | `journal_entry`, `transfer`                                                         |
+| Journal        | `journal_entry`, `transfer`, `compensation`                                         |
 | Budgets        | `category_budget`, `budget_settlement`                                              |
 | Import         | `import_rule`, `import_batch`, `import_line`                                        |
 
@@ -39,6 +39,7 @@ Schedules are not built yet. When they are, they join the export.
 - **Names:** the book name is proposed at import and can be changed.
 - **Format version:** a file newer than the application is refused. A column added later takes its default when the file does not have it; a change that cannot be read this way raises the version and converts older files.
 - **Payment types**, removed since, are left out of the files that hold them: their table, the entries' and lines' values, and the rules whose only action was one.
+- **Virtual accounts**, removed since: an unused one is left out of the files that hold it; a file where one holds something is refused.
 - **Safety:** the shape of the file is checked, and the database constraints apply; it is written in one transaction, so a failure leaves no partial book. The other business rules of the application are not checked again: a file edited by hand only affects the book it creates.
 - **Exact values:** amounts and exchange rates are written as text, to lose no precision.
 - **Dates** of creation and update are carried over; revision numbers start again.

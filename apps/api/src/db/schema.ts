@@ -160,8 +160,6 @@ export const bookLanguage = pgTable(
 // Names are stored per language in `names`: { "fr": "...", "en": "..." }.
 // ---------------------------------------------------------------------------
 
-export const accountKind = pgEnum("account_kind", ["bank", "virtual"]);
-
 const bookId = () =>
   uuid("book_id")
     .notNull()
@@ -301,15 +299,13 @@ export const subCategory = pgTable(
   ],
 );
 
-/** A bank or virtual account of a book (not the sign-in `account` of better-auth). */
+/** A bank account of a book (not the sign-in `account` of better-auth). */
 export const bookAccount = pgTable(
   "book_account",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     bookId: bookId(),
     names: names(),
-    /** Bank accounts are reconciled and projected; virtual ones hold zero-sum compensations. */
-    kind: accountKind("kind").notNull(),
     /** ISO 4217 code: entries on the account are in this currency. */
     currency: char("currency", { length: 3 }).notNull(),
     /** Warn when the projected balance goes below this amount, in minor units. */
@@ -360,13 +356,32 @@ export const transfer = pgTable(
 
 export const transferLeg = pgEnum("transfer_leg", ["source", "destination"]);
 
+/**
+ * A compensation: an amount that counts in two sub-categories without any money
+ * moving. Two journal entries without an account, in the book currency, that
+ * change together: `plus` receives the amount and `minus` its negation.
+ */
+export const compensation = pgTable(
+  "compensation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookId: bookId(),
+    ...timestamps,
+    version: version(),
+  },
+  (t) => [unique().on(t.id, t.bookId), index("compensation_book_idx").on(t.bookId)],
+);
+
+export const compensationSide = pgEnum("compensation_side", ["plus", "minus"]);
+
 export const journalEntry = pgTable(
   "journal_entry",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     bookId: bookId(),
     date: date("date", { mode: "string" }).notNull(),
-    accountId: uuid("account_id").notNull(),
+    /** None for a side of a compensation, which is then in the book currency. */
+    accountId: uuid("account_id"),
     subCategoryId: uuid("sub_category_id").notNull(),
     description: text("description").notNull().default(""),
     /** Signed, in minor units of the account currency, as entered. */
@@ -389,6 +404,9 @@ export const journalEntry = pgTable(
     /** The transfer this entry is one side of, and which side. */
     transferId: uuid("transfer_id"),
     transferLeg: transferLeg("transfer_leg"),
+    /** The compensation this entry is one side of, and which side. */
+    compensationId: uuid("compensation_id"),
+    compensationSide: compensationSide("compensation_side"),
     /** The statement import that created the entry. */
     importBatchId: uuid("import_batch_id").references((): AnyPgColumn => importBatch.id, {
       onDelete: "set null",
@@ -405,6 +423,19 @@ export const journalEntry = pgTable(
     check(
       "journal_entry_transfer_check",
       sql`(${t.transferId} IS NULL) = (${t.transferLeg} IS NULL)`,
+    ),
+    foreignKey({
+      columns: [t.compensationId, t.bookId],
+      foreignColumns: [compensation.id, compensation.bookId],
+    }).onDelete("cascade"),
+    unique("journal_entry_compensation_side_unique").on(t.compensationId, t.compensationSide),
+    check(
+      "journal_entry_compensation_check",
+      sql`(${t.compensationId} IS NULL) = (${t.compensationSide} IS NULL)`,
+    ),
+    check(
+      "journal_entry_account_check",
+      sql`(${t.accountId} IS NULL) = (${t.compensationId} IS NOT NULL)`,
     ),
     foreignKey({
       columns: [t.accountId, t.bookId],

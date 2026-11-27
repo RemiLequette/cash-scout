@@ -80,7 +80,8 @@ export function rowsOf(entries: readonly Entry[]): PlanRow[] {
       keptMonth: e.monthShifted ? budgetMonth(e.date, true) : null,
       subCategoryId: e.subCategoryId,
       description: e.description,
-      accountId: e.accountId,
+      // A planned entry has an account: only compensations have none.
+      accountId: e.accountId!,
       amount: plain(e.plannedAmount),
       exchangeRate: e.exchangeRate,
       reconciled: e.reconciled,
@@ -527,8 +528,9 @@ export function PlanEntries({
     const usable = previous.filter(
       (e) =>
         !e.transferId &&
+        !e.compensationId &&
         Number(e.amount) !== 0 &&
-        !accounts.get(e.accountId)?.archived &&
+        !accounts.get(e.accountId!)?.archived &&
         subCategories.some((s) => s.value === e.subCategoryId && !s.archived),
     );
     const copies = entriesToCopy(usable, [...rows.filter((r) => !r.removed), ...unplanned]);
@@ -540,7 +542,7 @@ export function PlanEntries({
           keptMonth: e.monthShifted ? budgetMonth(e.date, true) : null,
           subCategoryId: e.subCategoryId,
           description: e.description,
-          accountId: e.accountId,
+          accountId: e.accountId!,
           // What was paid, or is expected, becomes the plan.
           amount: plain(e.amount),
           exchangeRate: e.exchangeRate,

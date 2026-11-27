@@ -53,7 +53,7 @@ export function Statements({ bookId }: { bookId: string }) {
   const [creating, setCreating] = useState(false);
 
   const accounts = (reference.data?.accounts ?? [])
-    .filter((a) => a.kind === "bank" && !a.archived)
+    .filter((a) => !a.archived)
     .sort((a, b) => nameOf(a.names).localeCompare(nameOf(b.names)));
 
   function read(next: { accountId: string | null; presetId: string | null; file: File | null }) {

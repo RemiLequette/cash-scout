@@ -151,7 +151,12 @@ export async function proposals(tx: Tx, bookId: string, accountId: string, lines
 function lineMayBe(
   line: { amount: bigint },
   accountId: string,
-  entry: { accountId: string; amount: bigint; reconciled: boolean; transferId: string | null },
+  entry: {
+    accountId: string | null;
+    amount: bigint;
+    reconciled: boolean;
+    transferId: string | null;
+  },
 ) {
   return (
     entry.accountId === accountId &&

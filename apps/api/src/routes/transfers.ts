@@ -64,7 +64,9 @@ async function readTransfer(tx: Tx, bookId: string, id: string) {
   if (!source || !destination) {
     throw new HTTPException(500, { message: "A transfer lost one of its sides" });
   }
-  return { header, source, destination };
+  // A side of a transfer always has an account.
+  const sided = (row: (typeof rows)[number]) => ({ ...row, accountId: row.accountId! });
+  return { header, source: sided(source), destination: sided(destination) };
 }
 
 async function respond(tx: Tx, bookId: string, id: string) {

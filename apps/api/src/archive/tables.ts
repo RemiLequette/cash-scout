@@ -10,6 +10,7 @@ import {
   category,
   categoryBudget,
   categoryGroup,
+  compensation,
   importBatch,
   importLine,
   importRule,
@@ -37,6 +38,7 @@ export const ARCHIVED: readonly ArchivedTable[] = [
   { table: subCategory, references: { categoryId: category } },
   { table: bookAccount, references: {} },
   { table: transfer, references: {} },
+  { table: compensation, references: {} },
   { table: importBatch, references: { accountId: bookAccount } },
   {
     table: journalEntry,
@@ -44,6 +46,7 @@ export const ARCHIVED: readonly ArchivedTable[] = [
       accountId: bookAccount,
       subCategoryId: subCategory,
       transferId: transfer,
+      compensationId: compensation,
       importBatchId: importBatch,
     },
   },

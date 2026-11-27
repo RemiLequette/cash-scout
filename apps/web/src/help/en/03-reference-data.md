@@ -46,8 +46,7 @@ A new book starts with four natures: Income, Spending, Savings and Transfers.
 
 ## Accounts
 
-- **Bank** accounts are reconciled with the bank and appear in the cash projection.
-- **Virtual** accounts have no bank behind them. They hold compensations that add up to zero, and are left out of the projection.
+- An account is a bank account: reconciled with the bank and part of the cash projection. To move an amount between categories without any bank movement, use a [compensation](04-journal.md).
 - An account's **currency** cannot be changed once it exists.
 - The **opening balance** is the part of the account's balance that no entry explains: what came before the first entry, and whatever is missing. It sits in no category, so in no total or budget. In the account's menu, **Opening balance…**: type the balance read in your bank, and it is worked out so that the reconciled entries give that balance, whatever their date.
 - The **low balance warning** is an amount: the account chart warns when the projected balance goes below it.

@@ -53,12 +53,9 @@ Nothing is shared between books. A typical setup is one private book per person 
 - A book with a single member is private; a book with several is shared.
 - A **super user** maintains the installation: users, books, global settings. The super user does not see a book's data without being a member.
 
-### Virtual accounts and compensations
+### Compensations
 
-Not every operation moves money in each book. In the sheets, some are recorded as pairs of **virtual** entries that add up to zero. cash-scout makes this explicit:
-
-- A book can have **virtual accounts**: not tied to a bank, never reconciled, left out of the cash projection. Their balance should come back to zero; a report flags those that don't.
-- A **compensation** is a set of entries on a virtual account whose sum is zero. It moves an amount from one category to another without touching any bank balance.
+Not every operation moves money in each book. When a member pays a shared expense from their private account, the shared book records a **compensation**: one amount that counts in two sub-categories, for instance _+50 contribution_ and _−50 food_. It touches no account, and nothing links the books. See [Compensations](docs/compensations.md).
 
 ## Journal
 
@@ -68,7 +65,7 @@ One entry per transaction, past or future, in a book:
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Date            | Year and month are derived from it, not stored                                                                                                                                                                       |
 | Budget month    | Optional shift: the month before (date up to the 15th) or after, for budgets and the dashboard                                                                                                                       |
-| Account         | One of the book's accounts; its currency is the entry's currency                                                                                                                                                     |
+| Account         | One of the book's accounts; its currency is the entry's currency. None for a compensation                                                                                                                            |
 | Sub-category    | Sets the category, the group and the nature                                                                                                                                                                          |
 | Description     | Free text, from the bank label on import                                                                                                                                                                             |
 | Amount          | Signed, in the account's currency. The expected amount until reconciled, then the bank amount                                                                                                                        |
@@ -187,7 +184,7 @@ A page for reading and analysing one year, replacing the yearly tabs of the shee
 - **Rows**: the book's natures and balances in the order it set. A nature opens on its groups (which nest), categories and sub-categories, each level expandable and collapsible, with an expand-all and a collapse-all; a group that carries categories of several natures appears under each. A row is the sum of what it contains, shown with its nature's sign. A balance is one line, the sum of its natures as entered; it adds a nature wherever the nature sits in the list. A row with nothing in the selected year (no entry, no budget allocation) is hidden, and so is a group, a nature or a balance left empty. Transfers are left out, as in every total; control lines of the sheets are not rows.
 - **Cell**: the sum of the month's entries, reconciled or not, and of the category's budget line. Future values are shown differently from past ones.
 - **Budget**: under an expanded category, a line carries its budget lines, so that its sub-categories and this line add up to the category. The detail panel lists them with the entries.
-- **Account balances**: a block under the categories, with one line per bank account and a total, giving the balance at the end of each month. It is the sum of the entries' book amounts up to that date, adjustments included, and it is not revalued at today's rate. For future months it is the projected balance of the [cash projection](#cash-projection). Virtual accounts are left out.
+- **Account balances**: a block under the categories, with one line per bank account and a total, giving the balance at the end of each month. It is the sum of the entries' book amounts up to that date, adjustments included, and it is not revalued at today's rate. For future months it is the projected balance of the [cash projection](#cash-projection). Compensations, which have no account, are left out.
 - **Detail panel**: a section at the bottom, resizable and hideable, lists the entries behind the selected cell: a row and a month, a row's year total, or an account's month. Its columns are the journal's, it is read-only, and each entry links to the journal.
 - **Access**: any member of the book, viewers included.
 
@@ -198,7 +195,7 @@ Functional decisions. Technical choices are in [ARCHITECTURE.md](ARCHITECTURE.md
 | Topic               | Decision                                                                                                                                                           | Serves                             | Notes                                                                                                        |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Separation          | Books: fully separate data and reference data in one database                                                                                                      | O1–O3 per person and per household | Every table carries the book; the API checks membership on every request                                     |
-| Virtual accounts    | Non-bank accounts per book, out of the projection, for zero-sum compensations                                                                                      | O1, O3                             | Moves an amount between categories without a fake bank movement                                              |
+| Compensations       | An amount counted in two sub-categories: two entries without an account, changed together                                                                          | O1, O3                             | Moves an amount between categories without a fake account                                                    |
 | Roles               | Owner, editor, viewer per book; one super user                                                                                                                     | — (security)                       |                                                                                                              |
 | Two ways to budget  | Planned entries and a monthly grid, which add up; only unplanned entries consume the grid                                                                          | O1, O2, O3                         | One plan per entry, so nothing is counted twice                                                              |
 | Planned entries     | Future entries in the journal with a planned amount; unplanned entries have a planned amount of 0                                                                  | O2, O1, O3                         | Variance = amount − planned amount, unplanned spending included                                              |

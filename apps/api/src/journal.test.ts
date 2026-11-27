@@ -61,12 +61,10 @@ async function bookWithReference(owner?: User) {
   const pay = await post("/sub-categories", { categoryId: salary.id, names: { fr: "Paie" } });
   const current = await post("/accounts", {
     names: { fr: "Compte courant" },
-    kind: "bank",
     currency: "EUR",
   });
   const ringgit = await post("/accounts", {
     names: { fr: "Compte MYR" },
-    kind: "bank",
     currency: "MYR",
   });
 

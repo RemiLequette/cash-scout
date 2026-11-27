@@ -331,7 +331,6 @@ export function AccountChart({
         const account = byId.get(p.accountId);
         if (!account) return false;
         if (accountId) return p.accountId === accountId;
-        if (account.kind !== "bank") return false;
         // Archived accounts only while they still move.
         return !account.archived || Number(p.opening) !== 0 || p.changes.length > 0;
       })

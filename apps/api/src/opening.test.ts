@@ -36,12 +36,10 @@ async function bookWithAccounts() {
   const bakery = await post("/sub-categories", { categoryId: food.id, names: { fr: "Pain" } });
   const current = await post<Account>("/accounts", {
     names: { fr: "Compte courant" },
-    kind: "bank",
     currency: "EUR",
   });
   const ringgit = await post<Account>("/accounts", {
     names: { fr: "Compte MYR" },
-    kind: "bank",
     currency: "MYR",
   });
   const add = (accountId: string, body: Record<string, unknown>) =>

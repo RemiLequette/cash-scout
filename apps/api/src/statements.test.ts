@@ -15,7 +15,6 @@ async function bookWithAccount() {
   const { id: bookId } = (await book.json()) as { id: string };
   const account = await owner.request("POST", `/books/${bookId}/reference/accounts`, {
     names: { fr: "Compte" },
-    kind: "bank",
     currency: "EUR",
   });
   const { id: accountId } = (await account.json()) as { id: string };

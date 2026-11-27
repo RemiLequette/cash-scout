@@ -128,7 +128,6 @@ function AccountForm({ bookId, initialName, onClose, onCreated, reference }: For
           kind: "accounts",
           body: {
             names: { [reference.defaultLanguage]: name.trim() },
-            kind: "bank",
             currency,
           },
         });

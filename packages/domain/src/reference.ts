@@ -31,10 +31,6 @@ export function checkNames(
   return undefined;
 }
 
-export const accountKinds = ["bank", "virtual"] as const;
-export const accountKindSchema = z.enum(accountKinds);
-export type AccountKind = z.infer<typeof accountKindSchema>;
-
 /** Category code: sets the sort order, e.g. "C01", "P02". */
 export const categoryCodeSchema = z
   .string()
@@ -190,12 +186,11 @@ const decimalSchema = z.string().regex(/^[+-]?\d+(\.\d+)?$/);
 
 export const accountInputSchema = z.object({
   names: namesSchema,
-  kind: accountKindSchema,
   currency: currencySchema,
-  /** Warn when the projected balance goes below this amount (bank accounts). */
+  /** Warn when the projected balance goes below this amount. */
   lowBalanceThreshold: decimalSchema.nullable().optional(),
 });
-/** Kind and currency are fixed at creation. */
+/** The currency is fixed at creation. */
 export const accountUpdateSchema = accountInputSchema
   .pick({ names: true, lowBalanceThreshold: true })
   .partial()

@@ -152,7 +152,6 @@
     "moveHint": "Choisissez une autre catégorie pour y déplacer cette sous-catégorie.",
     "newAccount": "Nouveau compte",
     "editAccount": "Modifier le compte",
-    "kind": "Type",
     "currencyHint": "Les écritures de ce compte sont dans cette devise. Elle ne peut plus être changée ensuite.",
     "threshold": "Alerte de solde bas",
     "thresholdHint": "Alerter quand le solde prévu passe sous ce montant. Laisser vide pour aucune alerte.",
@@ -393,12 +392,6 @@
       "create": "{count, plural, one {Créer # transfert} other {Créer # transferts}}"
     }
   },
-  "accountKinds": {
-    "bank": "Bancaire",
-    "virtual": "Virtuel",
-    "bankHint": "Un vrai compte : pointé avec la banque et inclus dans la prévision de trésorerie.",
-    "virtualHint": "Sans banque derrière : porte des compensations de somme nulle, hors de la prévision de trésorerie."
-  },
   "journal": {
     "date": "Date",
     "account": "Compte",
@@ -481,7 +474,7 @@
     "chartAhead": "{count} mois à partir de celui-ci",
     "chartHide": "Masquer",
     "chartShow": "Afficher",
-    "chartAllAccounts": "Tous les comptes bancaires. Seul le filtre de compte agit ici, pas la période, la catégorie, le statut ni la recherche.",
+    "chartAllAccounts": "Tous les comptes. Seul le filtre de compte agit ici, pas la période, la catégorie, le statut ni la recherche.",
     "chartOneAccount": "Le compte sélectionné. Seul le filtre de compte agit ici, pas la période, la catégorie, le statut ni la recherche.",
     "chartEmpty": "Aucun compte à afficher.",
     "overdraftTitle": "Découvert",
@@ -551,5 +544,21 @@
     "version": "Version {version}",
     "license": "Logiciel libre, licence MIT.",
     "source": "Code source sur GitHub"
+  },
+  "compensation": {
+    "new": "Nouvelle compensation",
+    "edit": "Modifier la compensation",
+    "badge": "Compensation",
+    "all": "Compensations",
+    "filter": "Ne montrer que les compensations",
+    "plus": "Sous-catégorie en +",
+    "minus": "Sous-catégorie en −",
+    "deleteConfirm": "Supprimer cette compensation et ses deux lignes ?",
+    "invalid": {
+      "date": "Saisissez une date.",
+      "plusSubCategoryId": "Choisissez une sous-catégorie.",
+      "minusSubCategoryId": "Choisissez une sous-catégorie, différente de la première.",
+      "amount": "Saisissez un montant positif, avec au plus les décimales de la devise."
+    }
   }
 }
