@@ -66,7 +66,6 @@ function rowOf(
     destinationAccountId: destination.accountId,
     subCategoryId: source.subCategoryId,
     description: source.description,
-    paymentTypeId: source.paymentTypeId,
     amount: unsigned(amount(source)),
     destinationAmount: unsigned(amount(destination)),
     sourceRate: source.exchangeRate,
@@ -161,11 +160,7 @@ function useChoices(reference: Reference) {
       archived: a.archived,
     }))
     .sort(byLabel);
-  const paymentTypes = reference.paymentTypes
-    .filter((p) => !p.archived)
-    .map((p) => ({ value: p.id, label: nameOf(p.names) }))
-    .sort(byLabel);
-  return { subCategories, accounts, paymentTypes };
+  return { subCategories, accounts };
 }
 
 type Choices = ReturnType<typeof useChoices>;
@@ -191,7 +186,6 @@ export function PlanTransfers(props: Props) {
       previous={previous.isFetchedAfterMount ? previous.data : undefined}
       defaults={{
         subCategoryId: defaults.data?.subCategoryId ?? null,
-        paymentTypeId: defaults.data?.paymentTypeId ?? null,
       }}
     />
   );
@@ -226,7 +220,7 @@ function TransfersPlan({
 }: Props & {
   transfers: YearTransfer[];
   previous: YearTransfer[] | undefined;
-  defaults: { subCategoryId: string | null; paymentTypeId: string | null };
+  defaults: { subCategoryId: string | null };
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -343,7 +337,6 @@ function TransfersPlan({
     if (!previous) return;
     const open = new Set(choices.accounts.filter((a) => !a.archived).map((a) => a.value));
     const subs = new Set(choices.subCategories.filter((s) => !s.archived).map((s) => s.value));
-    const payments = new Set(choices.paymentTypes.map((p) => p.value));
     // Two transfers are alike with the same accounts and description.
     const alike = (row: TransferRow) => ({
       date: row.date,
@@ -376,7 +369,6 @@ function TransfersPlan({
         id: undefined,
         version: undefined,
         date,
-        paymentTypeId: payments.has(row.paymentTypeId ?? "") ? row.paymentTypeId : null,
         reconciled: false,
       }),
     );
@@ -398,7 +390,6 @@ function TransfersPlan({
         destinationAccountId: last?.destinationAccountId ?? null,
         subCategoryId: last?.subCategoryId ?? defaults.subCategoryId,
         description: "",
-        paymentTypeId: last?.paymentTypeId ?? defaults.paymentTypeId,
         amount: "",
         destinationAmount: "",
         sourceRate: last?.sourceRate ?? "",
@@ -848,7 +839,7 @@ function ScheduleForm({
 }: {
   context: Context;
   choices: Choices;
-  defaults: { subCategoryId: string | null; paymentTypeId: string | null };
+  defaults: { subCategoryId: string | null };
   onCancel: () => void;
   onCreate: (rows: TransferRow[]) => void;
 }) {
@@ -865,7 +856,6 @@ function ScheduleForm({
     destinationAccountId: null as string | null,
     subCategoryId: defaults.subCategoryId,
     description: "",
-    paymentTypeId: defaults.paymentTypeId,
     amount: "",
     destinationAmount: "",
     sourceRate: "",
@@ -956,21 +946,12 @@ function ScheduleForm({
           value={draft.subCategoryId}
           onChange={(value) => set({ subCategoryId: value })}
         />
-        <Group grow>
-          <TextInput
-            label={t("journal.description")}
-            maxLength={500}
-            value={draft.description}
-            onChange={(e) => set({ description: e.currentTarget.value })}
-          />
-          <Select
-            label={t("journal.paymentType")}
-            clearable
-            data={choices.paymentTypes}
-            value={draft.paymentTypeId}
-            onChange={(value) => set({ paymentTypeId: value })}
-          />
-        </Group>
+        <TextInput
+          label={t("journal.description")}
+          maxLength={500}
+          value={draft.description}
+          onChange={(e) => set({ description: e.currentTarget.value })}
+        />
         <Group grow>
           {input("amount", t("budget.plannedAmount"))}
           {wants.amountInTwo && input("destinationAmount", t("transfer.destinationAmount"))}

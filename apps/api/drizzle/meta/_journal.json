@@ -232,6 +232,13 @@
       "when": 1795764565579,
       "tag": "0032_month_shifted",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795774233610,
+      "tag": "0033_drop_payment_types",
+      "breakpoints": true
     }
   ]
 }

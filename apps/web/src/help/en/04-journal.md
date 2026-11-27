@@ -10,7 +10,6 @@ The journal holds one entry per transaction, **past or future**, for the open bo
 | Account         | Its currency is the entry's currency                                                             |
 | Sub-category    | Sets the category, group and nature                                                              |
 | Description     | Free text                                                                                        |
-| Payment type    | Card, transfer, cash…                                                                            |
 | Amount          | **Signed**, as on the bank statement: −12.50 for a payment                                       |
 | Exchange rate   | Shown when the account is not in the book's currency. Kept when saved, so past totals never move |
 | Original amount | Optional, for information: what you really paid in another currency                              |

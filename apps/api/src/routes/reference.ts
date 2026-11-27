@@ -21,8 +21,6 @@ import {
   natureInputSchema,
   natureUpdateSchema,
   parseThreshold,
-  paymentTypeInputSchema,
-  paymentTypeUpdateSchema,
   subCategoryInputSchema,
   subCategoryUpdateSchema,
   toDecimalString,
@@ -43,7 +41,6 @@ import {
   importLine,
   journalEntry,
   nature,
-  paymentType,
   subCategory,
 } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
@@ -235,12 +232,6 @@ const subCategoryColumns = {
   names: subCategory.names,
   archivedAt: subCategory.archivedAt,
 };
-const paymentTypeColumns = {
-  version: paymentType.version,
-  id: paymentType.id,
-  names: paymentType.names,
-  archivedAt: paymentType.archivedAt,
-};
 const accountColumns = {
   version: bookAccount.version,
   id: bookAccount.id,
@@ -304,7 +295,6 @@ export function referenceRoutes(db: Db) {
             groups,
             categories,
             subCategories,
-            paymentTypes,
             accounts,
           ] = await Promise.all([
             languagesOf(tx, bookId),
@@ -333,7 +323,6 @@ export function referenceRoutes(db: Db) {
               .where(byBook(category))
               .orderBy(asc(category.code)),
             tx.select(subCategoryColumns).from(subCategory).where(byBook(subCategory)),
-            tx.select(paymentTypeColumns).from(paymentType).where(byBook(paymentType)),
             tx.select(accountColumns).from(bookAccount).where(byBook(bookAccount)),
           ]);
           return {
@@ -350,7 +339,6 @@ export function referenceRoutes(db: Db) {
             groups: groups.map(out),
             categories: categories.map(out),
             subCategories: subCategories.map(out),
-            paymentTypes: paymentTypes.map(out),
             accounts: accounts.map(outAccount),
           };
         });
@@ -700,47 +688,6 @@ export function referenceRoutes(db: Db) {
         });
         return c.json({ moved });
       })
-
-      // Payment types ----------------------------------------------------------
-      .post("/payment-types", zValidator("json", paymentTypeInputSchema), async (c) => {
-        const me = c.var.user.id;
-        const bookId = idOf(c.req.param("bookId"));
-        const input = c.req.valid("json");
-        const row = await withUser(db, me, async (tx) => {
-          await requireRole(tx, bookId, me, "editor");
-          const names = await validNames(tx, bookId, input.names);
-          const [created] = await tx
-            .insert(paymentType)
-            .values({ bookId, names })
-            .returning(paymentTypeColumns);
-          return created!;
-        });
-        return c.json(out(row), 201);
-      })
-      .patch("/payment-types/:id", zValidator("json", paymentTypeUpdateSchema), async (c) => {
-        const me = c.var.user.id;
-        const bookId = idOf(c.req.param("bookId"));
-        const id = idOf(c.req.param("id"), "Item");
-        const { names, archived, version } = c.req.valid("json");
-        const row = await withUser(db, me, async (tx) => {
-          await requireRole(tx, bookId, me, "editor");
-          return updatedOne(
-            await tx
-              .update(paymentType)
-              .set({
-                ...archiveValue(archived),
-                ...(names && { names: await mergedNames(tx, bookId, paymentType, id, names) }),
-              })
-              .where(rowOf(paymentType, bookId, id, version))
-              .returning(paymentTypeColumns),
-            version,
-          );
-        });
-        return c.json(out(row));
-      })
-      .delete("/payment-types/:id", async (c) =>
-        deleteItem(c, db, paymentType, idOf(c.req.param("id"), "Item")),
-      )
 
       // Accounts ---------------------------------------------------------------
       .post("/accounts", zValidator("json", accountInputSchema), async (c) => {

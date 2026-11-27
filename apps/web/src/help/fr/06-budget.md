@@ -48,7 +48,7 @@ Les mois rapprochés ne changent pas.
 
 La liste sous la grille se modifie en place. Elle s'enregistre avec la grille par **Enregistrer**, tout ou rien : tant que vous n'avez pas enregistré, le journal ne change pas.
 
-- **Copier l'année précédente** reprend toutes les écritures de la catégorie de l'année d'avant, prévues ou non, un an plus tard, avec leur libellé, sous-catégorie, compte et type de paiement. Leur montant devient le montant prévu. Une écriture déjà là (même date, sous-catégorie et libellé) n'est pas recopiée. Les transferts ne sont pas copiés.
+- **Copier l'année précédente** reprend toutes les écritures de la catégorie de l'année d'avant, prévues ou non, un an plus tard, avec leur libellé, sous-catégorie et compte. Leur montant devient le montant prévu. Une écriture déjà là (même date, sous-catégorie et libellé) n'est pas recopiée. Les transferts ne sont pas copiés.
 - **Échéancier** crée une série d'écritures : première et dernière date, fréquence, sous-catégorie, libellé, compte, montant. La série n'est pas mémorisée : ce sont des écritures ordinaires.
 - **Cochez** des lignes pour leur donner un nouveau montant ou un autre jour, changer leur compte ou leur sous-catégorie, les dupliquer ou les supprimer. Maj+clic coche une plage ; la case du titre coche toutes les lignes affichées par le **filtre**.
 - Les flèches haut et bas et Entrée passent d'une ligne à l'autre.
@@ -77,7 +77,7 @@ Rien ne change dans le journal avant **Enregistrer**, qui écrit tout ou rien.
 - **Cochez** des lignes pour leur donner un nouveau montant ou un autre jour, changer leur compte source, leur compte destination ou leur sous-catégorie, les dupliquer ou les supprimer. Maj+clic coche une plage ; la case du titre coche toutes les lignes affichées par le **filtre**. Le nouveau montant ne touche pas les transferts entre devises différentes : saisissez leurs deux montants sur la ligne. Un changement de compte est ignoré sur une ligne dont les deux comptes deviendraient identiques, ou, pour un transfert déjà enregistré, dont la devise changerait.
 - **Annuler** revient sur la dernière copie, création ou action sur les lignes cochées.
 
-Un transfert dont un côté est rapproché ne se modifie pas ici. Le type de paiement se choisit dans l'échéancier ou dans le [journal](05-transfers.md). Changer le montant prévu remplace aussi le montant attendu des deux côtés.
+Un transfert dont un côté est rapproché ne se modifie pas ici. Changer le montant prévu remplace aussi le montant attendu des deux côtés.
 
 ## Variation des comptes
 

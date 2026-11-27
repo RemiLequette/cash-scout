@@ -105,7 +105,7 @@ Grid:
 Entry list:
 
 - columns: date, sub-category, description, account, planned amount, and the current amount for information;
-- **copy the previous year**, one category at a time: all its entries, planned or not, one year later, with their description, sub-category, account and payment type, which later reconciling relies on. The amount of each becomes its planned amount. An entry already there (same date, sub-category and description) is not copied again. Transfers keep their two sides;
+- **copy the previous year**, one category at a time: all its entries, planned or not, one year later, with their description, sub-category and account, which later reconciling relies on. The amount of each becomes its planned amount. An entry already there (same date, sub-category and description) is not copied again. Transfers keep their two sides;
 - **create from a schedule**: description, sub-category, account, amount, frequency (month, quarter, year), day, first and last date;
 - tick rows, all of those a filter on description or sub-category shows included, to delete them, set a new planned amount (such as a rise known from July), or change their day, account or sub-category. No percentages;
 - add and duplicate rows.

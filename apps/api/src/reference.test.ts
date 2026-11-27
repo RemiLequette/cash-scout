@@ -199,7 +199,7 @@ describe("categories", () => {
   });
 });
 
-describe("accounts and payment types", () => {
+describe("accounts", () => {
   it("stores the threshold in the account currency", async () => {
     const { owner, ref } = await bilingualBook();
     const account = await json<{ id: string; lowBalanceThreshold: string; kind: string }>(
@@ -227,7 +227,7 @@ describe("accounts and payment types", () => {
     expect(cleared.lowBalanceThreshold).toBeNull();
   });
 
-  it("creates virtual accounts and payment types", async () => {
+  it("creates virtual accounts", async () => {
     const { owner, ref } = await bilingualBook();
     await json(
       owner.request("POST", ref("/accounts"), {
@@ -237,12 +237,8 @@ describe("accounts and payment types", () => {
       }),
       201,
     );
-    await json(owner.request("POST", ref("/payment-types"), { names: { fr: "Carte" } }), 201);
-    const reference = await json<{ accounts: unknown[]; paymentTypes: unknown[] }>(
-      owner.request("GET", ref()),
-    );
+    const reference = await json<{ accounts: unknown[] }>(owner.request("GET", ref()));
     expect(reference.accounts).toHaveLength(1);
-    expect(reference.paymentTypes).toHaveLength(1);
   });
 });
 
@@ -256,7 +252,7 @@ describe("roles and isolation", () => {
     });
 
     expect((await viewer.request("GET", ref())).status).toBe(200);
-    const write = await viewer.request("POST", ref("/payment-types"), { names: { fr: "Carte" } });
+    const write = await viewer.request("POST", ref("/groups"), { names: { fr: "Courant" } });
     expect(write.status).toBe(403);
   });
 

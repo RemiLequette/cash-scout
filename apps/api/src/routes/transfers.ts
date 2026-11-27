@@ -20,20 +20,12 @@ import {
   category,
   journalEntry,
   nature,
-  paymentType,
   subCategory,
   transfer,
 } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
-import {
-  accountOf,
-  bookCurrencyOf,
-  entryColumns,
-  outEntry,
-  paymentTypeOf,
-  usable,
-} from "./journal.js";
+import { accountOf, bookCurrencyOf, entryColumns, outEntry, usable } from "./journal.js";
 
 /** A sub-category of the book, which must belong to a category of a transfer nature. */
 async function transferSubCategory(tx: Tx, bookId: string, id: string, allowArchived: boolean) {
@@ -94,9 +86,6 @@ async function createTransfer(tx: Tx, bookId: string, input: z.output<typeof tra
   const source = await usable(accountOf(tx, bookId, input.sourceAccountId), "account");
   const destination = await usable(accountOf(tx, bookId, input.destinationAccountId), "account");
   await transferSubCategory(tx, bookId, input.subCategoryId, false);
-  if (input.paymentTypeId) {
-    await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
-  }
   const bookCurrency = await bookCurrencyOf(tx, bookId);
   const sameCurrency = source.currency === destination.currency;
   if (!sameCurrency && input.destinationAmount === undefined) {
@@ -121,7 +110,6 @@ async function createTransfer(tx: Tx, bookId: string, input: z.output<typeof tra
     transferId: created!.id,
     subCategoryId: input.subCategoryId,
     description: input.description,
-    paymentTypeId: input.paymentTypeId ?? null,
   };
   const side = (minor: bigint, currency: string, rate: string) => ({
     amount: minor,
@@ -183,11 +171,6 @@ async function updateTransfer(
   }
   const subCategoryId = input.subCategoryId ?? source.subCategoryId;
   await transferSubCategory(tx, bookId, subCategoryId, subCategoryId === source.subCategoryId);
-  const paymentTypeId =
-    input.paymentTypeId === undefined ? source.paymentTypeId : input.paymentTypeId;
-  if (paymentTypeId && paymentTypeId !== source.paymentTypeId) {
-    await usable(paymentTypeOf(tx, bookId, paymentTypeId), "payment type");
-  }
   const bookCurrency = await bookCurrencyOf(tx, bookId);
   const sameCurrency = source.currency === destination.currency;
   const outMinor = input.amount
@@ -221,7 +204,6 @@ async function updateTransfer(
   const shared = {
     subCategoryId,
     description: input.description ?? source.description,
-    paymentTypeId,
   };
   const side = (minor: bigint, currency: string, rate: string) => ({
     amount: minor,
@@ -318,8 +300,8 @@ async function transfersOf(tx: Tx, bookId: string, year: number) {
 export function transferRoutes(db: Db) {
   return (
     new Hono<AppEnv>()
-      // The sub-category and payment type most used by the book's transfers, to
-      // start a new one from. Archived items are left out.
+      // The sub-category most used by the book's transfers, to start a new one
+      // from. Archived ones are left out.
       .get("/defaults", async (c) => {
         const me = c.var.user.id;
         const bookId = idOf(c.req.param("bookId"));
@@ -337,15 +319,7 @@ export function transferRoutes(db: Db) {
             .groupBy(journalEntry.subCategoryId)
             .orderBy(desc(count()), journalEntry.subCategoryId)
             .limit(1);
-          const [payment] = await tx
-            .select({ id: journalEntry.paymentTypeId })
-            .from(journalEntry)
-            .innerJoin(paymentType, eq(paymentType.id, journalEntry.paymentTypeId))
-            .where(and(sides, isNull(paymentType.archivedAt)))
-            .groupBy(journalEntry.paymentTypeId)
-            .orderBy(desc(count()), journalEntry.paymentTypeId)
-            .limit(1);
-          return { subCategoryId: sub?.id ?? null, paymentTypeId: payment?.id ?? null };
+          return { subCategoryId: sub?.id ?? null };
         });
         return c.json(result);
       })

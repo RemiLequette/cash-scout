@@ -301,18 +301,6 @@ export const subCategory = pgTable(
   ],
 );
 
-export const paymentType = pgTable(
-  "payment_type",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    bookId: bookId(),
-    names: names(),
-    archivedAt: archivedAt(),
-    version: version(),
-  },
-  (t) => [unique().on(t.id, t.bookId), index("payment_type_book_idx").on(t.bookId)],
-);
-
 /** A bank or virtual account of a book (not the sign-in `account` of better-auth). */
 export const bookAccount = pgTable(
   "book_account",
@@ -381,7 +369,6 @@ export const journalEntry = pgTable(
     accountId: uuid("account_id").notNull(),
     subCategoryId: uuid("sub_category_id").notNull(),
     description: text("description").notNull().default(""),
-    paymentTypeId: uuid("payment_type_id"),
     /** Signed, in minor units of the account currency, as entered. */
     amount: bigint("amount", { mode: "bigint" }).notNull(),
     /** The amount when the entry was created; never changed. Variance = amount − planned. */
@@ -427,10 +414,6 @@ export const journalEntry = pgTable(
       columns: [t.subCategoryId, t.bookId],
       foreignColumns: [subCategory.id, subCategory.bookId],
     }),
-    foreignKey({
-      columns: [t.paymentTypeId, t.bookId],
-      foreignColumns: [paymentType.id, paymentType.bookId],
-    }),
     check(
       "journal_entry_original_check",
       sql`(${t.originalAmount} IS NULL) = (${t.originalCurrency} IS NULL)`,
@@ -439,7 +422,6 @@ export const journalEntry = pgTable(
     index("journal_entry_book_date_idx").on(t.bookId, t.date),
     index("journal_entry_account_idx").on(t.accountId),
     index("journal_entry_sub_category_idx").on(t.subCategoryId),
-    index("journal_entry_payment_type_idx").on(t.paymentTypeId),
   ],
 );
 
@@ -470,9 +452,6 @@ export const importRule = pgTable(
     maxAmount: numeric("max_amount"),
     /** Actions. */
     subCategoryId: uuid("sub_category_id").references(() => subCategory.id, {
-      onDelete: "set null",
-    }),
-    paymentTypeId: uuid("payment_type_id").references(() => paymentType.id, {
       onDelete: "set null",
     }),
     description: text("description"),
@@ -543,10 +522,6 @@ export const importLine = pgTable(
     status: importLineStatus("status").notNull().default("review"),
     /** Chosen in the review: the sub-category of the entry to create. */
     subCategoryId: uuid("sub_category_id").references(() => subCategory.id, {
-      onDelete: "set null",
-    }),
-    /** The payment type of the entry to create. */
-    paymentTypeId: uuid("payment_type_id").references(() => paymentType.id, {
       onDelete: "set null",
     }),
     /** The rule that proposed the sub-category, description or ignoring. */

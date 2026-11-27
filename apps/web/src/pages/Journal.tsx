@@ -94,7 +94,6 @@ export interface Draft {
   accountId: string | null;
   subCategoryId: string | null;
   description: string;
-  paymentTypeId: string | null;
   amount: string;
   exchangeRate: string;
   originalAmount: string;
@@ -116,7 +115,6 @@ export function draftOf(entry: Entry, mode: "edit" | "duplicate"): Draft {
     accountId: entry.accountId,
     subCategoryId: entry.subCategoryId,
     description: entry.description,
-    paymentTypeId: entry.paymentTypeId,
     amount: entry.amount,
     exchangeRate: entry.exchangeRate === "1" ? "" : entry.exchangeRate,
     originalAmount: entry.originalAmount ?? "",
@@ -136,7 +134,6 @@ export const emptyDraft = (): Draft => ({
   accountId: null,
   subCategoryId: null,
   description: "",
-  paymentTypeId: null,
   amount: "",
   exchangeRate: "",
   originalAmount: "",
@@ -177,7 +174,6 @@ function validate(
     accountId: draft.accountId ?? "",
     subCategoryId: draft.subCategoryId ?? "",
     description: draft.description,
-    paymentTypeId: draft.paymentTypeId,
     amount,
     ...(needsRate && { exchangeRate }),
     originalAmount: originalAmount || null,
@@ -246,11 +242,6 @@ export function EntryForm({
     reference,
     initial.id ? (initial.subCategoryId ?? undefined) : undefined,
   );
-  const paymentTypeOptions = reference.paymentTypes
-    .filter((p) => !p.archived || p.id === initial.paymentTypeId)
-    .map((p) => ({ value: p.id, label: nameOf(p.names) }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-
   const account = reference.accounts.find((a) => a.id === draft.accountId);
   const needsRate = account !== undefined && account.currency !== bookCurrency;
   const { body, errors } = validate(draft, account?.currency, bookCurrency);
@@ -324,25 +315,16 @@ export function EntryForm({
           value={draft.description}
           onChange={(e) => set({ description: e.currentTarget.value })}
         />
-        <Group grow align="flex-start">
-          <TextInput
-            label={account ? `${t("journal.amount")} (${account.currency})` : t("journal.amount")}
-            description={t("journal.amountHint")}
-            required
-            inputMode="decimal"
-            placeholder={t("journal.amountPlaceholder")}
-            value={draft.amount}
-            error={error("amount")}
-            onChange={(e) => set({ amount: e.currentTarget.value })}
-          />
-          <Select
-            label={t("journal.paymentType")}
-            clearable
-            data={paymentTypeOptions}
-            value={draft.paymentTypeId}
-            onChange={(value) => set({ paymentTypeId: value })}
-          />
-        </Group>
+        <TextInput
+          label={account ? `${t("journal.amount")} (${account.currency})` : t("journal.amount")}
+          description={t("journal.amountHint")}
+          required
+          inputMode="decimal"
+          placeholder={t("journal.amountPlaceholder")}
+          value={draft.amount}
+          error={error("amount")}
+          onChange={(e) => set({ amount: e.currentTarget.value })}
+        />
         {needsRate && (
           <TextInput
             label={t("journal.exchangeRate")}
@@ -763,7 +745,6 @@ interface Row {
   natureSign?: 1 | -1;
   transfer?: boolean;
   account: string;
-  paymentType: string;
 }
 
 /**
@@ -1040,13 +1021,11 @@ function toRows(entries: Entry[], reference: Reference, language: string): Row[]
   const categories = byId(reference.categories);
   const natures = byId(reference.natures);
   const accounts = byId(reference.accounts);
-  const paymentTypes = byId(reference.paymentTypes);
   return entries
     .map((entry) => {
       const sub = subs.get(entry.subCategoryId);
       const category = sub && categories.get(sub.categoryId);
       const account = accounts.get(entry.accountId);
-      const paymentType = entry.paymentTypeId ? paymentTypes.get(entry.paymentTypeId) : undefined;
       return {
         entry,
         sub: sub ? nameOf(sub.names) : "",
@@ -1055,7 +1034,6 @@ function toRows(entries: Entry[], reference: Reference, language: string): Row[]
         natureSign: category && natures.get(category.natureId)?.sign,
         transfer: category && natures.get(category.natureId)?.transfer,
         account: account ? nameOf(account.names) : "",
-        paymentType: paymentType ? nameOf(paymentType.names) : "",
       };
     })
     .reverse();
@@ -1182,9 +1160,6 @@ const TableEntry = memo(function TableEntry({
       </Table.Td>
       <Table.Td style={{ whiteSpace: "nowrap" }}>{row.sub}</Table.Td>
       <Table.Td style={{ whiteSpace: "nowrap" }}>{row.account}</Table.Td>
-      <Table.Td c="dimmed" style={{ whiteSpace: "nowrap" }}>
-        {row.paymentType}
-      </Table.Td>
       <Table.Td>
         <Amount row={row} bookCurrency={bookCurrency} />
       </Table.Td>
@@ -1692,7 +1667,7 @@ export function Journal({
     </>
   );
 
-  const columns = 8;
+  const columns = 7;
 
   const top = (
     <Stack gap="xs" pb={6}>
@@ -1862,7 +1837,6 @@ export function Journal({
               <Table.Th>{t("journal.category")}</Table.Th>
               <Table.Th>{t("journal.subCategory")}</Table.Th>
               <Table.Th>{t("journal.account")}</Table.Th>
-              <Table.Th>{t("journal.paymentType")}</Table.Th>
               <Table.Th ta="right">{t("journal.amount")}</Table.Th>
               <Table.Th w={96}>{t("journal.status")}</Table.Th>
             </Table.Tr>

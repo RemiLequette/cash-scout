@@ -3,7 +3,6 @@
  *
  * - categories.csv: group, category, code, nature, sub_category
  * - accounts.csv: name, kind, currency, low_balance_threshold
- * - payment_types.csv: name
  *
  * Name columns are in the book's default language; a translation goes in a
  * column suffixed with its language: `category@en`, `name@en`.
@@ -13,24 +12,16 @@ import { checkNames, currencySchema, parseThreshold, type Names } from "@cash-sc
 import { parse } from "csv-parse/sync";
 import { asc, eq } from "drizzle-orm";
 import type { Tx } from "../db/client.js";
-import {
-  bookAccount,
-  category,
-  categoryGroup,
-  nature,
-  paymentType,
-  subCategory,
-} from "../db/schema.js";
+import { bookAccount, category, categoryGroup, nature, subCategory } from "../db/schema.js";
 import { languagesOf } from "../routes/access.js";
 
 export interface ReferenceCsv {
   categories?: string;
   accounts?: string;
-  paymentTypes?: string;
 }
 
 export interface ImportSummary {
-  created: Record<"groups" | "categories" | "subCategories" | "accounts" | "paymentTypes", number>;
+  created: Record<"groups" | "categories" | "subCategories" | "accounts", number>;
   existing: number;
 }
 
@@ -81,7 +72,7 @@ export async function importReference(
 ): Promise<ImportSummary> {
   const { languages, defaultLanguage } = await languagesOf(tx, bookId);
   const summary: ImportSummary = {
-    created: { groups: 0, categories: 0, subCategories: 0, accounts: 0, paymentTypes: 0 },
+    created: { groups: 0, categories: 0, subCategories: 0, accounts: 0 },
     existing: 0,
   };
 
@@ -207,24 +198,6 @@ export async function importReference(
         .values({ bookId, names, kind, currency: currency.data, lowBalanceThreshold });
       existing.add(key(names));
       summary.created.accounts++;
-    }
-  }
-
-  if (csv.paymentTypes) {
-    const existing = new Set(
-      (await tx.select().from(paymentType).where(eq(paymentType.bookId, bookId))).map((p) =>
-        key(p.names),
-      ),
-    );
-    for (const [index, row] of parseCsv(csv.paymentTypes).entries()) {
-      const names = checked(namesOf(row, "name", defaultLanguage), index + 2);
-      if (existing.has(key(names))) {
-        summary.existing++;
-        continue;
-      }
-      await tx.insert(paymentType).values({ bookId, names });
-      existing.add(key(names));
-      summary.created.paymentTypes++;
     }
   }
 

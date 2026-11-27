@@ -51,7 +51,3 @@ A new book starts with four natures: Income, Spending, Savings and Transfers.
 - An account's **currency** cannot be changed once it exists.
 - The **opening balance** is the part of the account's balance that no entry explains: what came before the first entry, and whatever is missing. It sits in no category, so in no total or budget. In the account's menu, **Opening balance…**: type the balance read in your bank, and it is worked out so that the reconciled entries give that balance, whatever their date.
 - The **low balance warning** is an amount: the account chart warns when the projected balance goes below it.
-
-## Payment types
-
-Card, transfer, direct debit, cash, cheque, fees… Add the ones you use.

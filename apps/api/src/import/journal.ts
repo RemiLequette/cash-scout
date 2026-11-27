@@ -2,10 +2,11 @@
  * Import of journal entries from a CSV file (see docs/import.md).
  *
  * Columns: date, account, sub_category, category_code, description,
- * payment_type, amount, planned_amount, exchange_rate, book_amount,
- * original_amount, original_currency, reconciled.
+ * amount, planned_amount, exchange_rate, book_amount, original_amount,
+ * original_currency, reconciled. Other columns are ignored, such as the
+ * payment_type of older files.
  *
- * Accounts, sub-categories and payment types are matched by their name in the
+ * Accounts and sub-categories are matched by their name in the
  * book's default language, ignoring case. Archived items are matched too, so
  * old entries can be imported. Every line is a new entry: an import run twice
  * creates the entries twice.
@@ -21,14 +22,7 @@ import {
 } from "@cash-scout/domain";
 import { eq } from "drizzle-orm";
 import type { Tx } from "../db/client.js";
-import {
-  book,
-  bookAccount,
-  category,
-  journalEntry,
-  paymentType,
-  subCategory,
-} from "../db/schema.js";
+import { book, bookAccount, category, journalEntry, subCategory } from "../db/schema.js";
 import { languagesOf } from "../routes/access.js";
 import { ImportError, parseCsv } from "./reference.js";
 
@@ -94,9 +88,6 @@ export async function importJournal(
   const accounts = byName(
     await tx.select().from(bookAccount).where(eq(bookAccount.bookId, bookId)),
   );
-  const paymentTypes = byName(
-    await tx.select().from(paymentType).where(eq(paymentType.bookId, bookId)),
-  );
   const subCategories = await tx
     .select({ id: subCategory.id, names: subCategory.names, code: category.code })
     .from(subCategory)
@@ -135,8 +126,6 @@ export async function importJournal(
       ? (subByCode.get(`${row.category_code}|${subName.toLocaleLowerCase()}`) ??
         fail(`no sub-category "${subName}" in the category ${row.category_code}`))
       : find(subByName, "sub_category", "sub-category");
-
-    const payment = row.payment_type ? find(paymentTypes, "payment_type", "payment type") : null;
 
     const amount = amountOf("amount", account.currency);
     // No planned amount: the entry was not planned, and consumes its category's budget.
@@ -189,7 +178,6 @@ export async function importJournal(
       accountId: account.id,
       subCategoryId: sub.id,
       description: (row.description ?? "").slice(0, 500),
-      paymentTypeId: payment?.id ?? null,
       amount: amount.minor,
       plannedAmount: planned.minor,
       exchangeRate: rate,

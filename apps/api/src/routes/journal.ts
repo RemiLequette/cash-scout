@@ -32,7 +32,7 @@ import type { z } from "zod";
 import { HTTPException } from "hono/http-exception";
 import { BUDGET_DATE } from "../db/budget-date.js";
 import { withUser, type Db, type Tx } from "../db/client.js";
-import { book, bookAccount, journalEntry, paymentType, subCategory } from "../db/schema.js";
+import { book, bookAccount, journalEntry, subCategory } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { checked, idOf, missing, requireRole, rowOf } from "./access.js";
 import { monthEnds } from "./budget-months.js";
@@ -46,7 +46,7 @@ export async function bookCurrencyOf(tx: Tx, bookId: string): Promise<string> {
 }
 
 /**
- * An account, sub-category or payment type of the book, for an entry.
+ * An account or sub-category of the book, for an entry.
  * Archived items are refused, unless the entry already uses the item.
  */
 export async function usable<T extends { archivedAt: Date | null }>(
@@ -76,13 +76,6 @@ export function subCategoryOf(tx: Tx, bookId: string, id: string) {
     .from(subCategory)
     .where(and(eq(subCategory.id, id), eq(subCategory.bookId, bookId)));
 }
-export function paymentTypeOf(tx: Tx, bookId: string, id: string) {
-  return tx
-    .select({ archivedAt: paymentType.archivedAt })
-    .from(paymentType)
-    .where(and(eq(paymentType.id, id), eq(paymentType.bookId, bookId)));
-}
-
 function originalOf(amount: string | null | undefined, currency: string | null | undefined) {
   if (amount == null || currency == null) {
     return { originalAmount: null, originalCurrency: null };
@@ -100,7 +93,6 @@ export const entryColumns = {
   accountId: journalEntry.accountId,
   subCategoryId: journalEntry.subCategoryId,
   description: journalEntry.description,
-  paymentTypeId: journalEntry.paymentTypeId,
   amount: journalEntry.amount,
   plannedAmount: journalEntry.plannedAmount,
   exchangeRate: journalEntry.exchangeRate,
@@ -142,9 +134,6 @@ export async function createEntry(
 ) {
   const account = await usable(accountOf(tx, bookId, input.accountId), "account");
   await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
-  if (input.paymentTypeId) {
-    await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
-  }
   const bookCurrency = await bookCurrencyOf(tx, bookId);
   const amount = checked(() => parseAmount(input.amount, account.currency));
   const rate = checked(() => resolveRate(account.currency, bookCurrency, input.exchangeRate));
@@ -156,7 +145,6 @@ export async function createEntry(
       accountId: input.accountId,
       subCategoryId: input.subCategoryId,
       description: input.description,
-      paymentTypeId: input.paymentTypeId ?? null,
       amount: amount.minor,
       plannedAmount: input.planned ? amount.minor : 0n,
       exchangeRate: rate,
@@ -208,9 +196,6 @@ export async function updateEntry(
   if (input.subCategoryId && input.subCategoryId !== current.subCategoryId) {
     await usable(subCategoryOf(tx, bookId, input.subCategoryId), "sub-category");
   }
-  if (input.paymentTypeId && input.paymentTypeId !== current.paymentTypeId) {
-    await usable(paymentTypeOf(tx, bookId, input.paymentTypeId), "payment type");
-  }
   const bookCurrency = await bookCurrencyOf(tx, bookId);
   const amount =
     input.amount === undefined
@@ -233,7 +218,6 @@ export async function updateEntry(
       accountId: input.accountId,
       subCategoryId: input.subCategoryId,
       description: input.description,
-      paymentTypeId: input.paymentTypeId,
       reconciled: input.reconciled,
       amount: amount.minor,
       // Written in the budget's plan: the plan and the expected amount move together.

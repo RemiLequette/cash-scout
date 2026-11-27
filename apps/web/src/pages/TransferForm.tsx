@@ -30,7 +30,6 @@ export interface TransferDraft {
   destinationAccountId: string | null;
   subCategoryId: string | null;
   description: string;
-  paymentTypeId: string | null;
   amount: string;
   destinationAmount: string;
   sourceRate: string;
@@ -44,7 +43,6 @@ const emptyDraft = (): TransferDraft => ({
   destinationAccountId: null,
   subCategoryId: null,
   description: "",
-  paymentTypeId: null,
   amount: "",
   destinationAmount: "",
   sourceRate: "",
@@ -64,7 +62,6 @@ function draftOf(transfer: Transfer): TransferDraft {
     destinationAccountId: transfer.destination.accountId,
     subCategoryId: transfer.source.subCategoryId,
     description: transfer.source.description,
-    paymentTypeId: transfer.source.paymentTypeId,
     amount: unsigned(transfer.source.amount),
     destinationAmount: unsigned(transfer.destination.amount),
     sourceRate: rateText(transfer.source.exchangeRate),
@@ -131,7 +128,6 @@ export function validate(
     destinationAccountId: draft.destinationAccountId ?? "",
     subCategoryId: draft.subCategoryId ?? "",
     description: draft.description,
-    paymentTypeId: draft.paymentTypeId,
     amount,
     ...(wants.amountInTwo && { destinationAmount }),
     ...(wants.sourceRate && { sourceRate: decimalInput(draft.sourceRate) }),
@@ -217,11 +213,6 @@ function TransferFields({
         .sort((a, b) => a.label.localeCompare(b.label)),
     }))
     .filter((group) => group.items.length > 0);
-  const paymentTypeOptions = reference.paymentTypes
-    .filter((p) => !p.archived || p.id === initial.paymentTypeId)
-    .map((p) => ({ value: p.id, label: nameOf(p.names) }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-
   const delay = Number(draft.delayDays);
   const arrival =
     errors.date || errors.delayDays || Number.isNaN(delay)
@@ -364,21 +355,12 @@ function TransferFields({
           error={error("subCategoryId")}
           onChange={(value) => set({ subCategoryId: value })}
         />
-        <Group grow align="flex-start">
-          <TextInput
-            label={t("journal.description")}
-            maxLength={500}
-            value={draft.description}
-            onChange={(e) => set({ description: e.currentTarget.value })}
-          />
-          <Select
-            label={t("journal.paymentType")}
-            clearable
-            data={paymentTypeOptions}
-            value={draft.paymentTypeId}
-            onChange={(value) => set({ paymentTypeId: value })}
-          />
-        </Group>
+        <TextInput
+          label={t("journal.description")}
+          maxLength={500}
+          value={draft.description}
+          onChange={(e) => set({ description: e.currentTarget.value })}
+        />
         <Text size="sm" c="dimmed">
           {t("transfer.reconcileHint")}
         </Text>
@@ -446,7 +428,6 @@ export function TransferForm({
     : {
         ...emptyDraft(),
         subCategoryId: defaults.data?.subCategoryId ?? null,
-        paymentTypeId: defaults.data?.paymentTypeId ?? null,
       };
   return (
     <TransferFields

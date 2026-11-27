@@ -7,12 +7,12 @@ import { useCreateItem, useNameOf, useReference, type Reference } from "../refer
 
 /**
  * Creating a reference item without leaving what one is doing: an account, a
- * sub-category (with its category and group if needed) or a payment type. The
+ * sub-category (with its category and group if needed). The
  * item gets its name in the book's default language; the reference data screen
  * holds the rest.
  */
 
-export type Creatable = "account" | "subCategory" | "paymentType";
+export type Creatable = "account" | "subCategory";
 
 /** Choosing "new" in a list of categories or groups. */
 const NEW = "new";
@@ -56,9 +56,7 @@ interface Props {
 export function QuickCreate({ kind, ...props }: Props & { kind: Creatable }) {
   const reference = useReference(props.bookId);
   if (!reference.data) return null;
-  const Form = { account: AccountForm, subCategory: SubCategoryForm, paymentType: PaymentForm }[
-    kind
-  ];
+  const Form = { account: AccountForm, subCategory: SubCategoryForm }[kind];
   return <Form {...props} reference={reference.data} />;
 }
 
@@ -153,38 +151,6 @@ function AccountForm({ bookId, initialName, onClose, onCreated, reference }: For
         data={currencyOptions(i18n.language)}
         value={currency}
         onChange={(value) => value && setCurrency(value)}
-      />
-    </Dialog>
-  );
-}
-
-function PaymentForm({ bookId, initialName, onClose, onCreated, reference }: FormProps) {
-  const { t } = useTranslation();
-  const create = useCreateItem(bookId);
-  const [name, setName] = useState(initialName ?? "");
-  return (
-    <Dialog
-      title={t("reference.newPaymentType")}
-      error={create.error}
-      pending={create.isPending}
-      ready={name.trim() !== ""}
-      onClose={onClose}
-      onSubmit={async () => {
-        const { id } = await create.mutateAsync({
-          kind: "payment-types",
-          body: { names: { [reference.defaultLanguage]: name.trim() } },
-        });
-        onCreated(id);
-        onClose();
-      }}
-    >
-      <TextInput
-        label={t("reference.itemName")}
-        required
-        maxLength={100}
-        value={name}
-        onChange={(e) => setName(e.currentTarget.value)}
-        data-autofocus
       />
     </Dialog>
   );

@@ -15,7 +15,6 @@ interface Entry {
   accountId: string;
   subCategoryId: string;
   description: string;
-  paymentTypeId: string | null;
   currency: string;
   amount: string;
   plannedAmount: string;
@@ -33,7 +32,7 @@ async function json<T>(response: Response | Promise<Response>, status = 200): Pr
   return (await res.json()) as T;
 }
 
-/** A EUR book with a EUR and a MYR account, food and salary categories, a payment type. */
+/** A EUR book with a EUR and a MYR account, food and salary categories. */
 async function bookWithReference(owner?: User) {
   owner ??= await h.signedInUser();
   const { id: bookId } = await json<{ id: string }>(
@@ -70,7 +69,6 @@ async function bookWithReference(owner?: User) {
     kind: "bank",
     currency: "MYR",
   });
-  const card = await post("/payment-types", { names: { fr: "Carte" } });
 
   const journal = (path = "") => `/books/${bookId}/journal${path}`;
   const add = (body: Record<string, unknown>, by: User = owner) =>
@@ -97,14 +95,13 @@ async function bookWithReference(owner?: User) {
     pay,
     current,
     ringgit,
-    card,
   };
 }
 
 describe("journal entries", () => {
   it("creates an entry with its book amount, and no planned amount", async () => {
     const b = await bookWithReference();
-    const entry = await b.add({ description: "Boulangerie", paymentTypeId: b.card.id });
+    const entry = await b.add({ description: "Boulangerie" });
     expect(entry).toMatchObject({
       date: "2026-11-02",
       currency: "EUR",
@@ -114,7 +111,6 @@ describe("journal entries", () => {
       exchangeRate: "1",
       bookAmount: "-12.50",
       reconciled: false,
-      paymentTypeId: b.card.id,
     });
   });
 

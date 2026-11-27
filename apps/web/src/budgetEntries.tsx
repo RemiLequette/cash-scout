@@ -53,7 +53,6 @@ export interface PlanRow {
   subCategoryId: string;
   description: string;
   accountId: string;
-  paymentTypeId: string | null;
   /** The planned amount as typed, signed, in the account's currency. */
   amount: string;
   /** Used for an account in another currency than the book's. */
@@ -82,7 +81,6 @@ export function rowsOf(entries: readonly Entry[]): PlanRow[] {
       subCategoryId: e.subCategoryId,
       description: e.description,
       accountId: e.accountId,
-      paymentTypeId: e.paymentTypeId,
       amount: plain(e.plannedAmount),
       exchangeRate: e.exchangeRate,
       reconciled: e.reconciled,
@@ -172,7 +170,6 @@ export function entryChanges(
       accountId: row.accountId,
       subCategoryId: row.subCategoryId,
       description: row.description,
-      paymentTypeId: row.paymentTypeId,
     };
     if (!row.id) {
       const monthShifted = row.keptMonth !== null && shiftToKeep(row.date, row.keptMonth);
@@ -544,7 +541,6 @@ export function PlanEntries({
           subCategoryId: e.subCategoryId,
           description: e.description,
           accountId: e.accountId,
-          paymentTypeId: e.paymentTypeId,
           // What was paid, or is expected, becomes the plan.
           amount: plain(e.amount),
           exchangeRate: e.exchangeRate,
@@ -594,7 +590,6 @@ export function PlanEntries({
                         last?.subCategoryId ?? subCategories.find((s) => !s.archived)?.value ?? "",
                       description: "",
                       accountId: last?.accountId ?? "",
-                      paymentTypeId: last?.paymentTypeId ?? null,
                       amount: "",
                       exchangeRate: last?.exchangeRate ?? "",
                       reconciled: false,
@@ -829,7 +824,6 @@ function ScheduleForm({
   onCreate: (rows: PlanRow[]) => void;
 }) {
   const { t } = useTranslation();
-  const nameOf = useNameOf(reference.defaultLanguage);
   const [draft, setDraft] = useState({
     first: `${year}-01-01`,
     last: `${year}-12-31`,
@@ -837,7 +831,6 @@ function ScheduleForm({
     subCategoryId: subCategories.length === 1 ? subCategories[0]!.value : "",
     description: "",
     accountId: "",
-    paymentTypeId: "",
     amount: "",
     exchangeRate: "",
   });
@@ -854,7 +847,6 @@ function ScheduleForm({
       subCategoryId: draft.subCategoryId,
       description: draft.description,
       accountId: draft.accountId,
-      paymentTypeId: draft.paymentTypeId || null,
       amount: decimalInput(draft.amount),
       exchangeRate: draft.exchangeRate,
       reconciled: false,
@@ -908,23 +900,12 @@ function ScheduleForm({
           value={draft.description}
           onChange={(e) => set({ description: e.currentTarget.value })}
         />
-        <Group grow>
-          <Select
-            label={t("journal.account")}
-            data={accountOptions}
-            value={draft.accountId || null}
-            onChange={(value) => set({ accountId: value ?? "" })}
-          />
-          <Select
-            label={t("journal.paymentType")}
-            clearable
-            data={reference.paymentTypes
-              .filter((p) => !p.archived)
-              .map((p) => ({ value: p.id, label: nameOf(p.names) }))}
-            value={draft.paymentTypeId || null}
-            onChange={(value) => set({ paymentTypeId: value ?? "" })}
-          />
-        </Group>
+        <Select
+          label={t("journal.account")}
+          data={accountOptions}
+          value={draft.accountId || null}
+          onChange={(value) => set({ accountId: value ?? "" })}
+        />
         <Group grow>
           <TextInput
             label={t("budget.plannedAmount")}

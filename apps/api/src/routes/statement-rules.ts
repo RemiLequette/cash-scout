@@ -7,7 +7,7 @@ import { withUser, type Db, type Tx } from "../db/client.js";
 import { importLine, importRule } from "../db/schema.js";
 import type { AppEnv } from "../http.js";
 import { idOf, requireRole } from "./access.js";
-import { paymentTypeOf, subCategoryOf, usable } from "./journal.js";
+import { subCategoryOf, usable } from "./journal.js";
 
 const columns = {
   id: importRule.id,
@@ -19,7 +19,6 @@ const columns = {
   minAmount: importRule.minAmount,
   maxAmount: importRule.maxAmount,
   subCategoryId: importRule.subCategoryId,
-  paymentTypeId: importRule.paymentTypeId,
   description: importRule.description,
   ignore: importRule.ignore,
 };
@@ -28,9 +27,6 @@ const columns = {
 async function values(tx: Tx, bookId: string, rule: RuleFields) {
   if (rule.subCategoryId) {
     await usable(subCategoryOf(tx, bookId, rule.subCategoryId), "sub-category");
-  }
-  if (rule.paymentTypeId) {
-    await usable(paymentTypeOf(tx, bookId, rule.paymentTypeId), "payment type");
   }
   return rule;
 }
@@ -132,7 +128,7 @@ export function statementRuleRoutes(db: Db) {
           // The proposals it made to lines not yet accepted go with it.
           await tx
             .update(importLine)
-            .set({ ruleId: null, subCategoryId: null, paymentTypeId: null, description: null })
+            .set({ ruleId: null, subCategoryId: null, description: null })
             .where(
               and(
                 eq(importLine.bookId, bookId),

@@ -57,7 +57,6 @@ async function filledBook() {
     names: { fr: "Virement" },
   });
   await create("/reference/balances", { names: { fr: "Courant" }, natureIds: [expense] });
-  const paymentType = await create("/reference/payment-types", { names: { fr: "Carte" } });
   const account = (name: string) =>
     create("/reference/accounts", { names: { fr: name }, kind: "bank", currency: "EUR" });
   const current = await account("Courant");
@@ -67,7 +66,6 @@ async function filledBook() {
     date: "2026-11-03",
     accountId: current,
     subCategoryId: sub,
-    paymentTypeId: paymentType,
     description: "Boulangerie",
     amount: "-12.50",
   });
@@ -179,6 +177,51 @@ describe("book export and import", () => {
     };
     expect(await balances(`/books/${id}/journal/balances`)).toEqual(
       await balances(at("/journal/balances")),
+    );
+  });
+
+  it("reads a file that still holds payment types, and leaves them out", async () => {
+    const { owner, bookId } = await filledBook();
+    const archive = await exportOf(owner, bookId);
+    const paid = crypto.randomUUID();
+    const onlyPaid = crypto.randomUUID();
+    const [rule] = archive.tables.import_rule!;
+    const lines = archive.tables.import_line!;
+    // As a file of before: its own table, a value on the rows, and a rule that only gave one.
+    const old = {
+      ...archive,
+      tables: {
+        ...archive.tables,
+        payment_type: [{ id: paid, names: { fr: "Carte" }, archivedAt: null }],
+        journal_entry: archive.tables.journal_entry!.map((e) => ({ ...e, paymentTypeId: paid })),
+        import_rule: [
+          { ...rule, paymentTypeId: paid },
+          {
+            ...rule,
+            id: onlyPaid,
+            position: 2,
+            subCategoryId: null,
+            description: null,
+            paymentTypeId: paid,
+          },
+        ],
+        import_line: lines.map((l, index) => ({
+          ...l,
+          paymentTypeId: index === 0 ? paid : null,
+          ruleId: index === 0 ? onlyPaid : l.ruleId,
+        })),
+      },
+    };
+
+    const { id } = await json<{ id: string }>(importFile(owner, old, "?name=Ancien"), 201);
+    const copy = await exportOf(owner, id);
+    expect(Object.keys(copy.tables)).not.toContain("payment_type");
+    expect(copy.tables.journal_entry).toHaveLength(archive.tables.journal_entry!.length);
+    expect(copy.tables.import_rule!.map((r) => r.name)).toEqual([rule!.name]);
+    expect(copy.tables.import_line).toHaveLength(lines.length);
+    // The line of the rule that went follows no rule.
+    expect(copy.tables.import_line!.filter((l) => l.ruleId).length).toBe(
+      lines.slice(1).filter((l) => l.ruleId).length,
     );
   });
 

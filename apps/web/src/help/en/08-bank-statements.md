@@ -29,7 +29,7 @@ There is no detection: **you create the transfer from one side**. On the line, *
 
 ## Rules
 
-The **Rules** section of the import screen lists the rules of the book, in the order they are tried: the first that fits a line wins. A rule has **conditions** (the label contains a text, the bank's category, money in or out, a minimum or maximum amount) and **actions** (a sub-category, a payment type, a new description, or ignore the line). Rules are kept with the book: edit, reorder or delete them there at any time. Deleting a rule takes back what it proposed to lines not yet accepted.
+The **Rules** section of the import screen lists the rules of the book, in the order they are tried: the first that fits a line wins. A rule has **conditions** (the label contains a text, the bank's category, money in or out, a minimum or maximum amount) and **actions** (a sub-category, a new description, or ignore the line). Rules are kept with the book: edit, reorder or delete them there at any time. Deleting a rule takes back what it proposed to lines not yet accepted.
 
 Rules are tried on a statement when it is kept, and again with **Try the rules**, which follows the rules as they are now for the proposals you have not changed by hand. They only propose: the line keeps its sub-category in the list, tagged with the rule's name, and stays to review until you accept it. A line that could be reconciled with an entry of the journal is not accepted in bulk.
 
@@ -41,7 +41,6 @@ The **+** beside a list creates the item without leaving the screen, and selects
 
 - an **account**, on the import screen and in a rule (a bank account, in the book's currency unless you choose another);
 - a **sub-category**, on a line, for the selected lines and in a rule. Pick its category, or create it with a code, a nature and a group, which can be new too. From a line, the name starts from the bank's category;
-- a **payment type**, on a line and in a rule.
 
 The item is named in the book's default language. Other names, colours and order are set in the reference data.
 

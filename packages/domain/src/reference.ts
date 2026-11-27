@@ -185,11 +185,6 @@ export const subCategoryUpdateSchema = subCategoryInputSchema
   .partial()
   .extend({ archived: archived.optional(), version: versionSchema.optional() });
 
-export const paymentTypeInputSchema = z.object({ names: namesSchema });
-export const paymentTypeUpdateSchema = paymentTypeInputSchema
-  .partial()
-  .extend({ archived: archived.optional(), version: versionSchema.optional() });
-
 /** Decimal amount as text ("-500.00"), checked against the account currency by the API. */
 const decimalSchema = z.string().regex(/^[+-]?\d+(\.\d+)?$/);
 

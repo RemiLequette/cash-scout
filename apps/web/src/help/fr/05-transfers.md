@@ -12,7 +12,7 @@ Utilisez **Nouveau transfert** dans le journal.
 
 ## Le modifier
 
-Le montant, les comptes, la sous-catégorie, la description et le type de paiement se modifient sur le transfert, jamais sur un seul côté : ouvrir un côté depuis le journal ouvre tout le transfert. Seul le **rapprochement** est propre à chaque côté, car chacun se pointe avec sa propre ligne de relevé.
+Le montant, les comptes, la sous-catégorie et la description se modifient sur le transfert, jamais sur un seul côté : ouvrir un côté depuis le journal ouvre tout le transfert. Seul le **rapprochement** est propre à chaque côté, car chacun se pointe avec sa propre ligne de relevé.
 
 Les transferts sont hors des totaux, car ils ne changent pas le solde du livre dans son ensemble.
 

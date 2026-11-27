@@ -15,7 +15,6 @@ import {
   importRule,
   journalEntry,
   nature,
-  paymentType,
   subCategory,
   transfer,
 } from "../db/schema.js";
@@ -36,7 +35,6 @@ export const ARCHIVED: readonly ArchivedTable[] = [
   { table: balanceNature, references: { balanceId: balance, natureId: nature } },
   { table: category, references: { groupId: categoryGroup, natureId: nature } },
   { table: subCategory, references: { categoryId: category } },
-  { table: paymentType, references: {} },
   { table: bookAccount, references: {} },
   { table: transfer, references: {} },
   { table: importBatch, references: { accountId: bookAccount } },
@@ -45,18 +43,16 @@ export const ARCHIVED: readonly ArchivedTable[] = [
     references: {
       accountId: bookAccount,
       subCategoryId: subCategory,
-      paymentTypeId: paymentType,
       transferId: transfer,
       importBatchId: importBatch,
     },
   },
-  { table: importRule, references: { subCategoryId: subCategory, paymentTypeId: paymentType } },
+  { table: importRule, references: { subCategoryId: subCategory } },
   {
     table: importLine,
     references: {
       batchId: importBatch,
       subCategoryId: subCategory,
-      paymentTypeId: paymentType,
       ruleId: importRule,
       transferAccountId: bookAccount,
       entryId: journalEntry,
