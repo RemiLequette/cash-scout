@@ -29,9 +29,20 @@ Une écriture compte dans le mois de sa date. Quand elle tombe juste avant ou ju
 ## Saisir vite
 
 - **Nouvelle écriture** ouvre le formulaire. **Partir d'une saisie fréquente** propose les écritures que vous avez saisies vous-même le plus souvent sur les 12 derniers mois (les planifiées sont écartées), datées d'aujourd'hui. Une nouvelle écriture est cochée **Rapproché** : décochez pour saisir une prévision.
-- La flèche de **Nouvelle écriture** démarre aussi un **transfert** ou une **compensation**.
+- La flèche de **Nouvelle écriture** démarre aussi une **ventilation**, un **transfert** ou une **compensation**.
 - **Dupliquer** copie une écriture existante.
 - **Marquer rapprochées** et **Marquer en prévision** changent le statut d'une écriture depuis la liste.
+
+## Ventilations
+
+Une **ventilation** compte un seul mouvement bancaire dans plusieurs sous-catégories. Exemple : un gestionnaire verse 850 de loyer net, que vous enregistrez en 1000 de loyer brut et −150 de frais de gestion. **Nouvelle écriture ▾ › Nouvelle ventilation**, le compte, le **montant bancaire** (850) et une ligne par part.
+
+- Une des parts est le **solde** : son montant est celui de la banque moins les autres parts, il se calcule seul. Choisissez-la avec le bouton rond.
+- Chaque part est une écriture ordinaire, marquée **⑂** avec le montant bancaire. La date, le compte et l'état rapproché sont ceux de toute la ventilation. Ouvrez une des parts pour modifier, ajouter ou retirer des parts, dupliquer ou supprimer toute la ventilation.
+- **Ventiler** (dans le formulaire d'une écriture ordinaire) fait d'une écriture existante, importée par exemple, le solde d'une ventilation : son montant bancaire ne change pas, et la ligne du relevé lui reste liée.
+- Une ventilation ne change ni les totaux ni les soldes : chaque part compte dans sa catégorie, et le compte bouge du montant bancaire.
+- Les sous-catégories d'une catégorie de transfert ne sont pas proposées. Pour un emprunt, ventilez le capital et les intérêts en deux sous-catégories.
+- Planifiez-les avec l'[Échéancier](06-budget.md) du budget. À l'import d'un relevé, une ligne est rapprochée de la ventilation prévue et le solde prend l'écart (voir [Relevés](08-bank-statements.md)).
 
 ## Compensations
 

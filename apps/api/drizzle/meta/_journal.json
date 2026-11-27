@@ -260,6 +260,20 @@
       "when": 1795779290518,
       "tag": "0036_drop_account_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1795786072407,
+      "tag": "0037_splits",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795786103933,
+      "tag": "0038_splits_isolation",
+      "breakpoints": true
     }
   ]
 }

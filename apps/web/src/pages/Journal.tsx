@@ -68,6 +68,7 @@ import { currencyOptions } from "../options";
 import { useNameOf, useReference, useSubCategoryOptions, type Reference } from "../reference";
 import { AccountChart } from "./AccountChart";
 import { CompensationForm, type CompensationDraft } from "./CompensationForm";
+import { SplitForm, splitFromEntry, type SplitDraft } from "./SplitForm";
 import { TransferForm } from "./TransferForm";
 
 function ErrorAlert({ error }: { error: Error | null }) {
@@ -108,7 +109,7 @@ export interface Draft {
   currency?: string;
 }
 
-export function draftOf(entry: Entry, mode: "edit" | "duplicate"): Draft {
+export function draftOf(entry: Omit<Entry, "split">, mode: "edit" | "duplicate"): Draft {
   return {
     id: mode === "edit" ? entry.id : undefined,
     version: mode === "edit" ? entry.version : undefined,
@@ -211,6 +212,7 @@ export function EntryForm({
   initial,
   onClose,
   onDuplicate,
+  onSplit,
 }: {
   bookId: string;
   bookCurrency: string;
@@ -219,6 +221,8 @@ export function EntryForm({
   onClose: () => void;
   /** Starts a new entry from the saved one. */
   onDuplicate?: (draft: Draft) => void;
+  /** Splits the saved entry into parts. */
+  onSplit?: (draft: SplitDraft) => void;
 }) {
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
@@ -404,6 +408,11 @@ export function EntryForm({
                     }
                   >
                     {t("journal.duplicate")}
+                  </Button>
+                )}
+                {onSplit && (
+                  <Button variant="subtle" onClick={() => onSplit(splitFromEntry(initial))}>
+                    {t("split.action")}
                   </Button>
                 )}
                 <Button
@@ -878,6 +887,18 @@ function CompensationBadge() {
   );
 }
 
+/** Marks a part of a split, telling the whole movement on hover. */
+function SplitBadge({ entry }: { entry: Entry }) {
+  const { t } = useTranslation();
+  const formatAmount = useMoney();
+  const total = formatAmount(entry.split!.total, entry.currency);
+  return (
+    <Badge variant="light" color="teal" size="xs" mr={6} title={t("split.movement", { total })}>
+      ⑂ {total}
+    </Badge>
+  );
+}
+
 function CategoryLabel({ row }: { row: Row }) {
   return (
     <Text size="sm" span style={{ whiteSpace: "nowrap" }}>
@@ -1177,6 +1198,7 @@ const TableEntry = memo(function TableEntry({
       <Table.Td>
         {entry.transferId && <TransferBadge leg={entry.transferLeg} />}
         {entry.compensationId && <CompensationBadge />}
+        {entry.split && <SplitBadge entry={entry} />}
         {entry.description}
       </Table.Td>
       <Table.Td>
@@ -1222,6 +1244,7 @@ const CardEntry = memo(function CardEntry({
           <Text size="sm" fw={500} truncate>
             {entry.transferId && <TransferBadge leg={entry.transferLeg} />}
             {entry.compensationId && <CompensationBadge />}
+            {entry.split && <SplitBadge entry={entry} />}
             {entry.description || row.sub}
           </Text>
           <Text size="xs" c="dimmed" truncate>
@@ -1380,6 +1403,7 @@ function NewEntryButton({
   onOpen,
   onTransfer,
   onCompensate,
+  onSplit,
 }: {
   bookId: string;
   /** No entry can be made yet: the button itself waits. */
@@ -1390,6 +1414,7 @@ function NewEntryButton({
   onOpen: (draft: Draft) => void;
   onTransfer: () => void;
   onCompensate: () => void;
+  onSplit: () => void;
 }) {
   const { t } = useTranslation();
   const formatAmount = useMoney();
@@ -1434,6 +1459,9 @@ function NewEntryButton({
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
+          <Menu.Item disabled={!canTransfer} onClick={onSplit} leftSection="⑂">
+            {t("split.new")}
+          </Menu.Item>
           <Menu.Item disabled={!canTransfer} onClick={onTransfer} leftSection="⇄">
             {t("transfer.new")}
           </Menu.Item>
@@ -1522,6 +1550,14 @@ export function Journal({
     setFormKey((key) => key + 1);
   }, []);
 
+  /** The split being created (no id) or edited, in its own form. */
+  const [splitting, setSplitting] = useState<{ id?: string; from?: SplitDraft } | null>(null);
+  const openSplit = useCallback((id?: string, from?: SplitDraft) => {
+    setDraft(null);
+    setSplitting({ id, from });
+    setFormKey((key) => key + 1);
+  }, []);
+
   // Newest first, so that the latest entries are the ones loaded; shown oldest first.
   const list = useJournal(bookId, {
     months: months ? [...months].join(",") : undefined,
@@ -1576,14 +1612,15 @@ export function Journal({
     (id: string, reconciled: boolean) => mutate({ action: "reconcile", ids: [id], reconciled }),
     [mutate],
   );
-  // A side of a transfer or a compensation opens the whole: both sides change together.
+  // A side of a transfer or a compensation, or a part of a split, opens the whole.
   const onOpen = useCallback(
     (entry: Entry) => {
       if (entry.transferId) openTransfer(entry.transferId);
       else if (entry.compensationId) openCompensation(entry.compensationId);
+      else if (entry.splitId) openSplit(entry.splitId);
       else open(draftOf(entry, "edit"));
     },
-    [open, openTransfer, openCompensation],
+    [open, openTransfer, openCompensation, openSplit],
   );
 
   // The filters stay above the table; its header sticks just under them.
@@ -1734,6 +1771,7 @@ export function Journal({
                 onOpen={open}
                 onTransfer={() => openTransfer()}
                 onCompensate={() => openCompensation()}
+                onSplit={() => openSplit()}
               />
             )}
           </Group>
@@ -1771,6 +1809,7 @@ export function Journal({
               onOpen={open}
               onTransfer={() => openTransfer()}
               onCompensate={() => openCompensation()}
+              onSplit={() => openSplit()}
             />
           )}
         </Group>
@@ -1970,6 +2009,27 @@ export function Journal({
             initial={draft}
             onClose={() => setDraft(null)}
             onDuplicate={open}
+            onSplit={(from) => openSplit(undefined, from)}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        size="xl"
+        opened={splitting !== null}
+        onClose={() => setSplitting(null)}
+        title={splitting?.id ? t("split.edit") : t("split.new")}
+      >
+        {splitting && (
+          <SplitForm
+            key={formKey}
+            bookId={bookId}
+            bookCurrency={bookCurrency}
+            reference={ref}
+            splitId={splitting.id}
+            from={splitting.from}
+            onClose={() => setSplitting(null)}
+            onDuplicate={(from) => openSplit(undefined, from)}
           />
         )}
       </Modal>

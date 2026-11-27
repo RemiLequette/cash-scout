@@ -98,7 +98,11 @@ Two ways of working, both supported:
 
 **Opening balance**: each account has an opening balance, set in its reference data, so that account balances match the bank. It holds whatever no entry explains (what came before the first entry, and any gap), is not dated, and sits in no category: no total, budget or dashboard line counts it. It is set from the balance read in the bank, so that the reconciled entries add up to it. There is no "adjustment" entry.
 
-**Import**: CSV, OFX and QIF bank exports, with a saved column mapping per account and rules that set the sub-category from the bank label. An imported line that matches an unreconciled entry (same account, close date and amount) reconciles it instead of creating a new one. Importing the existing sheets' journals is the first migration path.
+**Import**: CSV, OFX and QIF bank exports, with a saved column mapping per account and rules that set the sub-category from the bank label. An imported line that matches an unreconciled entry (same account, close date and amount) reconciles it instead of creating a new one; a planned split is matched as one entry, on its bank amount. Importing the existing sheets' journals is the first migration path.
+
+### Splits
+
+A **split** counts one bank movement in several sub-categories, for instance a net rent recorded as gross rent and charges, or a loan payment as capital and interest. It is a set of journal entries, its **parts**, that share the account, date and reconciled state; the **bank amount** is their sum. One part is the **remainder**: it takes what the others leave of the bank amount, so a planned split follows the statement line it is matched with. See [Split entries](docs/splits.md).
 
 ### Transfers
 

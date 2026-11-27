@@ -323,6 +323,86 @@ describe("statement review and import", () => {
   });
 });
 
+describe("a line matched to a split", () => {
+  /** A split of -10.00 and a remainder of -8.00 (the bank amount is -18.00), planned on 11-02. */
+  async function withSplit() {
+    const b = await setup();
+    const refPath = `/books/${b.bookId}/reference`;
+    const other = (
+      (await (
+        await b.owner.request("POST", `${refPath}/sub-categories`, {
+          categoryId: (
+            (await (await b.owner.request("GET", refPath)).json()) as {
+              categories: { id: string }[];
+            }
+          ).categories[0]!.id,
+          names: { fr: "Autre" },
+        })
+      ).json()) as { id: string }
+    ).id;
+    const res = await b.owner.request("POST", `/books/${b.bookId}/splits`, {
+      date: "2026-11-02",
+      accountId: b.accountId,
+      planned: true,
+      parts: [
+        { subCategoryId: b.subCategoryId, amount: "-10.00" },
+        { subCategoryId: other, amount: "-8.00", remainder: true },
+      ],
+    });
+    expect(res.status).toBe(201);
+    const split = (await res.json()) as {
+      parts: { id: string; amount: string; splitRemainder: boolean }[];
+    };
+    const remainder = split.parts.find((p) => p.splitRemainder)!.id;
+    const fixed = split.parts.find((p) => !p.splitRemainder)!.id;
+    return { ...b, remainder, fixed };
+  }
+
+  it("proposes the split once, for its bank amount, and the remainder takes the difference", async () => {
+    const b = await withSplit();
+    const id = await b.keep();
+    const batch = await b.read(id);
+    const line = batch.lines.find((l) => l.amount === "-19.15")!;
+    expect(line.candidates.map((c) => c.id)).toEqual([b.remainder]);
+    expect(line.candidates[0]).toMatchObject({ amount: "-18.00" });
+
+    expect((await b.change(id, [{ id: line.id, entryId: b.remainder }])).status).toBe(204);
+    // A part that is not the remainder is not matched on its own.
+    expect((await b.change(id, [{ id: line.id, entryId: b.fixed }])).status).toBe(400);
+    expect((await b.run(id)).status).toBe(200);
+
+    const after = await b.entries();
+    expect(after.map((e) => [e.id, e.amount, e.date, e.reconciled]).sort()).toEqual(
+      [
+        [b.fixed, "-10.00", "2026-10-30", true],
+        [b.remainder, "-9.15", "2026-10-30", true],
+      ].sort(),
+    );
+  });
+
+  it("gives the split its dates, flags and amounts back on undo, unless it was changed", async () => {
+    const b = await withSplit();
+    const id = await b.keep();
+    const line = (await b.read(id)).lines.find((l) => l.amount === "-19.15")!;
+    await b.change(id, [{ id: line.id, entryId: b.remainder }]);
+    await b.run(id);
+
+    expect(await (await b.undo(id)).json()).toEqual({ removed: 0, restored: 1, skipped: 0 });
+    const back = await b.entries();
+    expect(back.map((e) => [e.id, e.amount, e.date, e.reconciled]).sort()).toEqual(
+      [
+        [b.fixed, "-10.00", "2026-11-02", false],
+        [b.remainder, "-8.00", "2026-11-02", false],
+      ].sort(),
+    );
+
+    // Imported again, then the fixed part changes: the undo leaves the split alone.
+    await b.run(id);
+    await b.owner.request("PATCH", `/books/${b.bookId}/journal/${b.fixed}`, { amount: "-11.00" });
+    expect(await (await b.undo(id)).json()).toEqual({ removed: 0, restored: 0, skipped: 1 });
+  });
+});
+
 describe("a line imported as a transfer", () => {
   async function withTransfers() {
     const b = await setup();

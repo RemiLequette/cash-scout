@@ -8,6 +8,9 @@ import {
   rateSchema,
   scheduleDates,
   shiftToKeep,
+  splitRemainder,
+  toDecimalString,
+  yearAhead,
   type PlanInput,
 } from "@cash-scout/domain";
 import {
@@ -38,7 +41,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { decimalInput, formatDate, formatDay, type Entry } from "./journal";
-import { useNameOf, type Reference } from "./reference";
+import { useNameOf, useSubCategoryOptions, type Reference } from "./reference";
 import { DataTable } from "./table";
 
 /** A planned entry as the category's list edits it. */
@@ -59,6 +62,20 @@ export interface PlanRow {
   exchangeRate: string;
   reconciled: boolean;
   removed: boolean;
+  /** The split the row is a part of: of a saved one its id, of a new one a key. */
+  group?: string;
+  /** The part that takes what the others leave of the bank amount. */
+  remainder?: boolean;
+  /** The parts of the same split in other categories. */
+  others?: OtherPart[];
+}
+
+/** A part of a split that belongs to another category than the one planned. */
+export interface OtherPart {
+  subCategoryId: string;
+  description: string;
+  amount: string;
+  remainder: boolean;
 }
 
 type Account = Reference["accounts"][number];
@@ -86,8 +103,90 @@ export function rowsOf(entries: readonly Entry[]): PlanRow[] {
       exchangeRate: e.exchangeRate,
       reconciled: e.reconciled,
       removed: false,
+      ...(e.split && {
+        group: e.splitId!,
+        remainder: e.splitRemainder,
+        // Parts of this category are rows of their own.
+        others: e.split.parts
+          .filter((p) => !entries.some((own) => own.id === p.id))
+          .map((p) => ({
+            subCategoryId: p.subCategoryId,
+            description: p.description,
+            amount: plain(p.amount),
+            remainder: p.remainder,
+          })),
+      }),
     }))
     .sort(byDate);
+}
+
+/** The rows of new splits, by split, with every part: its own rows and the others. */
+function newSplits(rows: readonly PlanRow[]) {
+  const groups = new Map<string, PlanRow[]>();
+  for (const row of rows) {
+    if (row.id || row.removed || !row.group) continue;
+    groups.set(row.group, [...(groups.get(row.group) ?? []), row]);
+  }
+  return [...groups.values()];
+}
+
+/** Copies rows as new ones; the parts of a split stay together, in a new split. */
+function copiesOf(rows: readonly PlanRow[]): PlanRow[] {
+  const groups = new Map<string, string>();
+  return rows.map((row) => {
+    if (row.group && !groups.has(row.group)) groups.set(row.group, newKey());
+    return {
+      ...row,
+      key: newKey(),
+      id: undefined,
+      version: undefined,
+      reconciled: false,
+      group: row.group && groups.get(row.group),
+    };
+  });
+}
+
+/** What belongs to the whole split: changing it on one part changes the others. */
+const shared = ({ date, accountId, exchangeRate, keptMonth }: Partial<PlanRow>) =>
+  Object.fromEntries(
+    Object.entries({ date, accountId, exchangeRate, keptMonth }).filter(
+      ([, value]) => value !== undefined,
+    ),
+  ) as Partial<PlanRow>;
+
+/** A change of some rows, with what their splits share given to their other parts. */
+function patched(
+  rows: readonly PlanRow[],
+  keys: ReadonlySet<string>,
+  patch: (row: PlanRow) => Partial<PlanRow>,
+): PlanRow[] {
+  const groups = new Map<string, Partial<PlanRow>>();
+  const next = rows.map((row) => {
+    if (!keys.has(row.key)) return row;
+    const change = patch(row);
+    if (row.group) groups.set(row.group, shared(change));
+    return { ...row, ...change };
+  });
+  return next.map((row) =>
+    row.group && groups.has(row.group) ? { ...row, ...groups.get(row.group) } : row,
+  );
+}
+
+/** The bank amount of a row's split, from the rows and the parts elsewhere. */
+function movementOf(rows: readonly PlanRow[], row: PlanRow, currency: string) {
+  const parts = [
+    ...rows.filter((r) => r.group === row.group && !r.removed),
+    ...(rows.find((r) => r.group === row.group && r.others)?.others ?? []),
+  ];
+  try {
+    const minor = parts.reduce(
+      (sum, part) => sum + parseAmount(decimalInput(part.amount), currency).minor,
+      0n,
+    );
+    return { total: toDecimalString(money(minor, currency)), parts };
+  } catch {
+    return { total: undefined, parts };
+  }
 }
 
 const byDate = (a: PlanRow, b: PlanRow) =>
@@ -156,11 +255,27 @@ export function entryChanges(
   rows: readonly PlanRow[],
   initial: readonly PlanRow[],
   { accounts, bookCurrency }: Context,
-): Required<Pick<PlanInput, "create" | "update" | "remove">> {
+): Required<Pick<PlanInput, "create" | "splits" | "update" | "remove">> {
   const before = new Map(initial.map((row) => [row.key, row]));
   const create: NonNullable<PlanInput["create"]> = [];
   const update: NonNullable<PlanInput["update"]> = [];
   const remove: NonNullable<PlanInput["remove"]> = [];
+  const splits = newSplits(rows).map((own) => {
+    const first = own[0]!;
+    const foreign = accounts.get(first.accountId)?.currency !== bookCurrency;
+    return {
+      date: first.date,
+      accountId: first.accountId,
+      ...(foreign && { exchangeRate: decimalInput(first.exchangeRate) }),
+      monthShifted: first.keptMonth !== null && shiftToKeep(first.date, first.keptMonth),
+      parts: [...own, ...(own.find((r) => r.others)?.others ?? [])].map((part) => ({
+        subCategoryId: part.subCategoryId,
+        description: part.description,
+        amount: decimalInput(part.amount),
+        remainder: part.remainder ?? false,
+      })),
+    };
+  });
   for (const row of rows) {
     const rate =
       accounts.get(row.accountId)?.currency !== bookCurrency
@@ -173,6 +288,7 @@ export function entryChanges(
       description: row.description,
     };
     if (!row.id) {
+      if (row.group) continue;
       const monthShifted = row.keptMonth !== null && shiftToKeep(row.date, row.keptMonth);
       if (!row.removed) {
         create.push({ ...fields, ...rate, monthShifted, amount: decimalInput(row.amount) });
@@ -197,7 +313,7 @@ export function entryChanges(
       }),
     });
   }
-  return { create, update, remove };
+  return { create, splits, update, remove };
 }
 
 export const field: CSSProperties = {
@@ -294,10 +410,13 @@ const Row = memo(function Row({
   context,
   subCategories,
   accountOptions,
+  movement,
   onTick,
   onPatch,
 }: {
   row: PlanRow;
+  /** What the split of a part says when hovered. */
+  movement: string | undefined;
   ticked: boolean;
   canEdit: boolean;
   context: Context;
@@ -353,16 +472,23 @@ const Row = memo(function Row({
         </select>
       </Table.Td>
       <Table.Td>
-        <input
-          data-column="description"
-          aria-label={t("journal.description")}
-          style={field}
-          maxLength={500}
-          value={row.description}
-          disabled={locked}
-          onKeyDown={moveRows}
-          onChange={(e) => onPatch(row.key, { description: e.currentTarget.value })}
-        />
+        <Group gap={4} wrap="nowrap">
+          {movement !== undefined && (
+            <Text span size="xs" c="teal" title={movement} style={{ cursor: "help" }}>
+              ⑂
+            </Text>
+          )}
+          <input
+            data-column="description"
+            aria-label={t("journal.description")}
+            style={field}
+            maxLength={500}
+            value={row.description}
+            disabled={locked}
+            onKeyDown={moveRows}
+            onChange={(e) => onPatch(row.key, { description: e.currentTarget.value })}
+          />
+        </Group>
       </Table.Td>
       <Table.Td>
         <select
@@ -470,7 +596,7 @@ export function PlanEntries({
   /** Entries of the year that are not planned: a copy does not repeat them. */
   unplanned: Entry[];
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
   const [filter, setFilter] = useState("");
   const [history, setHistory] = useState<PlanRow[][]>([]);
@@ -502,6 +628,21 @@ export function PlanEntries({
           .includes(search)),
   );
   const tickable = shown.filter((row) => !row.reconciled);
+  const amountText = (amount: string, currency: string) =>
+    new Intl.NumberFormat(i18n.language, { style: "currency", currency }).format(Number(amount));
+  /** The movement of a part's split, with all of its parts. */
+  function movement(row: PlanRow): string | undefined {
+    if (!row.group) return undefined;
+    const currency = accounts.get(row.accountId)?.currency ?? bookCurrency;
+    const { total, parts } = movementOf(rows, row, currency);
+    const names = reference.subCategories;
+    const list = parts.map((part) => {
+      const sub = names.find((s) => s.id === part.subCategoryId);
+      return `${sub ? nameOf(sub.names) : "?"} ${decimalInput(part.amount)}`;
+    });
+    const sum = total === undefined ? "?" : amountText(total, currency);
+    return `${t("split.movement", { total: sum })} : ${list.join(", ")}`;
+  }
   const { ticked, setTicked, onTick } = useTicks(tickable.map((row) => row.key));
   const selected = tickable.filter((row) => ticked.has(row.key));
   const selectedKeys = new Set(selected.map((row) => row.key));
@@ -514,12 +655,17 @@ export function PlanEntries({
     setNote("");
   }
   const change = (patch: (row: PlanRow) => Partial<PlanRow>) =>
-    apply(rows.map((row) => (selectedKeys.has(row.key) ? { ...row, ...patch(row) } : row)));
+    apply(patched(rows, selectedKeys, patch));
+  /** The ticked rows with the other parts of their splits: what is done to all. */
+  const groups = new Set(selected.flatMap((row) => (row.group ? [row.group] : [])));
+  const whole = rows.filter(
+    (row) => !row.removed && (selectedKeys.has(row.key) || (row.group && groups.has(row.group))),
+  );
   const add = (added: PlanRow[]) => apply([...rows, ...added].sort(byDate));
 
   const onPatch = useCallback(
     (key: string, patch: Partial<PlanRow>) =>
-      setRows((old) => old.map((row) => (row.key === key ? { ...row, ...patch } : row))),
+      setRows((old) => patched(old, new Set([key]), () => patch)),
     [setRows],
   );
 
@@ -531,26 +677,57 @@ export function PlanEntries({
         !e.compensationId &&
         Number(e.amount) !== 0 &&
         !accounts.get(e.accountId!)?.archived &&
-        subCategories.some((s) => s.value === e.subCategoryId && !s.archived),
+        subCategories.some((s) => s.value === e.subCategoryId && !s.archived) &&
+        // A split is copied whole, so every part must still be usable.
+        (!e.split ||
+          e.split.parts.every((p) => {
+            const sub = reference.subCategories.find((s) => s.id === p.subCategoryId);
+            return sub !== undefined && !sub.archived;
+          })),
     );
-    const copies = entriesToCopy(usable, [...rows.filter((r) => !r.removed), ...unplanned]);
-    if (copies.length > 0) {
-      add(
-        copies.map((e) => ({
-          key: newKey(),
-          date: e.date,
-          keptMonth: e.monthShifted ? budgetMonth(e.date, true) : null,
-          subCategoryId: e.subCategoryId,
-          description: e.description,
-          accountId: e.accountId!,
-          // What was paid, or is expected, becomes the plan.
-          amount: plain(e.amount),
-          exchangeRate: e.exchangeRate,
-          reconciled: false,
-          removed: false,
-        })),
+    const existing = [...rows.filter((r) => !r.removed), ...unplanned];
+    const plain1 = usable.filter((e) => !e.splitId);
+    const asRow = (e: Entry): PlanRow => ({
+      key: newKey(),
+      date: e.date,
+      keptMonth: e.monthShifted ? budgetMonth(e.date, true) : null,
+      subCategoryId: e.subCategoryId,
+      description: e.description,
+      accountId: e.accountId!,
+      // What was paid, or is expected, becomes the plan.
+      amount: plain(e.amount),
+      exchangeRate: e.exchangeRate,
+      reconciled: false,
+      removed: false,
+    });
+    const copies = entriesToCopy(plain1, existing).map(asRow);
+    // A split is copied once, whole: unless one of its parts is already there.
+    const splits = new Map<string, Entry[]>();
+    for (const e of usable) {
+      if (e.splitId) splits.set(e.splitId, [...(splits.get(e.splitId) ?? []), e]);
+    }
+    for (const own of splits.values()) {
+      if (entriesToCopy(own, existing).length !== own.length) continue;
+      const group = newKey();
+      const ids = new Set(own.map((e) => e.id));
+      const elsewhere = own[0]!
+        .split!.parts.filter((p) => !ids.has(p.id))
+        .map((p) => ({
+          subCategoryId: p.subCategoryId,
+          description: p.description,
+          amount: plain(p.amount),
+          remainder: p.remainder,
+        }));
+      own.forEach((e, i) =>
+        copies.push({
+          ...asRow({ ...e, date: yearAhead(e.date) }),
+          group,
+          remainder: e.splitRemainder,
+          others: i === 0 ? elsewhere : undefined,
+        }),
       );
     }
+    if (copies.length > 0) add(copies);
     setNote(t("budget.entries.copied", { count: copies.length }));
   }
 
@@ -697,20 +874,7 @@ export function PlanEntries({
               value={null}
               onChange={(id) => id && change(() => ({ subCategoryId: id }))}
             />
-            <Button
-              size="compact-xs"
-              variant="default"
-              onClick={() =>
-                add(
-                  selected.map((row) => ({
-                    ...row,
-                    key: newKey(),
-                    id: undefined,
-                    version: undefined,
-                  })),
-                )
-              }
-            >
+            <Button size="compact-xs" variant="default" onClick={() => add(copiesOf(whole))}>
               {t("journal.duplicate")}
             </Button>
             <Button
@@ -719,9 +883,11 @@ export function PlanEntries({
               variant="light"
               onClick={() => {
                 // A row never saved goes; an entry of the journal goes when saved.
+                // A part takes its whole split with it.
+                const gone = new Set(whole.map((row) => row.key));
                 apply(
                   rows.flatMap((row) =>
-                    !selectedKeys.has(row.key) ? [row] : row.id ? [{ ...row, removed: true }] : [],
+                    !gone.has(row.key) ? [row] : row.id ? [{ ...row, removed: true }] : [],
                   ),
                 );
                 setTicked(new Set());
@@ -774,6 +940,7 @@ export function PlanEntries({
                   accountOptions={accountOptions.filter(
                     (a) => !a.archived || a.value === row.accountId,
                   )}
+                  movement={movement(row)}
                   onTick={onTick}
                   onPatch={onPatch}
                 />
@@ -795,6 +962,7 @@ export function PlanEntries({
             year={year}
             subCategories={subCategories.filter((s) => !s.archived)}
             accountOptions={accountOptions.filter((a) => !a.archived)}
+            categoryId={categoryId}
             onCancel={() => setScheduling(false)}
             onCreate={(created) => {
               add(created);
@@ -814,6 +982,7 @@ function ScheduleForm({
   year,
   subCategories,
   accountOptions,
+  categoryId,
   onCancel,
   onCreate,
 }: {
@@ -822,6 +991,7 @@ function ScheduleForm({
   year: number;
   subCategories: Option[];
   accountOptions: Option[];
+  categoryId: string;
   onCancel: () => void;
   onCreate: (rows: PlanRow[]) => void;
 }) {
@@ -837,25 +1007,90 @@ function ScheduleForm({
     exchangeRate: "",
   });
   const set = (patch: Partial<typeof draft>) => setDraft({ ...draft, ...patch });
+  /** The other parts of a split, when each date is one. */
+  const [parts, setParts] = useState<{ subCategoryId: string; amount: string }[]>([]);
+  /** Which takes the rest: -1 the first amount, else one of the other parts. */
+  const [remainder, setRemainder] = useState(0);
+  // Any sub-category but those of transfers.
+  const transferNatures = new Set(reference.natures.filter((n) => n.transfer).map((n) => n.id));
+  const partOptions = useSubCategoryOptions(
+    reference,
+    undefined,
+    reference.categories.filter((c) => !transferNatures.has(c.natureId)).map((c) => c.id),
+  );
+  const patchPart = (index: number, patch: Partial<(typeof parts)[number]>) =>
+    setParts(parts.map((part, i) => (i === index ? { ...part, ...patch } : part)));
 
   const accounts = new Map(reference.accounts.map((a) => [a.id, a]));
   const account = accounts.get(draft.accountId);
   const foreign = account !== undefined && account.currency !== bookCurrency;
-  const rows: PlanRow[] = scheduleDates(draft.first, draft.last, Number(draft.every)).map(
-    (date) => ({
-      key: newKey(),
+  const inCategory = (id: string) =>
+    reference.subCategories.some((s) => s.id === id && s.categoryId === categoryId);
+  const all = [{ subCategoryId: draft.subCategoryId, amount: draft.amount }, ...parts];
+  const split = parts.length > 0;
+  const dates = scheduleDates(draft.first, draft.last, Number(draft.every));
+  const rows: PlanRow[] = dates.flatMap((date) => {
+    const base = {
       date,
       keptMonth: null,
-      subCategoryId: draft.subCategoryId,
       description: draft.description,
       accountId: draft.accountId,
-      amount: decimalInput(draft.amount),
       exchangeRate: draft.exchangeRate,
       reconciled: false,
       removed: false,
-    }),
-  );
-  const ready = rows.length > 0 && invalidRows(rows, { accounts, bookCurrency, year }) === 0;
+    };
+    const group = split ? newKey() : undefined;
+    const made = all.map((part, i) => ({
+      subCategoryId: part.subCategoryId,
+      amount: decimalInput(part.amount),
+      remainder: split && i === remainder,
+      own: i === 0 || inCategory(part.subCategoryId),
+    }));
+    // Parts of the category are rows; the others go along with the first.
+    const others = made
+      .filter((p) => !p.own)
+      .map((p) => ({
+        subCategoryId: p.subCategoryId,
+        amount: p.amount,
+        remainder: p.remainder,
+        description: draft.description,
+      }));
+    return made
+      .filter((p) => p.own)
+      .map((part, i) => ({
+        ...base,
+        subCategoryId: part.subCategoryId,
+        amount: part.amount,
+        remainder: part.remainder,
+        key: newKey(),
+        group,
+        others: split && i === 0 ? others : undefined,
+      }));
+  });
+  const otherAmounts = parts.every((part) => {
+    try {
+      return (
+        part.subCategoryId !== "" &&
+        parseAmount(decimalInput(part.amount), account?.currency ?? bookCurrency).minor !== 0n
+      );
+    } catch {
+      return false;
+    }
+  });
+  const ready =
+    rows.length > 0 && otherAmounts && invalidRows(rows, { accounts, bookCurrency, year }) === 0;
+  /** The bank amount of each date, when it can be told. */
+  let total: string | undefined;
+  if (split) {
+    const currency = account?.currency ?? bookCurrency;
+    try {
+      const amounts = all.map((p) => parseAmount(decimalInput(p.amount), currency));
+      const negated = amounts.map((a) => money(-a.minor, currency));
+      total = toDecimalString(splitRemainder(money(0n, currency), negated));
+    } catch {
+      total = undefined;
+    }
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -925,12 +1160,77 @@ function ScheduleForm({
             />
           )}
         </Group>
+        {parts.map((part, index) => (
+          <Group key={index} gap="xs" align="flex-end" wrap="nowrap">
+            <Select
+              style={{ flex: 1 }}
+              label={t("split.otherPart")}
+              searchable
+              data={partOptions}
+              value={part.subCategoryId || null}
+              onChange={(value) => patchPart(index, { subCategoryId: value ?? "" })}
+            />
+            <TextInput
+              w={130}
+              label={t("budget.plannedAmount")}
+              inputMode="decimal"
+              value={part.amount}
+              onChange={(e) => patchPart(index, { amount: e.currentTarget.value })}
+            />
+            <ActionIcon
+              variant="default"
+              size="lg"
+              aria-label={t("split.removePart")}
+              title={t("split.removePart")}
+              onClick={() => {
+                setParts(parts.filter((_, i) => i !== index));
+                setRemainder(0);
+              }}
+            >
+              ×
+            </ActionIcon>
+          </Group>
+        ))}
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          style={{ alignSelf: "flex-start" }}
+          onClick={() => {
+            // The part added is the one that usually takes the rest.
+            setRemainder(parts.length + 1);
+            setParts([...parts, { subCategoryId: "", amount: "" }]);
+          }}
+        >
+          ⑂ {t("split.addPart")}
+        </Button>
+        {split && (
+          <Group justify="space-between" align="flex-end">
+            <Select
+              label={t("split.remainder")}
+              allowDeselect={false}
+              data={all.map((part, i) => ({
+                value: String(i),
+                label: `${i + 1}. ${
+                  partOptions
+                    .flatMap((g) => ("items" in g ? g.items : [g]))
+                    .find((o) => typeof o !== "string" && o.value === part.subCategoryId)?.label ??
+                  "…"
+                }`,
+              }))}
+              value={String(remainder)}
+              onChange={(value) => value && setRemainder(Number(value))}
+            />
+            <Text size="sm" fw={600}>
+              {t("split.bankAmount")} : {total ?? "…"}
+            </Text>
+          </Group>
+        )}
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel}>
             {t("common.cancel")}
           </Button>
           <Button type="submit" disabled={!ready}>
-            {t("budget.createPlanned", { count: rows.length })}
+            {t("budget.createPlanned", { count: dates.length })}
           </Button>
         </Group>
       </Stack>

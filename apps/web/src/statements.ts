@@ -38,6 +38,8 @@ export interface MatchedEntry {
   reconciled: boolean;
   /** One side of a transfer. */
   transfer: boolean;
+  /** For a split, its parts: the amount is then the bank amount of the whole. */
+  split: { subCategoryId: string; description: string; amount: string }[] | null;
 }
 
 export interface BatchLine {

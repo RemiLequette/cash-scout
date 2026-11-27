@@ -8,6 +8,7 @@ import { budgetBatchSchema } from "./budget.js";
 import {
   entryInputSchema,
   entryUpdateSchema,
+  splitInputSchema,
   transferInputSchema,
   transferUpdateSchema,
 } from "./journal.js";
@@ -21,6 +22,8 @@ const MOST = 2000;
 export const planSchema = z.object({
   budget: budgetBatchSchema,
   create: z.array(entryInputSchema).max(MOST).default([]),
+  /** Splits to create, planned. */
+  splits: z.array(splitInputSchema).max(MOST).default([]),
   update: z
     .array(entryUpdateSchema.and(z.object({ id: z.uuid() })))
     .max(MOST)

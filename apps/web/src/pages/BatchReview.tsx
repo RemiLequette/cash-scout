@@ -513,11 +513,24 @@ function Decision({
     entry.amount === line.amount
       ? ""
       : ` ${t("statements.review.planned", { amount: money(entry.amount) })}`;
+  const subName = new Map(
+    options.flatMap((group) =>
+      "items" in group ? group.items.map((o) => [o.value, o.label] as const) : [],
+    ),
+  );
+  /** The parts of a split, as "Loyer brut 1 000,00 ; Gestion -150,00". */
+  const partsOf = (entry: MatchedEntry) =>
+    entry.split
+      ? ` ⑂ (${entry.split
+          .map((p) => `${subName.get(p.subCategoryId) ?? p.description} ${money(p.amount)}`)
+          .join(" ; ")})`
+      : "";
   const named = (entry: MatchedEntry) => ({
     date: entry.date,
-    description: entry.transfer
-      ? `${entry.description} ${t("statements.review.transfer")}`
-      : entry.description,
+    description:
+      (entry.transfer
+        ? `${entry.description} ${t("statements.review.transfer")}`
+        : entry.description) + partsOf(entry),
   });
   if (line.status === "imported") {
     return (

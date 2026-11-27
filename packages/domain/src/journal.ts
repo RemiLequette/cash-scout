@@ -91,6 +91,62 @@ export const entryUpdateSchema = z
   );
 export type EntryUpdate = z.input<typeof entryUpdateSchema>;
 
+/** The most parts a split holds. */
+export const maxSplitParts = 20;
+
+const splitPartSchema = z.object({
+  /** An entry already there: a part of the split, or the entry being split. */
+  id: z.uuid().optional(),
+  subCategoryId: z.uuid(),
+  description: descriptionSchema.default(""),
+  /** Signed, in the account's currency. */
+  amount: amountTextSchema,
+  /** Takes what the other parts leave of the bank amount. */
+  remainder: z.boolean().default(false),
+});
+
+const splitFields = {
+  date: entryDateSchema,
+  accountId: z.uuid(),
+  /** Required when the account currency is not the book currency. */
+  exchangeRate: rateSchema.optional(),
+  reconciled: z.boolean().optional(),
+  monthShifted: z.boolean().optional(),
+  /** Part of the budget's plan: the planned amounts are then the amounts. */
+  planned: z.boolean().optional(),
+};
+
+const oneRemainder = (parts: { remainder: boolean }[]) =>
+  parts.filter((p) => p.remainder).length === 1;
+const remainderIssue = { message: "A split has exactly one remainder part" };
+
+/** One bank movement counting in several sub-categories (see docs/splits.md). */
+export const splitInputSchema = z.object({
+  ...splitFields,
+  parts: z.array(splitPartSchema).min(2).max(maxSplitParts).refine(oneRemainder, remainderIssue),
+});
+export type SplitInput = z.input<typeof splitInputSchema>;
+
+/** The whole split as it becomes; a single part leaves an ordinary entry. */
+export const splitUpdateSchema = z.object({
+  ...splitFields,
+  parts: z.array(splitPartSchema).min(1).max(maxSplitParts).refine(oneRemainder, remainderIssue),
+  version: versionSchema.optional(),
+});
+export type SplitUpdate = z.input<typeof splitUpdateSchema>;
+
+/** What the remainder part takes: the bank amount minus the other parts. */
+export function splitRemainder(total: Money, others: readonly Money[]): Money {
+  let minor = total.minor;
+  for (const other of others) {
+    if (other.currency !== total.currency) {
+      throw new RangeError("The parts of a split are in the same currency");
+    }
+    minor -= other.minor;
+  }
+  return money(minor, total.currency);
+}
+
 /** Positive decimal amount as text: the size of a transfer, whose sign comes from its side. */
 export const positiveAmountSchema = amountTextSchema
   .regex(/^\+?\d+(\.\d+)?$/, "The amount must be positive")

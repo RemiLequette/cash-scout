@@ -467,7 +467,9 @@ function CategoryPlan({
   /** The planned entries per month, read like the grid. */
   const planned = plannedByMonth(rows, context).map((v) => sign * v);
   const changes = entryChanges(rows, read.rows, context);
-  const entriesChanged = changes.create.length + changes.update.length + changes.remove.length > 0;
+  const entriesChanged =
+    changes.create.length + changes.splits.length + changes.update.length + changes.remove.length >
+    0;
   const wrongRows = invalidRows(rows, context);
 
   const update = (patch: Partial<Draft>) => setDraft((old) => ({ ...old, ...patch }));

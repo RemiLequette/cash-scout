@@ -21,6 +21,7 @@ import type { AppEnv } from "../http.js";
 import { idOf, languagesOf, missing, requireRole, roleOf } from "./access.js";
 import { budgetsRoutes } from "./budgets.js";
 import { compensationRoutes } from "./compensations.js";
+import { splitRoutes } from "./splits.js";
 import { dashboardRoutes } from "./dashboard.js";
 import { journalRoutes } from "./journal.js";
 import { statementRoutes } from "./statements.js";
@@ -193,6 +194,7 @@ export function booksRoutes(db: Db, events: BookEvents) {
       .route("/:bookId/journal", journalRoutes(db))
       .route("/:bookId/transfers", transferRoutes(db))
       .route("/:bookId/compensations", compensationRoutes(db))
+      .route("/:bookId/splits", splitRoutes(db))
       .route("/:bookId/reference", referenceRoutes(db))
       .route("/:bookId/statements", statementRoutes(db))
 
