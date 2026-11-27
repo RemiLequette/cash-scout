@@ -24,6 +24,14 @@ Open **Settings and members** in the book's menu. An owner can:
 
 A member can leave a book.
 
+## Exporting and importing a book
+
+**Export the book**, in the book's menu (owners only), downloads the whole book as one file: reference data, accounts, journal, budgets, rules and imported statements. Members are not part of it.
+
+**Import a book**, on the list of books, creates a **new** book from such a file, on this installation or another one; you are its owner. Nothing is ever merged or replaced: to go back to a copy, import it, compare, then delete the old book. An installation older than the one that wrote the file may refuse it: update it first.
+
+The file holds account numbers and bank labels in clear text: keep it as you would a bank statement.
+
 ## The super user
 
 The super user maintains the installation: it creates users and sets their initial password. It does **not** see a book's data unless it is a member of that book.

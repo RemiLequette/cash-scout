@@ -29,9 +29,15 @@ export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
  * Runs `fn` in a transaction where row-level security sees `userId` as the
  * current user. Every access to book data goes through here.
  */
-export function withUser<T>(db: Db, userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+export function withUser<T>(
+  db: Db,
+  userId: string,
+  fn: (tx: Tx) => Promise<T>,
+  /** "repeatable read" to read several tables as they were at one instant. */
+  isolationLevel?: "repeatable read",
+): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.execute(rawSql`select set_config('app.user_id', ${userId}, true)`);
     return fn(tx);
-  });
+  }, isolationLevel && { isolationLevel });
 }

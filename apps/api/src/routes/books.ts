@@ -9,8 +9,11 @@ import {
 } from "@cash-scout/domain";
 import { and, asc, eq, notInArray } from "drizzle-orm";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { streamSSE } from "hono/streaming";
+import { exportBook } from "../archive/export.js";
+import { importBook, readArchive } from "../archive/import.js";
 import { withUser, type Db, type Tx } from "../db/client.js";
 import { scopeOfPath, type BookEvents } from "../events.js";
 import { book, bookLanguage, bookMember, nature, user } from "../db/schema.js";
@@ -43,6 +46,13 @@ const bookIdOf = (param: string) => idOf(param);
 
 /** How often an idle event stream sends a ping, so proxies keep the connection open. */
 const PING_MS = 25_000;
+
+/** The largest book file accepted: years of journal and statements take a few MB. */
+const MAX_ARCHIVE = 50 * 1024 * 1024;
+
+/** The code of the database error behind an error of a query. */
+const databaseCode = (error: unknown) =>
+  (error as { code?: string }).code ?? (error as { cause?: { code?: string } }).cause?.code;
 
 export function booksRoutes(db: Db, events: BookEvents) {
   return (
@@ -89,6 +99,55 @@ export function booksRoutes(db: Db, events: BookEvents) {
           { id, ...input, languages: [input.defaultLanguage], role: "owner" as BookRole },
           201,
         );
+      })
+
+      // A book file, as `GET /:bookId/export` gives it, becomes a new book.
+      .post(
+        "/import",
+        bodyLimit({
+          maxSize: MAX_ARCHIVE,
+          onError: (c) => c.json({ error: "The file is too large" }, 413),
+        }),
+        async (c) => {
+          const me = c.var.user.id;
+          const name = bookInputSchema.shape.name.optional().safeParse(c.req.query("name"));
+          if (!name.success) throw new HTTPException(400, { message: "Invalid name" });
+          const content: unknown = await c.req.json().catch(() => null);
+          const archive = readArchive(content);
+          const id = await withUser(db, me, (tx) => importBook(tx, me, archive, name.data)).catch(
+            (error: unknown) => {
+              // Data and integrity errors: the file does not hold together.
+              if (/^2[23]/.test(databaseCode(error) ?? "")) {
+                throw new HTTPException(400, { message: "Invalid file: inconsistent data" });
+              }
+              throw error;
+            },
+          );
+          return c.json({ id }, 201);
+        },
+      )
+
+      // The whole book as one file. Owners only: it holds account numbers and labels.
+      .get("/:bookId/export", async (c) => {
+        const me = c.var.user.id;
+        const bookId = bookIdOf(c.req.param("bookId"));
+        const archive = await withUser(
+          db,
+          me,
+          async (tx) => {
+            await requireRole(tx, bookId, me, "owner");
+            return exportBook(tx, bookId);
+          },
+          "repeatable read",
+        );
+        // The book's name in the file name, and in plain ASCII for old browsers.
+        const file = `${archive.book.name}-${archive.exportedAt.slice(0, 10)}.json`;
+        const ascii = file.replace(/[^A-Za-z0-9._-]+/g, "_");
+        c.header(
+          "content-disposition",
+          `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file)}`,
+        );
+        return c.json(archive);
       })
 
       .get("/:bookId", async (c) => {

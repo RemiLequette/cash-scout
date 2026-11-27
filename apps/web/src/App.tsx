@@ -138,6 +138,17 @@ function NavMenu({
             <Menu.Item leftSection={mark(view === "settings")} onClick={() => open("settings")}>
               {t("book.settingsAndMembers")}
             </Menu.Item>
+            {book.data.role === "owner" && (
+              // A plain link: the browser saves the file the API sends.
+              <Menu.Item
+                component="a"
+                leftSection={mark(false)}
+                href={`/api/books/${bookId}/export`}
+                download
+              >
+                {t("book.export")}
+              </Menu.Item>
+            )}
             <Menu.Divider />
           </>
         )}

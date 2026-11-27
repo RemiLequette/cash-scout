@@ -33,6 +33,9 @@
     "viewer": "Lecteur"
   },
   "books": {
+    "import": "Importer un livre",
+    "file": "Fichier du livre",
+    "importAction": "Importer",
     "title": "Livres",
     "empty": "Vous n'êtes membre d'aucun livre. Créez-en un pour commencer.",
     "create": "Nouveau livre",
@@ -45,6 +48,7 @@
     "open": "Ouvrir"
   },
   "book": {
+    "export": "Exporter le livre",
     "dashboard": "Tableau de bord",
     "settings": "Paramètres",
     "members": "Membres",
