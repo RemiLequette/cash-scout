@@ -51,9 +51,11 @@ export const ARCHIVED: readonly ArchivedTable[] = [
       capitalSubCategoryId: subCategory,
       interestSubCategoryId: subCategory,
       insuranceSubCategoryId: subCategory,
+      penaltySubCategoryId: subCategory,
+      insuranceAccountId: bookAccount,
     },
   },
-  { table: loanEvent, references: { loanId: loan } },
+  { table: loanEvent, references: { loanId: loan, insuranceAccountId: bookAccount } },
   {
     table: journalEntry,
     references: {
