@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import {
   checkCapital,
   currencyDigits,
+  effectiveRates,
   daysBetween,
   insuranceLines,
   penaltyLines,
@@ -163,6 +164,16 @@ async function capitalChecks(tx: Tx, bookId: string, loans: Loan[], date: string
   return (one: Loan) => checks.get(keyOf(one)) ?? null;
 }
 
+/** The TEG, with and without the insurance, in percent with two decimals. */
+function effectiveOf(row: LoanRow, events: readonly EventRow[]) {
+  const rates = effectiveRates(row, eventsOf(events));
+  const text = (rate: number | null) => (rate === null ? null : rate.toFixed(2));
+  return {
+    withInsurance: text(rates.withInsurance),
+    withoutInsurance: text(rates.withoutInsurance),
+  };
+}
+
 function outLoan({ row, events, currency }: Loan, lines: LoanLine[], date: string) {
   const text = (minor: bigint) => toDecimalString(money(minor, currency));
   const { bookId, createdAt, updatedAt, amount, ...terms } = row;
@@ -180,6 +191,7 @@ function outLoan({ row, events, currency }: Loan, lines: LoanLine[], date: strin
     remaining: text(past.at(-1)?.remaining ?? released),
     nextPayment: next ? { date: next.date, total: text(next.total) } : null,
     end: lines.at(-1)?.date ?? null,
+    effectiveRate: effectiveOf(row, events),
     events: events.map((event) => ({
       id: event.id,
       version: event.version,
@@ -192,6 +204,7 @@ function outLoan({ row, events, currency }: Loan, lines: LoanLine[], date: strin
       insuranceSeparate: event.insuranceSeparate,
       insuranceAccountId: event.insuranceAccountId,
       penalty: event.penalty === null ? null : text(event.penalty),
+      note: event.note,
     })),
   };
 }
@@ -330,6 +343,7 @@ async function eventValues(
     insuranceRate: insurance ? (input.insuranceMode === "none" ? "0" : input.insuranceRate) : null,
     insuranceSeparate: separate,
     insuranceAccountId,
+    note: input.note,
     penalty: penalty === null ? null : checked(() => parseAmount(penalty, found.currency)).minor,
   };
 }

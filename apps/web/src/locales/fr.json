@@ -667,6 +667,10 @@
     "insuranceAccount": "Compte de l'assurance",
     "insuranceApart": "Payée à part de l'échéance",
     "penalty": "Pénalité",
-    "penaltyPart": "Sous-catégorie des pénalités"
+    "penaltyPart": "Sous-catégorie des pénalités",
+    "note": "Commentaire",
+    "effectiveRate": "TEG",
+    "effectiveRateText": "Taux effectif global (TEG) : {withInsurance} % avec l'assurance, {withoutInsurance} % hors assurance.",
+    "effectiveRateSame": "Taux effectif global (TEG) : {rate} %."
   }
 }

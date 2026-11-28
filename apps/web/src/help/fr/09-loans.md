@@ -15,12 +15,16 @@ Les échéances sont constantes : les intérêts se calculent sur le capital res
 
 ## Évènements
 
-Un évènement modifie l'échéancier à partir de sa date. Il compte après l'échéance du même jour.
+Un évènement modifie l'échéancier à partir de sa date. Chacun peut avoir un **commentaire**, pour ce qui a été convenu. Il compte après l'échéance du même jour.
 
 - **Déblocage** : capital libéré par étapes, comme pour un achat sur plan. Dès qu'un emprunt a des déblocages, seul ce qu'ils libèrent est emprunté ; leur total ne peut dépasser le capital.
 - **Remboursement anticipé** : un montant, ou tout ce qui reste. Il peut avoir une **pénalité**, qui est un coût et non du capital : indiquez la **sous-catégorie des pénalités** (dépense) de l'emprunt pour en saisir une. Pour une partie, choisissez ce qu'il **conserve** : l'échéance (l'emprunt est plus court) ou la durée (l'échéance est plus basse).
 - **Changement d'assureur** : à partir de sa date, l'assurance a de nouvelles conditions : aucune, un taux sur le capital emprunté ou sur le capital restant, dans l'échéance ou hors d'elle, sur un compte quelconque de la devise de l'emprunt. Il compte pour les échéances de ce jour et les suivantes.
 - **Rachat** : l'emprunt est remboursé en entier par un autre. Une **pénalité** peut être saisie, comme pour un remboursement anticipé. Saisissez le nouvel emprunt comme un emprunt à part. Le nouveau prêteur paie l'ancien : aucune échéance n'est prévue pour le rachat.
+
+## Taux effectif global (TEG)
+
+L'emprunt affiche son **taux effectif global**, avec et sans l'assurance (une assurance à part compte) : le taux annuel qui rend le capital reçu égal à tout ce qui est payé. C'est celui de l'emprunt tel que contracté : seuls les déblocages comptent parmi les évènements, et le capital est supposé libéré un mois avant la première échéance. Les frais autres que l'assurance ne sont pas comptés.
 
 ## Capital restant
 

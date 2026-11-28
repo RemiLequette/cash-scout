@@ -164,8 +164,13 @@ describe("loans", () => {
     const { id } = await s.create();
     const events = `/loans/${id}/events`;
     await s.post(events, { date: "2026-01-01", kind: "drawdown", amount: "130000" }, 400);
-    const repaid = await s.post<Loan>(events, { date: "2026-03-10", kind: "buyback" });
+    const repaid = await s.post<Loan>(events, {
+      date: "2026-03-10",
+      kind: "buyback",
+      note: "Rachat par la banque B",
+    });
     expect(repaid.events).toHaveLength(1);
+    expect(repaid.events[0]).toMatchObject({ note: "Rachat par la banque B" });
     expect((await s.loans())[0]!.remaining).toBe("0.00");
     const lines = await s.schedule(id);
     expect(lines.map((line) => line.kind)).toEqual(["payment", "payment", "payment", "buyback"]);

@@ -47,6 +47,7 @@ CREATE TABLE "loan_event" (
 	"insurance_separate" boolean DEFAULT false NOT NULL,
 	"insurance_account_id" uuid,
 	"penalty" bigint,
+	"note" text DEFAULT '' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"version" integer DEFAULT 1 NOT NULL,

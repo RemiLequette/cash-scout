@@ -15,12 +15,16 @@ Payments are constant: the interest is computed on the capital left, and the res
 
 ## Events
 
-An event changes the schedule from its date. It counts after the payment of the same day.
+An event changes the schedule from its date. Each can carry a **note**, for what was agreed. It counts after the payment of the same day.
 
 - **Drawdown**: capital released in steps, as in a purchase off plan. As soon as a loan has drawdowns, only what they release is borrowed; their total cannot exceed the amount.
 - **Early repayment**: an amount, or all that is left. It can carry a **penalty**, which is a cost, not capital: name the loan's **penalty sub-category** (spending) to enter one. For a part, choose what it **keeps**: the payment (the loan is shorter) or the term (the payment is lower).
 - **Change of insurer**: from its date, the insurance has new terms: none, a rate on the capital borrowed or on the remaining capital, inside or outside the payment, on any account of the loan's currency. It counts for the payments of that day on.
 - **Buy-back**: the loan is repaid in full by another one. A **penalty** can be entered, as for an early repayment. Enter the new loan as a loan of its own. The new lender pays the old one, so no payment is planned for the buy-back.
+
+## Effective rate (TEG)
+
+The loan shows its **effective annual rate**, with and without the insurance (an insurance paid apart counts): the yearly rate that makes the capital received equal to everything paid. It is that of the loan as contracted, so only the drawdowns count of the events, and the capital is taken to be released a month before the first payment. Fees other than insurance are not counted.
 
 ## Remaining capital
 

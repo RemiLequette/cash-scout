@@ -667,6 +667,10 @@
     "insuranceAccount": "Insurance account",
     "insuranceApart": "Paid apart from the payment",
     "penalty": "Penalty",
-    "penaltyPart": "Penalty sub-category"
+    "penaltyPart": "Penalty sub-category",
+    "note": "Note",
+    "effectiveRate": "TEG",
+    "effectiveRateText": "Effective annual rate (TEG): {withInsurance} % with the insurance, {withoutInsurance} % without.",
+    "effectiveRateSame": "Effective annual rate (TEG): {rate} %."
   }
 }

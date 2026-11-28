@@ -502,6 +502,8 @@ export const loanEvent = pgTable(
     insuranceAccountId: uuid("insurance_account_id"),
     /** Paid with an early repayment or a buy-back, on top of the capital, in minor units. */
     penalty: bigint("penalty", { mode: "bigint" }),
+    /** A comment on the event. */
+    note: text("note").notNull().default(""),
     ...timestamps,
     version: version(),
   },

@@ -417,6 +417,7 @@ interface EventDraft {
   insuranceSeparate: boolean;
   insuranceAccountId: string | null;
   penalty: string;
+  note: string;
 }
 
 const draftOfEvent = (event: LoanEventRow): EventDraft => ({
@@ -431,6 +432,7 @@ const draftOfEvent = (event: LoanEventRow): EventDraft => ({
   insuranceSeparate: event.insuranceSeparate,
   insuranceAccountId: event.insuranceAccountId,
   penalty: event.penalty ?? "",
+  note: event.note,
 });
 
 const newEvent = (): EventDraft => ({
@@ -443,6 +445,7 @@ const newEvent = (): EventDraft => ({
   insuranceSeparate: false,
   insuranceAccountId: null,
   penalty: "",
+  note: "",
 });
 
 function EventForm({
@@ -489,6 +492,7 @@ function EventForm({
         draft.kind === "repayment" || draft.kind === "buyback"
           ? decimalInput(draft.penalty) || null
           : null,
+      note: draft.note,
       version: draft.version,
     };
     const parsed = loanEventInputSchema.safeParse(candidate);
@@ -615,6 +619,12 @@ function EventForm({
             onChange={(value) => set({ keeps: value ?? "payment" })}
           />
         )}
+        <TextInput
+          label={t("loans.note")}
+          maxLength={300}
+          value={draft.note}
+          onChange={(e) => set({ note: e.currentTarget.value })}
+        />
         {invalid && !change.error && (
           <Text c="red" size="sm">
             {t("loans.invalid")}
@@ -657,6 +667,7 @@ function Events({ bookId, loan, canEdit }: { bookId: string; loan: Loan; canEdit
               <Table.Th>{t("loans.eventKind")}</Table.Th>
               <Table.Th ta="right">{t("loans.eventAmount")}</Table.Th>
               <Table.Th>{t("loans.keeps")}</Table.Th>
+              <Table.Th>{t("loans.note")}</Table.Th>
               <Table.Th />
             </Table.Tr>
           </Table.Thead>
@@ -686,6 +697,7 @@ function Events({ bookId, loan, canEdit }: { bookId: string; loan: Loan; canEdit
                     .filter(Boolean)
                     .join(" · ")}
                 </Table.Td>
+                <Table.Td>{event.note}</Table.Td>
                 <Table.Td>
                   {canEdit && (
                     <Group gap="xs" justify="flex-end" wrap="nowrap">
@@ -930,6 +942,16 @@ function LoanDetail({
           )}
         </Group>
         <ErrorAlert error={change.error} />
+        {loan.effectiveRate.withInsurance && (
+          <Text size="sm" c="dimmed">
+            {loan.effectiveRate.withInsurance === loan.effectiveRate.withoutInsurance
+              ? t("loans.effectiveRateSame", { rate: loan.effectiveRate.withInsurance })
+              : t("loans.effectiveRateText", {
+                  withInsurance: loan.effectiveRate.withInsurance,
+                  withoutInsurance: loan.effectiveRate.withoutInsurance,
+                })}
+          </Text>
+        )}
         {check?.flagged && (
           <Alert color="orange" title={t("loans.gap")}>
             {t("loans.gapText", {
@@ -995,6 +1017,7 @@ export function Loans({
               <Table.Th>{t("loans.name")}</Table.Th>
               <Table.Th ta="right">{t("loans.amount")}</Table.Th>
               <Table.Th ta="right">{t("loans.rateColumn")}</Table.Th>
+              <Table.Th ta="right">{t("loans.effectiveRate")}</Table.Th>
               <Table.Th>{t("loans.nextPayment")}</Table.Th>
               <Table.Th>{t("loans.end")}</Table.Th>
               <Table.Th ta="right">{t("loans.remaining")}</Table.Th>
@@ -1020,6 +1043,9 @@ export function Loans({
                 </Table.Td>
                 <Table.Td ta="right">{money(row.amount, row.currency)}</Table.Td>
                 <Table.Td ta="right">{row.rate} %</Table.Td>
+                <Table.Td ta="right">
+                  {row.effectiveRate.withInsurance ? `${row.effectiveRate.withInsurance} %` : ""}
+                </Table.Td>
                 <Table.Td>
                   {row.nextPayment
                     ? `${formatDate(row.nextPayment.date, i18n.language)} · ${money(row.nextPayment.total, row.currency)}`

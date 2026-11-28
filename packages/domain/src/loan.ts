@@ -103,6 +103,8 @@ export const loanEventInputSchema = z
     insuranceRate: percentSchema.default("0"),
     insuranceSeparate: z.boolean().default(false),
     insuranceAccountId: z.uuid().nullable().default(null),
+    /** A comment on the event: why, with which bank, what was agreed. */
+    note: z.string().trim().max(300).default(""),
     /** A penalty paid with an early repayment or a buy-back: a cost of its own. */
     penalty: positiveAmountSchema.nullable().default(null),
     version: versionSchema.optional(),
@@ -361,6 +363,62 @@ export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): Loa
   applyEvents();
   // Insurer changes and events were pushed as the payments went: back in order of day.
   return lines.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** The yearly rate, in percent, that makes what is received worth what is paid; none if there is none. */
+function actuarialRate(flows: readonly { date: string; amount: number }[]): number | null {
+  if (flows.length < 2) return null;
+  const first = flows[0]!.date;
+  const value = (rate: number) =>
+    flows.reduce(
+      (sum, flow) => sum + flow.amount * (1 + rate) ** (-daysBetween(first, flow.date) / 365),
+      0,
+    );
+  let low = -0.9;
+  let high = 10;
+  if (value(low) * value(high) > 0) return null;
+  for (let step = 0; step < 200; step++) {
+    const middle = (low + high) / 2;
+    // The money received comes first, and what is paid is worth less as the rate rises.
+    if (value(middle) > 0) high = middle;
+    else low = middle;
+  }
+  return ((low + high) / 2) * 100;
+}
+
+/**
+ * The effective yearly rate of a loan as contracted (TEG): with and without
+ * the insurance, an insurance paid apart included. Only the drawdowns are
+ * kept of the events, and the money is taken to be released a month before the
+ * first payment, when it is not drawn in steps. In percent.
+ */
+export function effectiveRates(
+  loan: LoanTerms,
+  events: readonly LoanEvent[],
+): { withInsurance: number | null; withoutInsurance: number | null } {
+  const drawdowns = events.filter((event) => event.kind === "drawdown");
+  const lines = loanSchedule(loan, drawdowns);
+  const received =
+    drawdowns.length > 0
+      ? lines
+          .filter((line) => line.kind === "drawdown")
+          .map((line) => ({ date: line.date, amount: Number(line.capital) }))
+      : [{ date: addMonths(loan.start, -1), amount: Number(loan.amount) }];
+  const paid = lines.filter((line) => line.kind === "payment");
+  const flows = (withInsurance: boolean) =>
+    [
+      ...received,
+      ...paid.map((line) => {
+        // The total holds the insurance only when it is in the payment.
+        const without = line.total - (line.insuranceSeparate ? 0n : line.insurance);
+        const amount = withInsurance ? without + (line.total > 0n ? line.insurance : 0n) : without;
+        return { date: line.date, amount: -Number(amount) };
+      }),
+    ].sort((a, b) => a.date.localeCompare(b.date));
+  return {
+    withInsurance: actuarialRate(flows(true)),
+    withoutInsurance: actuarialRate(flows(false)),
+  };
 }
 
 /** The capital left to repay at the end of a day. */

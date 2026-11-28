@@ -3,6 +3,7 @@ import {
   addMonths,
   annuity,
   checkCapital,
+  effectiveRates,
   insuranceLines,
   penaltyLines,
   loanEventInputSchema,
@@ -219,6 +220,32 @@ describe("loan schedule", () => {
   it("repays no more than what is left", () => {
     const lines = loanSchedule(loan(), [event("2026-01-10", "repayment", 99_000_000n)]);
     expect(lines.at(-1)).toMatchObject({ capital: 11_963_448n, remaining: 0n });
+  });
+});
+
+describe("effective rate", () => {
+  it("is the rate of the schedule, and higher with the insurance", () => {
+    const plain = effectiveRates(loan(), []);
+    // A twelfth a month is 3.04 % over the year.
+    expect(plain.withoutInsurance).toBeGreaterThan(3.02);
+    expect(plain.withoutInsurance).toBeLessThan(3.06);
+    expect(plain.withInsurance).toBeCloseTo(plain.withoutInsurance!, 6);
+
+    const insured = effectiveRates(loan({ insuranceMode: "initial", insuranceRate: "0.36" }), []);
+    expect(insured.withoutInsurance).toBeCloseTo(plain.withoutInsurance!, 6);
+    expect(insured.withInsurance!).toBeGreaterThan(insured.withoutInsurance! + 0.4);
+    // An insurance paid apart counts the same.
+    const apart = effectiveRates(
+      loan({ insuranceMode: "initial", insuranceRate: "0.36", insuranceSeparate: true }),
+      [],
+    );
+    expect(apart.withInsurance).toBeCloseTo(insured.withInsurance!, 6);
+  });
+
+  it("does not change with the events that come after", () => {
+    const base = effectiveRates(loan(), []);
+    const later = effectiveRates(loan(), [event("2030-01-10", "repayment", 5_000_000n)]);
+    expect(later.withoutInsurance).toBe(base.withoutInsurance);
   });
 });
 

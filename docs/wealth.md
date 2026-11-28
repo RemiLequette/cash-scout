@@ -64,6 +64,7 @@ Events, dated, change the schedule from their date:
 
 - **Drawdown**: capital released in steps, as in a purchase off plan.
 - **Early repayment**: part of the capital, or all of it. A part keeps either the payment (the loan is shorter) or the term (the payment is lower).
+- Each event can carry a free **note**.
 - **Buy-back**: a loan is repaid in full by another one. The old loan ends with an early repayment; the new one is a loan of its own.
 - **Penalty**: a repayment or a buy-back can carry a penalty. It is a cost of its own, not part of the capital: a planned entry on the payment account, in the loan's penalty sub-category, which the loan must name to have one.
 - **Change of insurer**: from its date, the insurance has new terms (none, a rate on the capital borrowed, or on the remaining capital). It counts for the payments of that day on, unlike the other events.
