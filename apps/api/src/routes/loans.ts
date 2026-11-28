@@ -3,6 +3,8 @@ import {
   checkCapital,
   currencyDigits,
   daysBetween,
+  insuranceLines,
+  penaltyLines,
   loanEventInputSchema,
   loanInputSchema,
   loanPlanSchema,
@@ -46,7 +48,17 @@ interface Loan {
 }
 
 const eventsOf = (events: readonly EventRow[]): LoanEvent[] =>
-  events.map(({ date, kind, amount, keeps }) => ({ date, kind, amount, keeps }));
+  events.map(({ date, kind, amount, keeps, ...insurance }) => ({
+    date,
+    kind,
+    amount,
+    keeps,
+    insuranceMode: insurance.insuranceMode,
+    insuranceRate: insurance.insuranceRate ?? undefined,
+    insuranceSeparate: insurance.insuranceSeparate,
+    insuranceAccountId: insurance.insuranceAccountId,
+    penalty: insurance.penalty,
+  }));
 
 const scheduleOf = ({ row, events }: Loan): LoanLine[] => loanSchedule(row, eventsOf(events));
 
@@ -175,6 +187,11 @@ function outLoan({ row, events, currency }: Loan, lines: LoanLine[], date: strin
       kind: event.kind,
       amount: event.amount === null ? null : text(event.amount),
       keeps: event.keeps,
+      insuranceMode: event.insuranceMode,
+      insuranceRate: event.insuranceRate,
+      insuranceSeparate: event.insuranceSeparate,
+      insuranceAccountId: event.insuranceAccountId,
+      penalty: event.penalty === null ? null : text(event.penalty),
     })),
   };
 }
@@ -211,11 +228,18 @@ async function loanValues(tx: Tx, bookId: string, input: Values, current?: Loan)
           current.row.capitalSubCategoryId,
           current.row.interestSubCategoryId,
           current.row.insuranceSubCategoryId,
+          current.row.penaltySubCategoryId,
         ]
       : [],
   );
   const insured = input.insuranceMode !== "none";
+  const separate = insured && input.insuranceSeparate;
+  const insuranceAccountId = separate ? input.insuranceAccountId : null;
+  if (insuranceAccountId) {
+    await insuranceAccount(tx, bookId, insuranceAccountId, account.currency, current);
+  }
   const parts = [
+    ...(input.penaltySubCategoryId ? [input.penaltySubCategoryId] : []),
     input.capitalSubCategoryId,
     input.interestSubCategoryId,
     ...(insured ? [input.insuranceSubCategoryId!] : []),
@@ -233,12 +257,15 @@ async function loanValues(tx: Tx, bookId: string, input: Values, current?: Loan)
     start: input.start,
     insuranceMode: input.insuranceMode,
     insuranceRate: insured ? input.insuranceRate : "0",
+    insuranceSeparate: separate,
+    insuranceAccountId,
     deferralMode: input.deferralMode,
     deferralMonths: input.deferralMonths,
     accountId: input.accountId,
     capitalSubCategoryId: input.capitalSubCategoryId,
     interestSubCategoryId: input.interestSubCategoryId,
     insuranceSubCategoryId: insured ? input.insuranceSubCategoryId : null,
+    penaltySubCategoryId: input.penaltySubCategoryId,
   };
 }
 
@@ -251,15 +278,59 @@ async function checkDrawdowns(tx: Tx, bookId: string, id: string) {
   if (released > found.row.amount) {
     throw new HTTPException(400, { message: "The drawdowns exceed the amount borrowed" });
   }
+  if (!found.row.penaltySubCategoryId && found.events.some((event) => event.penalty !== null)) {
+    throw new HTTPException(400, { message: "The loan needs a sub-category for penalties" });
+  }
 }
 
-function eventValues(input: z.output<typeof loanEventInputSchema>, currency: string) {
-  const { amount } = input;
+/**
+ * The account of a separate insurance: one of the book, in the currency of the
+ * loan (its amounts are in it). An archived one stays allowed where it is used.
+ */
+async function insuranceAccount(
+  tx: Tx,
+  bookId: string,
+  id: string,
+  currency: string,
+  current?: Loan,
+) {
+  const used = current
+    ? [current.row.insuranceAccountId, ...current.events.map((e) => e.insuranceAccountId)]
+    : [];
+  const account = await usable(accountOf(tx, bookId, id), "account", used.includes(id));
+  if (account.currency !== currency) {
+    throw new HTTPException(400, {
+      message: "The insurance account must be in the currency of the loan",
+    });
+  }
+}
+
+async function eventValues(
+  tx: Tx,
+  bookId: string,
+  input: z.output<typeof loanEventInputSchema>,
+  found: Loan,
+) {
+  const { amount, penalty } = input;
+  if (penalty !== null && !found.row.penaltySubCategoryId) {
+    throw new HTTPException(400, { message: "The loan needs a sub-category for penalties" });
+  }
+  const insurance = input.kind === "insurance";
+  const separate = insurance && input.insuranceMode !== "none" && input.insuranceSeparate;
+  const insuranceAccountId = separate ? input.insuranceAccountId : null;
+  if (insuranceAccountId) {
+    await insuranceAccount(tx, bookId, insuranceAccountId, found.currency, found);
+  }
   return {
     date: input.date,
     kind: input.kind,
-    amount: amount === null ? null : checked(() => parseAmount(amount, currency)).minor,
+    amount: amount === null ? null : checked(() => parseAmount(amount, found.currency)).minor,
     keeps: input.keeps,
+    insuranceMode: insurance ? input.insuranceMode : null,
+    insuranceRate: insurance ? (input.insuranceMode === "none" ? "0" : input.insuranceRate) : null,
+    insuranceSeparate: separate,
+    insuranceAccountId,
+    penalty: penalty === null ? null : checked(() => parseAmount(penalty, found.currency)).minor,
   };
 }
 
@@ -273,6 +344,7 @@ interface Planned {
   reconciled: boolean;
   monthShifted: boolean;
   exchangeRate: string;
+  accountId: string | null;
   parts: { subCategoryId: string; amount: bigint }[];
 }
 
@@ -288,6 +360,7 @@ function grouped(rows: (typeof journalEntry.$inferSelect)[]): Planned[] {
       reconciled: row.reconciled,
       monthShifted: row.monthShifted,
       exchangeRate: row.exchangeRate,
+      accountId: row.accountId,
       parts: [],
     };
     group.total -= row.amount;
@@ -305,11 +378,26 @@ const HAND_DAYS = 5;
  * the loan (with every part of their split), then those entered by hand, told
  * by the capital they repay on the payment account.
  */
+/** What is paid apart from a payment, as an entry of its own. */
+type Apart = "insurance" | "penalty";
+
+const apartAmount = (kind: Apart, line: LoanLine) =>
+  kind === "insurance" ? line.insurance : line.penalty;
+
+const apartLines = (kind: Apart, lines: readonly LoanLine[]) =>
+  kind === "insurance" ? insuranceLines(lines) : penaltyLines(lines);
+
 async function inJournal(tx: Tx, bookId: string, { row }: Loan, lines: LoanLine[]) {
-  const linked = await tx
+  const all = await tx
     .select()
     .from(journalEntry)
     .where(and(eq(journalEntry.bookId, bookId), eq(journalEntry.loanId, row.id)));
+  // An insurance paid apart, or a penalty, is an entry of its own, matched with its own lines.
+  const linked = all.filter((entry) => entry.loanPart === "payment");
+  const apartItems = {
+    insurance: grouped(all.filter((entry) => entry.loanPart === "insurance")),
+    penalty: grouped(all.filter((entry) => entry.loanPart === "penalty")),
+  };
   const splitIds = [...new Set(linked.flatMap((entry) => entry.splitId ?? []))];
   // A part added to a planned split is part of the payment too.
   const rows =
@@ -351,10 +439,19 @@ async function inJournal(tx: Tx, bookId: string, { row }: Loan, lines: LoanLine[
     );
     if (at >= 0) found[index] = { reconciled: byHand.splice(at, 1)[0]!.reconciled };
   });
+  const apartFound = (kind: Apart, lines: readonly LoanLine[]) => {
+    const items = apartItems[kind];
+    const pairs = matchPayments(
+      lines.map((line) => ({ date: line.date, total: apartAmount(kind, line) })),
+      items,
+    );
+    return { items, pairs, found: pairs.map((at) => (at === undefined ? undefined : items[at]!)) };
+  };
   return {
     found,
     /** Planned from the loan, and no longer in its schedule. */
     orphans: items.filter((_, at) => !matched.includes(at)),
+    apartFound,
   };
 }
 
@@ -363,8 +460,10 @@ function partsOf({ row }: Loan, line: LoanLine) {
   return [
     { subCategoryId: row.capitalSubCategoryId, amount: -line.capital },
     { subCategoryId: row.interestSubCategoryId, amount: -line.interest },
-    // A repayment has no insurance, nor has an uninsured loan.
-    { subCategoryId: row.insuranceSubCategoryId!, amount: -line.insurance },
+    // A repayment has no insurance, nor has an uninsured loan, nor one paid apart.
+    ...(line.insuranceSeparate
+      ? []
+      : [{ subCategoryId: row.insuranceSubCategoryId!, amount: -line.insurance }]),
   ].filter((part) => part.amount !== 0n);
 }
 
@@ -420,6 +519,31 @@ async function writePayment(
   await tx.update(journalEntry).set(mark).where(eq(journalEntry.splitId, id));
 }
 
+/** Writes what is paid apart from a payment as an entry of its own, planned. */
+async function writeApart(
+  tx: Tx,
+  bookId: string,
+  found: Loan,
+  kind: Apart,
+  line: LoanLine,
+  options: { date: string; monthShifted: boolean; exchangeRate: string | undefined },
+) {
+  const { row, currency } = found;
+  const insurance = kind === "insurance";
+  const entry = await createEntry(tx, bookId, {
+    ...options,
+    accountId: (insurance ? line.insuranceAccountId : null) ?? row.accountId,
+    subCategoryId: (insurance ? row.insuranceSubCategoryId : row.penaltySubCategoryId)!,
+    description: row.name,
+    amount: toDecimalString(money(-apartAmount(kind, line), currency)),
+    planned: true,
+  });
+  await tx
+    .update(journalEntry)
+    .set({ loanId: row.id, loanPart: kind })
+    .where(eq(journalEntry.id, entry.id));
+}
+
 /**
  * Brings the planned payments of a year in line with the schedule: adds those
  * the journal lacks, replaces the forecasts planned from the loan whose amounts
@@ -464,6 +588,45 @@ async function planYear(
     });
     result.replaced++;
   }
+
+  // The insurances paid apart and the penalties, each an entry of its own.
+  for (const kind of ["insurance", "penalty"] as const) {
+    const apart = apartLines(kind, scheduleOf(found));
+    const { items, pairs, found: there } = journal.apartFound(kind, apart);
+    for (const [at, item] of items.entries()) {
+      if (!inYear(item.date) || item.reconciled || pairs.includes(at)) continue;
+      await removeItem(tx, bookId, item);
+      result.removed++;
+    }
+    for (const [index, line] of apart.entries()) {
+      if (!inYear(line.date)) continue;
+      const item = there[index];
+      const accountId =
+        (kind === "insurance" ? line.insuranceAccountId : null) ?? found.row.accountId;
+      if (!item) {
+        await writeApart(tx, bookId, found, kind, line, {
+          date: line.date,
+          monthShifted: false,
+          exchangeRate,
+        });
+        result.created++;
+        continue;
+      }
+      if (
+        item.reconciled ||
+        (item.total === apartAmount(kind, line) && item.accountId === accountId)
+      ) {
+        continue;
+      }
+      await removeItem(tx, bookId, item);
+      await writeApart(tx, bookId, found, kind, line, {
+        date: item.date,
+        monthShifted: item.monthShifted,
+        exchangeRate: exchangeRate ?? item.exchangeRate,
+      });
+      result.replaced++;
+    }
+  }
   return result;
 }
 
@@ -500,8 +663,17 @@ export function loanRoutes(db: Db) {
           const found = await loadLoan(tx, bookId, id);
           const lines = scheduleOf(found);
           const paid = paidLines(lines);
-          const { found: there } = await inJournal(tx, bookId, found, paid);
-          const state = new Map(paid.map((line, index) => [line, there[index]]));
+          const journal = await inJournal(tx, bookId, found, paid);
+          const state = new Map(paid.map((line, index) => [line, journal.found[index]]));
+          const apartState = (kind: Apart) => {
+            const apart = apartLines(kind, lines);
+            const { found: there } = journal.apartFound(kind, apart);
+            return new Map(apart.map((line, index) => [line, there[index]]));
+          };
+          const insuranceState = apartState("insurance");
+          const penaltyState = apartState("penalty");
+          const stateOf = (entry: { reconciled: boolean } | undefined) =>
+            entry ? (entry.reconciled ? ("reconciled" as const) : ("planned" as const)) : null;
           const text = (minor: bigint) => toDecimalString(money(minor, found.currency));
           return {
             currency: found.currency,
@@ -516,6 +688,12 @@ export function loanRoutes(db: Db) {
                 insurance: text(line.insurance),
                 total: text(line.total),
                 remaining: text(line.remaining),
+                insuranceSeparate: line.insuranceSeparate,
+                insuranceAccountId: line.insuranceAccountId,
+                penalty: text(line.penalty),
+                /** What the journal holds for a separate insurance or a penalty, if anything. */
+                insuranceJournal: stateOf(insuranceState.get(line)),
+                penaltyJournal: stateOf(penaltyState.get(line)),
                 /** What the journal holds for the payment, if anything. */
                 journal: entry
                   ? entry.reconciled
@@ -596,7 +774,7 @@ export function loanRoutes(db: Db) {
           const found = await loadLoan(tx, bookId, id);
           await tx
             .insert(loanEvent)
-            .values({ bookId, loanId: id, ...eventValues(input, found.currency) });
+            .values({ bookId, loanId: id, ...(await eventValues(tx, bookId, input, found)) });
           await checkDrawdowns(tx, bookId, id);
           return respond(tx, bookId, id);
         });
@@ -614,7 +792,7 @@ export function loanRoutes(db: Db) {
           const found = await loadLoan(tx, bookId, id);
           const [updated] = await tx
             .update(loanEvent)
-            .set(eventValues(input, found.currency))
+            .set(await eventValues(tx, bookId, input, found))
             .where(and(rowOf(loanEvent, bookId, eventId, input.version), eq(loanEvent.loanId, id)))
             .returning({ id: loanEvent.id });
           if (!updated) return missing("Event", input.version);

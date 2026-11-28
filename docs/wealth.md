@@ -65,12 +65,15 @@ Events, dated, change the schedule from their date:
 - **Drawdown**: capital released in steps, as in a purchase off plan.
 - **Early repayment**: part of the capital, or all of it. A part keeps either the payment (the loan is shorter) or the term (the payment is lower).
 - **Buy-back**: a loan is repaid in full by another one. The old loan ends with an early repayment; the new one is a loan of its own.
+- **Penalty**: a repayment or a buy-back can carry a penalty. It is a cost of its own, not part of the capital: a planned entry on the payment account, in the loan's penalty sub-category, which the loan must name to have one.
+- **Change of insurer**: from its date, the insurance has new terms (none, a rate on the capital borrowed, or on the remaining capital). It counts for the payments of that day on, unlike the other events.
 
 The schedule is never stored: `packages/domain` computes it from the loan and its events, like the cash projection (`loanSchedule`, in `loan.ts`).
 
 How it is computed:
 
 - A French constant-payment loan: each month the interest is a twelfth of the yearly rate on the capital left, the rest of the payment repays capital, the last payment takes what is left. Amounts are minor units, rounded to the nearest.
+- The insurance can be **paid apart**: then it is not in the payment (the payment's total leaves it out), and it has its own account, in the loan's currency, which is the payment account by default. A change of insurer can move it in or out of the payment.
 - The insurance is a twelfth of its rate on the capital borrowed, or on the capital left at the start of the month; it is paid during a deferral of interest only, and not during one of nothing paid.
 - Without drawdowns the whole amount is released at the start. With them, only what they release is borrowed, and their total cannot exceed the amount; each one sets a new payment.
 - An event counts after the payments of its date and before the next one. A repayment of all that is left, or a buy-back, ends the loan.
@@ -83,6 +86,7 @@ How it is computed:
 
 - From its schedule, a loan **generates planned splits** for a year: one per payment, on its account, with capital, interest and insurance as parts. The capital part is in a sub-category of a saving nature: repaying capital is saving.
 - The **interest is the remainder**: it takes the gap with the statement line, which the import matches as for any planned split, so the capital stays that of the schedule. A payment with a single part (an early repayment, or interest only with no insurance) is an ordinary planned entry. A buy-back plans nothing: the new lender pays the old one.
+- An insurance paid apart is a planned entry of its own on its account, outside the split, one per payment. So is the penalty of a repayment or a buy-back, on the payment account. `journal_entry.loan_part` tells them from the payment.
 - The entries carry `loan_id`. **Plan** can be run again for a year: it adds the payments the journal lacks, replaces the unreconciled forecasts it planned whose amounts changed (keeping their day), and removes those the schedule no longer has. Reconciled entries are never touched. A payment entered by hand, with the same capital within five days, counts as planned. Deleting a loan unlinks its entries; they stay. Copying the previous year in the budget leaves them out.
 - The **remaining capital** at a date comes from the schedule. The capital repaid in the journal is checked against it: the reconciled entries of the capital sub-category, against the schedules of the loans that share it, month by month from the first entry to the last month reconciled on the payment account (a loan may be older than the journal). A gap of more than one unit of the currency is flagged.
 

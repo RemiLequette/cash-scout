@@ -3,6 +3,8 @@ import {
   addMonths,
   annuity,
   checkCapital,
+  insuranceLines,
+  penaltyLines,
   loanEventInputSchema,
   loanInputSchema,
   loanSchedule,
@@ -21,6 +23,8 @@ const loan = (changes: Partial<LoanTerms> = {}): LoanTerms => ({
   start: "2026-01-05",
   insuranceMode: "none",
   insuranceRate: "0",
+  insuranceSeparate: false,
+  insuranceAccountId: null,
   deferralMode: "none",
   deferralMonths: 0,
   ...changes,
@@ -75,6 +79,70 @@ describe("loan schedule", () => {
     expect(left[0]!.insurance).toBe(3_600n);
     expect(left[1]!.insurance).toBe(3_589n);
     expect(left.at(-1)!.insurance).toBeLessThan(25n);
+  });
+
+  it("changes insurer from a date, on the payments of that day on", () => {
+    const terms = loan({ insuranceMode: "initial", insuranceRate: "0.36" });
+    const change: LoanEvent = {
+      ...event("2026-03-05", "insurance"),
+      insuranceMode: "remaining",
+      insuranceRate: "0.20",
+    };
+    const lines = loanSchedule(terms, [change]);
+    const payments = lines.filter((line) => line.kind === "payment");
+    expect(payments[1]!.insurance).toBe(3_600n);
+    expect(payments[2]!.insurance).toBe(1_988n);
+    expect(lines.map((line) => line.kind).slice(0, 4)).toEqual([
+      "payment",
+      "payment",
+      "insurance",
+      "payment",
+    ]);
+    // Without insurance from then on.
+    const none = loanSchedule(terms, [{ ...change, insuranceMode: "none" }]);
+    expect(none.filter((line) => line.kind === "payment")[2]!.insurance).toBe(0n);
+  });
+
+  it("keeps a separate insurance out of the payment, on its own account", () => {
+    const terms = loan({
+      insuranceMode: "initial",
+      insuranceRate: "0.36",
+      insuranceSeparate: true,
+    });
+    const lines = loanSchedule(terms, [
+      {
+        ...event("2026-06-01", "insurance"),
+        insuranceMode: "remaining",
+        insuranceRate: "0.30",
+        insuranceSeparate: true,
+        insuranceAccountId: "other",
+      },
+    ]);
+    expect(lines[0]).toMatchObject({ insurance: 3_600n, total: 66_552n, insuranceAccountId: null });
+    expect(lines.filter((line) => line.kind === "payment")[5]).toMatchObject({
+      insuranceSeparate: true,
+      insuranceAccountId: "other",
+    });
+    expect(insuranceLines(lines)).toHaveLength(240);
+    // Back in the payment with a new insurer.
+    const back = loanSchedule(terms, [
+      { ...event("2026-02-01", "insurance"), insuranceMode: "initial", insuranceRate: "0.30" },
+    ]);
+    expect(back.filter((line) => line.kind === "payment")[1]).toMatchObject({
+      insuranceSeparate: false,
+      total: 66_552n + 3_000n,
+    });
+  });
+
+  it("carries the penalty of a repayment or a buy-back apart from the capital", () => {
+    for (const kind of ["repayment", "buyback"] as const) {
+      const lines = loanSchedule(loan(), [{ ...event("2026-02-10", kind), penalty: 90_000n }]);
+      const last = lines.at(-1)!;
+      expect(last).toMatchObject({ kind, penalty: 90_000n, remaining: 0n });
+      expect(last.total).toBe(last.capital);
+      expect(penaltyLines(lines)).toHaveLength(1);
+    }
+    expect(penaltyLines(loanSchedule(loan(), []))).toHaveLength(0);
   });
 
   it("pays the interest only during a deferral, then repays over what is left", () => {
@@ -216,5 +284,10 @@ describe("loan input", () => {
     expect(ok({ date: "2026-01-05", kind: "drawdown" })).toBe(false);
     expect(ok({ date: "2026-01-05", kind: "repayment" })).toBe(true);
     expect(ok({ date: "2026-01-05", kind: "buyback", amount: "10" })).toBe(false);
+    expect(ok({ date: "2026-01-05", kind: "buyback", penalty: "1500" })).toBe(true);
+    expect(ok({ date: "2026-01-05", kind: "drawdown", amount: "5", penalty: "1" })).toBe(false);
+    expect(ok({ date: "2026-01-05", kind: "insurance" })).toBe(false);
+    expect(ok({ date: "2026-01-05", kind: "insurance", insuranceMode: "initial" })).toBe(true);
+    expect(ok({ date: "2026-01-05", kind: "repayment", insuranceMode: "initial" })).toBe(false);
   });
 });

@@ -72,6 +72,7 @@ async function setup() {
   const capital = await sub(saving.id, "Capital remboursé");
   const interest = await sub(costs.id, "Intérêts");
   const insurance = await sub(costs.id, "Assurance");
+  const penalty = await sub(costs.id, "Pénalités");
   const move = await sub(moves.id, "Virement interne");
   const account = await post("/reference/accounts", { names: { fr: "Courant" }, currency: "EUR" });
 
@@ -114,6 +115,7 @@ async function setup() {
     capital,
     interest,
     insurance,
+    penalty,
     move,
     terms,
     create,
@@ -230,6 +232,90 @@ describe("loans", () => {
     const left = await s.journal();
     expect(left.filter((e) => e.date === "2026-01-05").every((e) => e.reconciled)).toBe(true);
     expect(Math.max(...left.map((e) => Number(e.date.slice(5, 7))))).toBe(9);
+  });
+
+  it("plans an insurance paid apart as its own entry, on another account, and follows a change of insurer", async () => {
+    const s = await setup();
+    const other = await s.post<{ id: string }>("/reference/accounts", {
+      names: { fr: "Assurance" },
+      currency: "EUR",
+    });
+    const dollars = await s.post<{ id: string }>("/reference/accounts", {
+      names: { fr: "Dollars" },
+      currency: "USD",
+    });
+    await s.create({ insuranceSeparate: true, insuranceAccountId: dollars.id }, 400);
+    const { id } = await s.create({ insuranceSeparate: true, insuranceAccountId: other.id });
+    expect(await s.plan(id)).toEqual({ created: 24, replaced: 0, removed: 0 });
+    expect(await s.plan(id)).toEqual({ created: 0, replaced: 0, removed: 0 });
+
+    const entries = await s.journal();
+    const insurance = entries.filter((e) => e.subCategoryId === s.insurance.id);
+    expect(insurance).toHaveLength(12);
+    expect(insurance.every((e) => e.splitId === null && e.amount === "-36.00")).toBe(true);
+    expect(
+      entries.filter((e) => e.date === "2026-01-05" && e.subCategoryId !== s.insurance.id),
+    ).toHaveLength(2);
+    const line = (await s.schedule(id))[0]!;
+    expect(line).toMatchObject({
+      total: "665.52",
+      insuranceSeparate: true,
+      insuranceJournal: "planned",
+    });
+
+    // From July, another insurer, whose cost is in the payment.
+    await s.post(`/loans/${id}/events`, {
+      date: "2026-07-01",
+      kind: "insurance",
+      insuranceMode: "remaining",
+      insuranceRate: "0.20",
+    });
+    expect(await s.plan(id)).toEqual({ created: 0, replaced: 6, removed: 6 });
+    const after = await s.journal();
+    expect(after.filter((e) => e.subCategoryId === s.insurance.id)).toHaveLength(12);
+    const july = after.filter((e) => e.date === "2026-07-05");
+    expect(july).toHaveLength(3);
+    expect(july.find((e) => e.subCategoryId === s.insurance.id)!.splitId).not.toBeNull();
+  });
+
+  it("plans the penalty of a buy-back as a cost of its own", async () => {
+    const s = await setup();
+    const without = await s.create();
+    await s.post(
+      `/loans/${without.id}/events`,
+      { date: "2026-03-10", kind: "buyback", penalty: "1500" },
+      400,
+    );
+    const { id } = await s.create({ penaltySubCategoryId: s.penalty.id });
+    const events = `/loans/${id}/events`;
+    await s.post(events, { date: "2026-03-10", kind: "drawdown", penalty: "5", amount: "1" }, 400);
+    const bought = await s.post<Loan>(events, {
+      date: "2026-03-10",
+      kind: "buyback",
+      penalty: "1500",
+    });
+    expect(await s.plan(id)).toEqual({ created: 4, replaced: 0, removed: 0 });
+    expect(await s.plan(id)).toEqual({ created: 0, replaced: 0, removed: 0 });
+    const fee = (await s.journal()).filter((e) => e.subCategoryId === s.penalty.id);
+    expect(fee).toMatchObject([
+      { amount: "-1500.00", date: "2026-03-10", splitId: null, loanId: id },
+    ]);
+    const line = (await s.schedule(id)).find((l) => l.kind === "buyback")!;
+    expect(line).toMatchObject({ penalty: "1500.00", penaltyJournal: "planned" });
+
+    const event = (bought.events as { id: string; version: number }[])[0]!;
+    await json(
+      s.owner.request("PATCH", s.url(`${events}/${event.id}`), {
+        date: "2026-03-10",
+        kind: "buyback",
+        penalty: "2000",
+        version: event.version,
+      }),
+    );
+    expect(await s.plan(id)).toEqual({ created: 0, replaced: 1, removed: 0 });
+    // The penalty goes with the event.
+    await status(s.owner.request("DELETE", s.url(`${events}/${event.id}`)), 204);
+    expect(await s.plan(id)).toEqual({ created: 9, replaced: 0, removed: 1 });
   });
 
   it("does not plan again a payment entered by hand", async () => {

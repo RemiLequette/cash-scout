@@ -637,7 +637,8 @@
     "event": {
       "drawdown": "Drawdown",
       "repayment": "Early repayment",
-      "buyback": "Buy-back"
+      "buyback": "Buy-back",
+      "insurance": "Change of insurer"
     },
     "eventAmount": "Amount",
     "allRemaining": "All that is left",
@@ -661,6 +662,11 @@
     "inJournal": {
       "planned": "Planned",
       "reconciled": "Reconciled"
-    }
+    },
+    "insuranceSeparate": "Insurance outside the payment",
+    "insuranceAccount": "Insurance account",
+    "insuranceApart": "Paid apart from the payment",
+    "penalty": "Penalty",
+    "penaltyPart": "Penalty sub-category"
   }
 }

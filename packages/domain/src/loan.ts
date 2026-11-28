@@ -18,7 +18,8 @@ export type InsuranceMode = (typeof insuranceModes)[number];
 export const deferralModes = ["none", "interest", "total"] as const;
 export type DeferralMode = (typeof deferralModes)[number];
 
-export const loanEventKinds = ["drawdown", "repayment", "buyback"] as const;
+/** A change of insurer is an event too: from its date, the insurance has new terms. */
+export const loanEventKinds = ["drawdown", "repayment", "buyback", "insurance"] as const;
 export type LoanEventKind = (typeof loanEventKinds)[number];
 
 /** What an early repayment of part of the capital leaves as it was. */
@@ -45,6 +46,12 @@ const loanFields = {
   insuranceMode: z.enum(insuranceModes).default("none"),
   /** Yearly rate in percent. */
   insuranceRate: percentSchema.default("0"),
+  /** The insurance is its own entry, outside the payment's split. */
+  insuranceSeparate: z.boolean().default(false),
+  /** Account of a separate insurance; none for the payment account. */
+  insuranceAccountId: z.uuid().nullable().default(null),
+  /** Sub-category of the penalties of early repayments and buy-backs. */
+  penaltySubCategoryId: z.uuid().nullable().default(null),
   deferralMode: z.enum(deferralModes).default("none"),
   deferralMonths: z.int().min(0).max(maxLoanTerm).default(0),
   accountId: z.uuid(),
@@ -91,13 +98,30 @@ export const loanEventInputSchema = z
     /** Capital released or repaid; none repays all that is left. */
     amount: positiveAmountSchema.nullable().default(null),
     keeps: z.enum(repaymentKeeps).default("payment"),
+    /** For a change of insurer: the insurance from the date on. */
+    insuranceMode: z.enum(insuranceModes).nullable().default(null),
+    insuranceRate: percentSchema.default("0"),
+    insuranceSeparate: z.boolean().default(false),
+    insuranceAccountId: z.uuid().nullable().default(null),
+    /** A penalty paid with an early repayment or a buy-back: a cost of its own. */
+    penalty: positiveAmountSchema.nullable().default(null),
     version: versionSchema.optional(),
   })
   .superRefine((event, context) => {
-    const issue = (message: string) =>
-      context.addIssue({ code: "custom", path: ["amount"], message });
-    if (event.kind === "drawdown" && event.amount === null) issue("A drawdown needs an amount");
-    if (event.kind === "buyback" && event.amount !== null) issue("A buy-back repays all");
+    const issue = (path: string, message: string) =>
+      context.addIssue({ code: "custom", path: [path], message });
+    if (event.kind === "drawdown" && event.amount === null) {
+      issue("amount", "A drawdown needs an amount");
+    }
+    if ((event.kind === "buyback" || event.kind === "insurance") && event.amount !== null) {
+      issue("amount", "This event has no amount");
+    }
+    if (event.penalty !== null && event.kind !== "repayment" && event.kind !== "buyback") {
+      issue("penalty", "Only a repayment or a buy-back has a penalty");
+    }
+    if ((event.kind === "insurance") !== (event.insuranceMode !== null)) {
+      issue("insuranceMode", "Only a change of insurer has insurance terms");
+    }
   });
 export type LoanEventInput = z.input<typeof loanEventInputSchema>;
 
@@ -120,6 +144,8 @@ export interface LoanTerms {
   start: string;
   insuranceMode: InsuranceMode;
   insuranceRate: string;
+  insuranceSeparate: boolean;
+  insuranceAccountId: string | null;
   deferralMode: DeferralMode;
   deferralMonths: number;
 }
@@ -129,6 +155,13 @@ export interface LoanEvent {
   kind: LoanEventKind;
   amount: bigint | null;
   keeps: RepaymentKeeps;
+  /** For a change of insurer. */
+  insuranceMode?: InsuranceMode | null;
+  insuranceRate?: string;
+  insuranceSeparate?: boolean;
+  insuranceAccountId?: string | null;
+  /** Paid with an early repayment or a buy-back, on top of the capital. */
+  penalty?: bigint | null;
 }
 
 /** One line of a schedule: a monthly payment, or an event. */
@@ -142,7 +175,12 @@ export interface LoanLine {
   /** For a total deferral, the interest is not paid: it joins the capital. */
   interest: bigint;
   insurance: bigint;
-  /** What leaves the payment account (nothing for a drawdown). */
+  /** The insurance is not in the payment: it is its own entry, on `insuranceAccountId` (none: the payment account). */
+  insuranceSeparate: boolean;
+  insuranceAccountId: string | null;
+  /** The penalty of an early repayment or a buy-back: its own entry, not part of the total. */
+  penalty: bigint;
+  /** What leaves the payment account (nothing for a drawdown), the insurance only if it is in the payment. */
   total: bigint;
   /** Capital left to repay after the line. */
   remaining: bigint;
@@ -187,13 +225,25 @@ const openingCapital = (loan: LoanTerms, events: readonly LoanEvent[]) =>
  */
 export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): LoanLine[] {
   const monthly = Number(loan.rate) / 1200;
-  const insured = loan.insuranceMode === "none" ? 0 : Number(loan.insuranceRate) / 1200;
+  let insurance = {
+    mode: loan.insuranceMode,
+    rate: loan.insuranceMode === "none" ? 0 : Number(loan.insuranceRate) / 1200,
+    separate: loan.insuranceSeparate && loan.insuranceMode !== "none",
+    accountId: loan.insuranceAccountId,
+  };
   const deferred = loan.deferralMode === "none" ? 0 : loan.deferralMonths;
+  // A change of insurer counts from its date: for the payments of that day on.
+  const insurers = events
+    .filter((event) => event.kind === "insurance")
+    .sort((a, b) => a.date.localeCompare(b.date));
   // Events of one day keep their order, drawdowns first.
-  const pending = [...events].sort(
-    (a, b) =>
-      a.date.localeCompare(b.date) || Number(b.kind === "drawdown") - Number(a.kind === "drawdown"),
-  );
+  const pending = events
+    .filter((event) => event.kind !== "insurance")
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        Number(b.kind === "drawdown") - Number(a.kind === "drawdown"),
+    );
   const lines: LoanLine[] = [];
   let balance = openingCapital(loan, events);
   let payment: bigint | null = null;
@@ -210,6 +260,9 @@ export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): Loa
         number: null,
         interest: 0n,
         insurance: 0n,
+        insuranceSeparate: false,
+        insuranceAccountId: null,
+        penalty: 0n,
       };
       if (event.kind === "drawdown") {
         balance += event.amount ?? 0n;
@@ -221,7 +274,13 @@ export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): Loa
       if (repaid <= 0n) continue;
       balance -= repaid;
       if (event.keeps === "term") payment = null;
-      lines.push({ ...line, capital: repaid, total: repaid, remaining: balance });
+      lines.push({
+        ...line,
+        capital: repaid,
+        total: repaid,
+        penalty: event.penalty ?? 0n,
+        remaining: balance,
+      });
       // Repaid in full, unless more is still to be released.
       over = balance === 0n && !pending.slice(next).some((later) => later.kind === "drawdown");
     }
@@ -231,8 +290,31 @@ export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): Loa
     const date = addMonths(loan.start, number - 1);
     applyEvents(date);
     if (over) break;
+    while (insurers.length > 0 && insurers[0]!.date <= date) {
+      const change = insurers.shift()!;
+      const mode = change.insuranceMode ?? "none";
+      insurance = {
+        mode,
+        rate: mode === "none" ? 0 : Number(change.insuranceRate ?? "0") / 1200,
+        separate: (change.insuranceSeparate ?? false) && mode !== "none",
+        accountId: change.insuranceAccountId ?? null,
+      };
+      lines.push({
+        date: change.date,
+        kind: "insurance",
+        number: null,
+        capital: 0n,
+        interest: 0n,
+        insurance: 0n,
+        insuranceSeparate: false,
+        insuranceAccountId: null,
+        penalty: 0n,
+        total: 0n,
+        remaining: balance,
+      });
+    }
     const interest = share(balance, monthly);
-    const insurance = share(loan.insuranceMode === "initial" ? loan.amount : balance, insured);
+    const insured = share(insurance.mode === "initial" ? loan.amount : balance, insurance.rate);
     let capital = 0n;
     if (number <= deferred) {
       if (loan.deferralMode === "total") {
@@ -244,6 +326,9 @@ export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): Loa
           capital: 0n,
           interest,
           insurance: 0n,
+          insuranceSeparate: false,
+          insuranceAccountId: null,
+          penalty: 0n,
           total: 0n,
           remaining: balance,
         });
@@ -262,8 +347,11 @@ export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): Loa
       number,
       capital,
       interest,
-      insurance,
-      total: capital + interest + insurance,
+      insurance: insured,
+      insuranceSeparate: insurance.separate,
+      insuranceAccountId: insurance.accountId,
+      penalty: 0n,
+      total: capital + interest + (insurance.separate ? 0n : insured),
       remaining: balance,
     });
     if (capital > 0n && balance === 0n) {
@@ -271,7 +359,8 @@ export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): Loa
     }
   }
   applyEvents();
-  return lines;
+  // Insurer changes and events were pushed as the payments went: back in order of day.
+  return lines.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** The capital left to repay at the end of a day. */
@@ -297,6 +386,18 @@ export function paidLines(lines: readonly LoanLine[]): LoanLine[] {
   return lines.filter(
     (line) => line.total > 0n && (line.kind === "payment" || line.kind === "repayment"),
   );
+}
+
+/** The monthly payments whose insurance is its own entry, outside the payment's split. */
+export function insuranceLines(lines: readonly LoanLine[]): LoanLine[] {
+  return lines.filter(
+    (line) => line.kind === "payment" && line.insuranceSeparate && line.insurance > 0n,
+  );
+}
+
+/** The early repayments and buy-backs that carry a penalty, paid on the payment account. */
+export function penaltyLines(lines: readonly LoanLine[]): LoanLine[] {
+  return lines.filter((line) => line.penalty > 0n);
 }
 
 /** How far apart a payment and its journal entry may be and still be the same one. */

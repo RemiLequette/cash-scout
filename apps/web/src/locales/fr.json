@@ -637,7 +637,8 @@
     "event": {
       "drawdown": "Déblocage",
       "repayment": "Remboursement anticipé",
-      "buyback": "Rachat"
+      "buyback": "Rachat",
+      "insurance": "Changement d'assureur"
     },
     "eventAmount": "Montant",
     "allRemaining": "Tout ce qui reste",
@@ -661,6 +662,11 @@
     "inJournal": {
       "planned": "Prévue",
       "reconciled": "Rapprochée"
-    }
+    },
+    "insuranceSeparate": "Assurance hors de l'échéance",
+    "insuranceAccount": "Compte de l'assurance",
+    "insuranceApart": "Payée à part de l'échéance",
+    "penalty": "Pénalité",
+    "penaltyPart": "Sous-catégorie des pénalités"
   }
 }

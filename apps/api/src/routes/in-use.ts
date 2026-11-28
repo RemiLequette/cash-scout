@@ -77,6 +77,7 @@ const referring = new Map<PgTable, Referring[]>([
       ["loans", loan, loan.capitalSubCategoryId],
       ["loans", loan, loan.interestSubCategoryId],
       ["loans", loan, loan.insuranceSubCategoryId],
+      ["loans", loan, loan.penaltySubCategoryId],
     ],
   ],
   [

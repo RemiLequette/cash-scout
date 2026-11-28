@@ -1,6 +1,6 @@
 {
-  "id": "4e115082-05ec-45f4-856d-7c22928ea475",
-  "prevId": "04613518-436c-4d43-b15f-520530e59e19",
+  "id": "6d006f6f-c1d4-4075-a3cd-718677a148da",
+  "prevId": "3c4f5897-8cdc-4f52-88c3-54315678796d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2010,6 +2010,14 @@
           "primaryKey": false,
           "notNull": false
         },
+        "loan_part": {
+          "name": "loan_part",
+          "type": "loan_part",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'payment'"
+        },
         "import_batch_id": {
           "name": "import_batch_id",
           "type": "uuid",
@@ -2292,6 +2300,10 @@
           "name": "journal_entry_split_check",
           "value": "(\"journal_entry\".\"split_id\" IS NOT NULL OR NOT \"journal_entry\".\"split_remainder\") AND (\"journal_entry\".\"split_id\" IS NULL OR (\"journal_entry\".\"transfer_id\" IS NULL AND \"journal_entry\".\"compensation_id\" IS NULL))"
         },
+        "journal_entry_loan_check": {
+          "name": "journal_entry_loan_check",
+          "value": "\"journal_entry\".\"loan_id\" IS NOT NULL OR \"journal_entry\".\"loan_part\" = 'payment'"
+        },
         "journal_entry_original_check": {
           "name": "journal_entry_original_check",
           "value": "(\"journal_entry\".\"original_amount\" IS NULL) = (\"journal_entry\".\"original_currency\" IS NULL)"
@@ -2371,6 +2383,25 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'0'"
+        },
+        "insurance_separate": {
+          "name": "insurance_separate",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "insurance_account_id": {
+          "name": "insurance_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "penalty_sub_category_id": {
+          "name": "penalty_sub_category_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "deferral_mode": {
           "name": "deferral_mode",
@@ -2523,6 +2554,36 @@
           ],
           "onUpdate": "no action",
           "onDelete": "no action"
+        },
+        "loan_insurance_account_id_book_id_book_account_id_book_id_fk": {
+          "name": "loan_insurance_account_id_book_id_book_account_id_book_id_fk",
+          "tableFrom": "loan",
+          "columnsFrom": [
+            "insurance_account_id",
+            "book_id"
+          ],
+          "tableTo": "book_account",
+          "columnsTo": [
+            "id",
+            "book_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "loan_penalty_sub_category_id_book_id_sub_category_id_book_id_fk": {
+          "name": "loan_penalty_sub_category_id_book_id_sub_category_id_book_id_fk",
+          "tableFrom": "loan",
+          "columnsFrom": [
+            "penalty_sub_category_id",
+            "book_id"
+          ],
+          "tableTo": "sub_category",
+          "columnsTo": [
+            "id",
+            "book_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2611,6 +2672,38 @@
           "notNull": true,
           "default": "'payment'"
         },
+        "insurance_mode": {
+          "name": "insurance_mode",
+          "type": "loan_insurance",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "insurance_rate": {
+          "name": "insurance_rate",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "insurance_separate": {
+          "name": "insurance_separate",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "insurance_account_id": {
+          "name": "insurance_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "penalty": {
+          "name": "penalty",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2678,6 +2771,21 @@
           ],
           "onUpdate": "no action",
           "onDelete": "cascade"
+        },
+        "loan_event_insurance_account_id_book_id_book_account_id_book_id_fk": {
+          "name": "loan_event_insurance_account_id_book_id_book_account_id_book_id_fk",
+          "tableFrom": "loan_event",
+          "columnsFrom": [
+            "insurance_account_id",
+            "book_id"
+          ],
+          "tableTo": "book_account",
+          "columnsTo": [
+            "id",
+            "book_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2697,9 +2805,13 @@
           "name": "loan_event_amount_check",
           "value": "\"loan_event\".\"amount\" IS NULL OR \"loan_event\".\"amount\" > 0"
         },
+        "loan_event_penalty_check": {
+          "name": "loan_event_penalty_check",
+          "value": "\"loan_event\".\"penalty\" IS NULL OR (\"loan_event\".\"penalty\" > 0 AND \"loan_event\".\"kind\" IN ('repayment', 'buyback'))"
+        },
         "loan_event_kind_check": {
           "name": "loan_event_kind_check",
-          "value": "(\"loan_event\".\"kind\" <> 'drawdown' OR \"loan_event\".\"amount\" IS NOT NULL) AND (\"loan_event\".\"kind\" <> 'buyback' OR \"loan_event\".\"amount\" IS NULL)"
+          "value": "(\"loan_event\".\"kind\" <> 'drawdown' OR \"loan_event\".\"amount\" IS NOT NULL) AND (\"loan_event\".\"kind\" NOT IN ('buyback', 'insurance') OR \"loan_event\".\"amount\" IS NULL) AND ((\"loan_event\".\"kind\" = 'insurance') = (\"loan_event\".\"insurance_mode\" IS NOT NULL AND \"loan_event\".\"insurance_rate\" IS NOT NULL))"
         }
       },
       "isRLSEnabled": false
@@ -3379,7 +3491,8 @@
       "values": [
         "drawdown",
         "repayment",
-        "buyback"
+        "buyback",
+        "insurance"
       ]
     },
     "public.loan_insurance": {
@@ -3389,6 +3502,15 @@
         "none",
         "initial",
         "remaining"
+      ]
+    },
+    "public.loan_part": {
+      "name": "loan_part",
+      "schema": "public",
+      "values": [
+        "payment",
+        "insurance",
+        "penalty"
       ]
     },
     "public.loan_repayment_keeps": {

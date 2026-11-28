@@ -699,6 +699,7 @@ export function referenceRoutes(db: Db) {
             "capitalSubCategoryId",
             "interestSubCategoryId",
             "insuranceSubCategoryId",
+            "penaltySubCategoryId",
           ] as const) {
             await tx
               .update(loan)

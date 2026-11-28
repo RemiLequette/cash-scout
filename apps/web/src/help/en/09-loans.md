@@ -7,7 +7,7 @@
 - **Payment account**: the account the payments are taken from. The loan is in its currency.
 - **Amount borrowed**, **yearly rate** (nominal: a month's interest is a twelfth of it) and **number of monthly payments**, deferred ones included.
 - **First payment**: the date of the first payment; the next ones fall on the same day of each month (the last day of a shorter month).
-- **Insurance**: none, a rate on the capital borrowed (the insurance stays the same), or a rate on the remaining capital (it falls with it).
+- **Insurance**: none, a rate on the capital borrowed (the insurance stays the same), or a rate on the remaining capital (it falls with it). **Insurance outside the payment** makes it an entry of its own, on the account you choose (the payment account by default), instead of a part of the payment.
 - **Deferral**: for the first months, either **interest only** (no capital is repaid), or **nothing paid** (the interest joins the capital).
 - **Sub-categories** of the capital, the interest and the insurance. Repaying capital is saving: choose a sub-category of a category of a **saving** nature for it, and spending ones for the interest and the insurance. Transfer categories are not offered.
 
@@ -18,8 +18,9 @@ Payments are constant: the interest is computed on the capital left, and the res
 An event changes the schedule from its date. It counts after the payment of the same day.
 
 - **Drawdown**: capital released in steps, as in a purchase off plan. As soon as a loan has drawdowns, only what they release is borrowed; their total cannot exceed the amount.
-- **Early repayment**: an amount, or all that is left. For a part, choose what it **keeps**: the payment (the loan is shorter) or the term (the payment is lower).
-- **Buy-back**: the loan is repaid in full by another one. Enter the new loan as a loan of its own. The new lender pays the old one, so no payment is planned for the buy-back.
+- **Early repayment**: an amount, or all that is left. It can carry a **penalty**, which is a cost, not capital: name the loan's **penalty sub-category** (spending) to enter one. For a part, choose what it **keeps**: the payment (the loan is shorter) or the term (the payment is lower).
+- **Change of insurer**: from its date, the insurance has new terms: none, a rate on the capital borrowed or on the remaining capital, inside or outside the payment, on any account of the loan's currency. It counts for the payments of that day on.
+- **Buy-back**: the loan is repaid in full by another one. A **penalty** can be entered, as for an early repayment. Enter the new loan as a loan of its own. The new lender pays the old one, so no payment is planned for the buy-back.
 
 ## Remaining capital
 
@@ -29,7 +30,7 @@ The capital repaid in the journal is checked against the schedule, month by mont
 
 ## Planning a year
 
-Choose the loan and the year, then **Plan**. For each payment of the year, the journal gets a [split](04-journal.md) on the payment account: the capital, the interest and the insurance, each in its sub-category, with the loan's name as description. A payment with a single part (an early repayment, or interest only with no insurance) is an ordinary planned entry.
+Choose the loan and the year, then **Plan**. For each payment of the year, the journal gets a [split](04-journal.md) on the payment account: the capital, the interest and the insurance, each in its sub-category, with the loan's name as description. An insurance outside the payment is not part of the split: it is a planned entry of its own, on its account. A penalty is a planned entry of its own on the payment account, in the penalty sub-category. A payment with a single part (an early repayment, or interest only with no insurance) is an ordinary planned entry.
 
 - The **interest is the remainder**: when a statement is imported, the line is matched to the planned payment and the interest takes the difference with the bank amount, so the capital stays that of the schedule.
 - **Plan** can be run again at any time, after an event for example. It adds the payments the journal lacks, replaces the forecasts it planned whose amounts changed (keeping their day), and removes those the schedule no longer has. Reconciled payments are never touched.

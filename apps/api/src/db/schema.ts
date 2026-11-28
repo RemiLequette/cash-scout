@@ -397,6 +397,7 @@ export const split = pgTable(
 // ---------------------------------------------------------------------------
 
 export const loanInsurance = pgEnum("loan_insurance", ["none", "initial", "remaining"]);
+export const loanPart = pgEnum("loan_part", ["payment", "insurance", "penalty"]);
 export const loanDeferral = pgEnum("loan_deferral", ["none", "interest", "total"]);
 
 export const loan = pgTable(
@@ -416,6 +417,12 @@ export const loan = pgTable(
     start: date("start", { mode: "string" }).notNull(),
     insuranceMode: loanInsurance("insurance_mode").notNull().default("none"),
     insuranceRate: numeric("insurance_rate").notNull().default("0"),
+    /** The insurance is its own entry, outside the payment's split. */
+    insuranceSeparate: boolean("insurance_separate").notNull().default(false),
+    /** Account of a separate insurance; none for the payment account. */
+    insuranceAccountId: uuid("insurance_account_id"),
+    /** Sub-category of the penalties of early repayments and buy-backs. */
+    penaltySubCategoryId: uuid("penalty_sub_category_id"),
     deferralMode: loanDeferral("deferral_mode").notNull().default("none"),
     deferralMonths: integer("deferral_months").notNull().default(0),
     /** The account the payments are taken from. */
@@ -445,6 +452,14 @@ export const loan = pgTable(
       columns: [t.insuranceSubCategoryId, t.bookId],
       foreignColumns: [subCategory.id, subCategory.bookId],
     }),
+    foreignKey({
+      columns: [t.insuranceAccountId, t.bookId],
+      foreignColumns: [bookAccount.id, bookAccount.bookId],
+    }),
+    foreignKey({
+      columns: [t.penaltySubCategoryId, t.bookId],
+      foreignColumns: [subCategory.id, subCategory.bookId],
+    }),
     check("loan_amount_check", sql`${t.amount} > 0`),
     check("loan_term_check", sql`${t.term} BETWEEN 1 AND 600`),
     check("loan_rate_check", sql`${t.rate} >= 0 AND ${t.insuranceRate} >= 0`),
@@ -459,7 +474,12 @@ export const loan = pgTable(
   ],
 );
 
-export const loanEventKind = pgEnum("loan_event_kind", ["drawdown", "repayment", "buyback"]);
+export const loanEventKind = pgEnum("loan_event_kind", [
+  "drawdown",
+  "repayment",
+  "buyback",
+  "insurance",
+]);
 export const loanRepaymentKeeps = pgEnum("loan_repayment_keeps", ["payment", "term"]);
 
 /** A dated event that changes a loan's schedule from its date. */
@@ -475,6 +495,13 @@ export const loanEvent = pgTable(
     amount: bigint("amount", { mode: "bigint" }),
     /** What a partial repayment leaves as it was: the payment or the term. */
     keeps: loanRepaymentKeeps("keeps").notNull().default("payment"),
+    /** For a change of insurer: the insurance from the date on. */
+    insuranceMode: loanInsurance("insurance_mode"),
+    insuranceRate: numeric("insurance_rate"),
+    insuranceSeparate: boolean("insurance_separate").notNull().default(false),
+    insuranceAccountId: uuid("insurance_account_id"),
+    /** Paid with an early repayment or a buy-back, on top of the capital, in minor units. */
+    penalty: bigint("penalty", { mode: "bigint" }),
     ...timestamps,
     version: version(),
   },
@@ -485,10 +512,18 @@ export const loanEvent = pgTable(
       columns: [t.loanId, t.bookId],
       foreignColumns: [loan.id, loan.bookId],
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.insuranceAccountId, t.bookId],
+      foreignColumns: [bookAccount.id, bookAccount.bookId],
+    }),
     check("loan_event_amount_check", sql`${t.amount} IS NULL OR ${t.amount} > 0`),
     check(
+      "loan_event_penalty_check",
+      sql`${t.penalty} IS NULL OR (${t.penalty} > 0 AND ${t.kind} IN ('repayment', 'buyback'))`,
+    ),
+    check(
       "loan_event_kind_check",
-      sql`(${t.kind} <> 'drawdown' OR ${t.amount} IS NOT NULL) AND (${t.kind} <> 'buyback' OR ${t.amount} IS NULL)`,
+      sql`(${t.kind} <> 'drawdown' OR ${t.amount} IS NOT NULL) AND (${t.kind} NOT IN ('buyback', 'insurance') OR ${t.amount} IS NULL) AND ((${t.kind} = 'insurance') = (${t.insuranceMode} IS NOT NULL AND ${t.insuranceRate} IS NOT NULL))`,
     ),
   ],
 );
@@ -532,6 +567,8 @@ export const journalEntry = pgTable(
     splitRemainder: boolean("split_remainder").notNull().default(false),
     /** The loan whose schedule planned the entry. */
     loanId: uuid("loan_id"),
+    /** What the entry is of its loan: its payment, its insurance paid apart, or a penalty. */
+    loanPart: loanPart("loan_part").notNull().default("payment"),
     /** The statement import that created the entry. */
     importBatchId: uuid("import_batch_id").references((): AnyPgColumn => importBatch.id, {
       onDelete: "set null",
@@ -579,6 +616,7 @@ export const journalEntry = pgTable(
       foreignColumns: [loan.id, loan.bookId],
     }),
     index("journal_entry_loan_idx").on(t.loanId),
+    check("journal_entry_loan_check", sql`${t.loanId} IS NOT NULL OR ${t.loanPart} = 'payment'`),
     foreignKey({
       columns: [t.accountId, t.bookId],
       foreignColumns: [bookAccount.id, bookAccount.bookId],

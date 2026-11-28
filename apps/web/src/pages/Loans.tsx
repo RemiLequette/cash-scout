@@ -18,6 +18,7 @@ import {
   Paper,
   Select,
   Stack,
+  Switch,
   Table,
   Text,
   TextInput,
@@ -54,12 +55,15 @@ interface LoanDraft {
   start: string;
   insuranceMode: string;
   insuranceRate: string;
+  insuranceSeparate: boolean;
+  insuranceAccountId: string | null;
   deferralMode: string;
   deferralMonths: string;
   accountId: string | null;
   capitalSubCategoryId: string | null;
   interestSubCategoryId: string | null;
   insuranceSubCategoryId: string | null;
+  penaltySubCategoryId: string | null;
 }
 
 const emptyLoan = (): LoanDraft => ({
@@ -71,12 +75,15 @@ const emptyLoan = (): LoanDraft => ({
   start: today(),
   insuranceMode: "none",
   insuranceRate: "",
+  insuranceSeparate: false,
+  insuranceAccountId: null,
   deferralMode: "none",
   deferralMonths: "",
   accountId: null,
   capitalSubCategoryId: null,
   interestSubCategoryId: null,
   insuranceSubCategoryId: null,
+  penaltySubCategoryId: null,
 });
 
 const draftOf = (loan: Loan): LoanDraft => ({
@@ -90,12 +97,15 @@ const draftOf = (loan: Loan): LoanDraft => ({
   start: loan.start,
   insuranceMode: loan.insuranceMode,
   insuranceRate: loan.insuranceMode === "none" ? "" : loan.insuranceRate,
+  insuranceSeparate: loan.insuranceSeparate,
+  insuranceAccountId: loan.insuranceAccountId,
   deferralMode: loan.deferralMode,
   deferralMonths: loan.deferralMonths === 0 ? "" : String(loan.deferralMonths),
   accountId: loan.accountId,
   capitalSubCategoryId: loan.capitalSubCategoryId,
   interestSubCategoryId: loan.interestSubCategoryId,
   insuranceSubCategoryId: loan.insuranceSubCategoryId,
+  penaltySubCategoryId: loan.penaltySubCategoryId,
 });
 
 /** Checks the draft as the API will: the body, or the fields that are wrong. */
@@ -109,12 +119,16 @@ function validateLoan(draft: LoanDraft, currency: string | undefined) {
     start: draft.start,
     insuranceMode: draft.insuranceMode,
     insuranceRate: decimalInput(draft.insuranceRate) || "0",
+    insuranceSeparate: draft.insuranceMode !== "none" && draft.insuranceSeparate,
+    insuranceAccountId:
+      draft.insuranceMode !== "none" && draft.insuranceSeparate ? draft.insuranceAccountId : null,
     deferralMode: draft.deferralMode,
     deferralMonths: draft.deferralMode === "none" ? 0 : Number(draft.deferralMonths),
     accountId: draft.accountId ?? "",
     capitalSubCategoryId: draft.capitalSubCategoryId ?? "",
     interestSubCategoryId: draft.interestSubCategoryId ?? "",
     insuranceSubCategoryId: draft.insuranceMode === "none" ? null : draft.insuranceSubCategoryId,
+    penaltySubCategoryId: draft.penaltySubCategoryId,
   };
   const errors = new Set<string>();
   const parsed = loanUpdateSchema.safeParse({ ...candidate, version: draft.version });
@@ -170,6 +184,11 @@ function LoanForm({
     kept(initial.interestSubCategoryId),
     counted,
   );
+  const penaltyOptions = useSubCategoryOptions(
+    reference,
+    kept(initial.penaltySubCategoryId),
+    counted,
+  );
   const insuranceOptions = useSubCategoryOptions(
     reference,
     kept(initial.insuranceSubCategoryId),
@@ -185,6 +204,12 @@ function LoanForm({
         a.currency === reference.accounts.find((x) => x.id === initial.accountId)?.currency,
     )
     .map((a) => ({ value: a.id, label: `${nameOf(a.names)} (${a.currency})` }));
+
+  // A separate insurance is in the currency of the loan.
+  const sameCurrency = reference.accounts
+    .filter((a) => a.currency === account?.currency)
+    .filter((a) => !a.archived || a.id === initial.insuranceAccountId)
+    .map((a) => ({ value: a.id, label: nameOf(a.names) }));
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -288,6 +313,25 @@ function LoanForm({
             />
           )}
         </Group>
+        {draft.insuranceMode !== "none" && (
+          <Group grow align="flex-end">
+            <Switch
+              label={t("loans.insuranceSeparate")}
+              checked={draft.insuranceSeparate}
+              onChange={(e) => set({ insuranceSeparate: e.currentTarget.checked })}
+            />
+            {draft.insuranceSeparate && (
+              <Select
+                label={t("loans.insuranceAccount")}
+                placeholder={t("loans.account")}
+                clearable
+                data={sameCurrency}
+                value={draft.insuranceAccountId}
+                onChange={(value) => set({ insuranceAccountId: value })}
+              />
+            )}
+          </Group>
+        )}
         <Group grow align="flex-start">
           <Select
             label={t("loans.deferral")}
@@ -339,6 +383,14 @@ function LoanForm({
             onChange={(value) => set({ insuranceSubCategoryId: value })}
           />
         )}
+        <Select
+          label={t("loans.penaltyPart")}
+          searchable
+          clearable
+          data={penaltyOptions}
+          value={draft.penaltySubCategoryId}
+          onChange={(value) => set({ penaltySubCategoryId: value })}
+        />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
             {t("common.cancel")}
@@ -360,6 +412,11 @@ interface EventDraft {
   kind: string;
   amount: string;
   keeps: string;
+  insuranceMode: string;
+  insuranceRate: string;
+  insuranceSeparate: boolean;
+  insuranceAccountId: string | null;
+  penalty: string;
 }
 
 const draftOfEvent = (event: LoanEventRow): EventDraft => ({
@@ -369,6 +426,23 @@ const draftOfEvent = (event: LoanEventRow): EventDraft => ({
   kind: event.kind,
   amount: event.amount ?? "",
   keeps: event.keeps,
+  insuranceMode: event.insuranceMode ?? "remaining",
+  insuranceRate: event.insuranceMode === "none" ? "" : (event.insuranceRate ?? ""),
+  insuranceSeparate: event.insuranceSeparate,
+  insuranceAccountId: event.insuranceAccountId,
+  penalty: event.penalty ?? "",
+});
+
+const newEvent = (): EventDraft => ({
+  date: today(),
+  kind: "repayment",
+  amount: "",
+  keeps: "payment",
+  insuranceMode: "remaining",
+  insuranceRate: "",
+  insuranceSeparate: false,
+  insuranceAccountId: null,
+  penalty: "",
 });
 
 function EventForm({
@@ -387,7 +461,14 @@ function EventForm({
   const [draft, setDraft] = useState(initial);
   const [invalid, setInvalid] = useState(false);
   const set = (patch: Partial<EventDraft>) => setDraft({ ...draft, ...patch });
-  const needsAmount = draft.kind !== "buyback";
+  const needsAmount = draft.kind === "drawdown" || draft.kind === "repayment";
+  const insurer = draft.kind === "insurance";
+  const reference = useReference(bookId);
+  const nameOf = useNameOf(reference.data?.defaultLanguage);
+  const accounts = (reference.data?.accounts ?? [])
+    .filter((a) => a.currency === loan.currency)
+    .filter((a) => !a.archived || a.id === initial.insuranceAccountId)
+    .map((a) => ({ value: a.id, label: nameOf(a.names) }));
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -397,6 +478,17 @@ function EventForm({
       kind: draft.kind,
       amount: needsAmount && amount !== "" ? amount : null,
       keeps: draft.keeps,
+      insuranceMode: insurer ? draft.insuranceMode : null,
+      insuranceRate: decimalInput(draft.insuranceRate) || "0",
+      insuranceSeparate: insurer && draft.insuranceMode !== "none" && draft.insuranceSeparate,
+      insuranceAccountId:
+        insurer && draft.insuranceMode !== "none" && draft.insuranceSeparate
+          ? draft.insuranceAccountId
+          : null,
+      penalty:
+        draft.kind === "repayment" || draft.kind === "buyback"
+          ? decimalInput(draft.penalty) || null
+          : null,
       version: draft.version,
     };
     const parsed = loanEventInputSchema.safeParse(candidate);
@@ -426,7 +518,7 @@ function EventForm({
         <Select
           label={t("loans.eventKind")}
           allowDeselect={false}
-          data={(["drawdown", "repayment", "buyback"] as const).map((kind) => ({
+          data={(["drawdown", "repayment", "buyback", "insurance"] as const).map((kind) => ({
             value: kind,
             label: t(`loans.event.${kind}`),
           }))}
@@ -458,6 +550,59 @@ function EventForm({
             />
           )}
         </Group>
+        {(draft.kind === "repayment" || draft.kind === "buyback") && (
+          <TextInput
+            label={`${t("loans.penalty")} (${loan.currency})`}
+            inputMode="decimal"
+            value={draft.penalty}
+            onChange={(e) => set({ penalty: e.currentTarget.value })}
+          />
+        )}
+        {insurer && (
+          <>
+            <Group grow align="flex-start">
+              <Select
+                label={t("loans.insurance")}
+                allowDeselect={false}
+                data={insuranceModes.map((mode) => ({
+                  value: mode,
+                  label: t(`loans.insuranceMode.${mode}`),
+                }))}
+                value={draft.insuranceMode}
+                onChange={(value) => set({ insuranceMode: value ?? "none" })}
+              />
+              {draft.insuranceMode !== "none" && (
+                <TextInput
+                  label={t("loans.insuranceRate")}
+                  required
+                  inputMode="decimal"
+                  value={draft.insuranceRate}
+                  error={invalid && !draft.insuranceRate ? t("loans.invalid") : undefined}
+                  onChange={(e) => set({ insuranceRate: e.currentTarget.value })}
+                />
+              )}
+            </Group>
+            {draft.insuranceMode !== "none" && (
+              <Group grow align="flex-end">
+                <Switch
+                  label={t("loans.insuranceSeparate")}
+                  checked={draft.insuranceSeparate}
+                  onChange={(e) => set({ insuranceSeparate: e.currentTarget.checked })}
+                />
+                {draft.insuranceSeparate && (
+                  <Select
+                    label={t("loans.insuranceAccount")}
+                    placeholder={t("loans.account")}
+                    clearable
+                    data={accounts}
+                    value={draft.insuranceAccountId}
+                    onChange={(value) => set({ insuranceAccountId: value })}
+                  />
+                )}
+              </Group>
+            )}
+          </>
+        )}
         {draft.kind === "repayment" && (
           <Select
             label={t("loans.keeps")}
@@ -498,13 +643,7 @@ function Events({ bookId, loan, canEdit }: { bookId: string; loan: Loan; canEdit
       <Group justify="space-between">
         <Title order={5}>{t("loans.events")}</Title>
         {canEdit && (
-          <Button
-            size="compact-sm"
-            variant="light"
-            onClick={() =>
-              setEditing({ date: today(), kind: "repayment", amount: "", keeps: "payment" })
-            }
-          >
+          <Button size="compact-sm" variant="light" onClick={() => setEditing(newEvent())}>
             {t("loans.addEvent")}
           </Button>
         )}
@@ -527,14 +666,25 @@ function Events({ bookId, loan, canEdit }: { bookId: string; loan: Loan; canEdit
                 <Table.Td>{formatDate(event.date, i18n.language)}</Table.Td>
                 <Table.Td>{t(`loans.event.${event.kind}`)}</Table.Td>
                 <Table.Td ta="right">
-                  {event.amount === null
-                    ? t("loans.allRemaining")
-                    : money(event.amount, loan.currency)}
+                  {event.kind === "insurance"
+                    ? `${t(`loans.insuranceMode.${event.insuranceMode ?? "none"}`)}${event.insuranceMode === "none" ? "" : ` · ${event.insuranceRate} %`}`
+                    : event.amount === null
+                      ? t("loans.allRemaining")
+                      : money(event.amount, loan.currency)}
                 </Table.Td>
                 <Table.Td>
-                  {event.kind === "repayment" && event.amount !== null
-                    ? t(`loans.keepsOption.${event.keeps}`)
-                    : ""}
+                  {[
+                    event.kind === "repayment" && event.amount !== null
+                      ? t(`loans.keepsOption.${event.keeps}`)
+                      : event.kind === "insurance" && event.insuranceSeparate
+                        ? t("loans.insuranceApart")
+                        : "",
+                    event.penalty
+                      ? `${t("loans.penalty")} ${money(event.penalty, loan.currency)}`
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </Table.Td>
                 <Table.Td>
                   {canEdit && (
@@ -661,6 +811,7 @@ function Schedule({
             <Table.Th ta="right">{t("loans.capital")}</Table.Th>
             <Table.Th ta="right">{t("loans.interest")}</Table.Th>
             <Table.Th ta="right">{t("loans.insuranceColumn")}</Table.Th>
+            <Table.Th ta="right">{t("loans.penalty")}</Table.Th>
             <Table.Th ta="right">{t("loans.total")}</Table.Th>
             <Table.Th ta="right">{t("loans.remaining")}</Table.Th>
             <Table.Th>{t("loans.journal")}</Table.Th>
@@ -677,15 +828,54 @@ function Schedule({
               </Table.Td>
               <Table.Td ta="right">{money(line.capital, loan.currency)}</Table.Td>
               <Table.Td ta="right">{money(line.interest, loan.currency)}</Table.Td>
-              <Table.Td ta="right">{money(line.insurance, loan.currency)}</Table.Td>
+              <Table.Td ta="right">
+                {line.insuranceSeparate && line.insurance !== "0.00" ? (
+                  <Tooltip label={t("loans.insuranceApart")}>
+                    <Text span c="dimmed" size="sm">
+                      {money(line.insurance, loan.currency)} ↗
+                    </Text>
+                  </Tooltip>
+                ) : (
+                  money(line.insurance, loan.currency)
+                )}
+              </Table.Td>
+              <Table.Td ta="right">
+                {line.penalty !== "0.00" && (
+                  <Text span c="dimmed" size="sm">
+                    {money(line.penalty, loan.currency)} ↗
+                  </Text>
+                )}
+              </Table.Td>
               <Table.Td ta="right">{money(line.total, loan.currency)}</Table.Td>
               <Table.Td ta="right">{money(line.remaining, loan.currency)}</Table.Td>
               <Table.Td>
-                {line.journal && (
-                  <Badge variant="light" color={line.journal === "reconciled" ? "green" : "blue"}>
-                    {t(`loans.inJournal.${line.journal}`)}
-                  </Badge>
-                )}
+                <Group gap={4} wrap="nowrap">
+                  {line.journal && (
+                    <Badge variant="light" color={line.journal === "reconciled" ? "green" : "blue"}>
+                      {t(`loans.inJournal.${line.journal}`)}
+                    </Badge>
+                  )}
+                  {line.penaltyJournal && (
+                    <Tooltip label={t("loans.penalty")}>
+                      <Badge
+                        variant="outline"
+                        color={line.penaltyJournal === "reconciled" ? "green" : "blue"}
+                      >
+                        {t(`loans.inJournal.${line.penaltyJournal}`)} ↗
+                      </Badge>
+                    </Tooltip>
+                  )}
+                  {line.insuranceJournal && (
+                    <Tooltip label={t("loans.insuranceApart")}>
+                      <Badge
+                        variant="outline"
+                        color={line.insuranceJournal === "reconciled" ? "green" : "blue"}
+                      >
+                        {t(`loans.inJournal.${line.insuranceJournal}`)} ↗
+                      </Badge>
+                    </Tooltip>
+                  )}
+                </Group>
               </Table.Td>
             </Table.Tr>
           ))}
