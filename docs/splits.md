@@ -62,7 +62,7 @@ One line per part, as for the two sides of a compensation. Each line is marked a
 
 ## Loans
 
-A payment is split into capital and interest, each an ordinary sub-category. The capital may belong to a nature of its own, to keep it apart from spending. The capital left to repay is not followed.
+A payment is split into capital and interest, each an ordinary sub-category. The capital may belong to a nature of its own, to keep it apart from spending. A [loan](wealth.md#loan) computes its schedule and plans its payments as splits, with the interest as the remainder; it also follows the capital left to repay.
 
 ## Planning
 
@@ -98,7 +98,7 @@ A payment is split into capital and interest, each an ordinary sub-category. The
 ## Out of scope
 
 - Following rental properties (leases, tenants, charge advances and their yearly settlement): a separate application.
-- Computing a loan's capital and interest from its terms.
+- Computing a loan's capital and interest from its terms: done by [loans](wealth.md#loan).
 - Loan accounts: a part that is a transfer, to follow the capital left to repay.
 - Import rules that create splits.
 - Remembered schedules.

@@ -778,6 +778,8 @@ export function PlanEntries({
       (e) =>
         !e.transferId &&
         !e.compensationId &&
+        // Payments of a loan are planned again from its schedule.
+        !e.loanId &&
         Number(e.amount) !== 0 &&
         !accounts.get(e.accountId!)?.archived &&
         subCategories.some((s) => s.value === e.subCategoryId && !s.archived) &&

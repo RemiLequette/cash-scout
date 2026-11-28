@@ -12,3 +12,4 @@ export * from "./opening.js";
 export * from "./statement.js";
 export * from "./review.js";
 export * from "./rules.js";
+export * from "./loan.js";

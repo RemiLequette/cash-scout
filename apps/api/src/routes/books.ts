@@ -24,6 +24,7 @@ import { compensationRoutes } from "./compensations.js";
 import { splitRoutes } from "./splits.js";
 import { dashboardRoutes } from "./dashboard.js";
 import { journalRoutes } from "./journal.js";
+import { loanRoutes } from "./loans.js";
 import { statementRoutes } from "./statements.js";
 import { transferRoutes } from "./transfers.js";
 import { referenceRoutes } from "./reference.js";
@@ -192,6 +193,7 @@ export function booksRoutes(db: Db, events: BookEvents) {
       .route("/:bookId/budgets", budgetsRoutes(db))
       .route("/:bookId/dashboard", dashboardRoutes(db))
       .route("/:bookId/journal", journalRoutes(db))
+      .route("/:bookId/loans", loanRoutes(db))
       .route("/:bookId/transfers", transferRoutes(db))
       .route("/:bookId/compensations", compensationRoutes(db))
       .route("/:bookId/splits", splitRoutes(db))

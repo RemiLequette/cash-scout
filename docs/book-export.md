@@ -21,6 +21,7 @@ Copy one book, to the same instance or another one. This also restores one book 
 | Reference data | `category_group`, `nature`, `balance`, `balance_nature`, `category`, `sub_category` |
 | Accounts       | `book_account`, with opening balances                                               |
 | Journal        | `journal_entry`, `transfer`, `compensation`, `split`                                |
+| Loans          | `loan`, `loan_event`                                                                |
 | Budgets        | `category_budget`, `budget_settlement`                                              |
 | Import         | `import_rule`, `import_batch`, `import_line`                                        |
 

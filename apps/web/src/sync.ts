@@ -6,14 +6,16 @@ function reload(queryClient: QueryClient, bookId: string, scope: string) {
   const keys: string[][] =
     scope === "reference"
       ? // Merging sub-categories moves entries; names and archiving show in the journal.
-        [["reference"], ["journal"], ["budgets"]]
+        [["reference"], ["journal"], ["budgets"], ["loans"]]
       : scope === "journal"
-        ? [["journal"], ["budgets"]]
+        ? [["journal"], ["budgets"], ["loans"]]
         : scope === "members"
           ? [["members"], ["candidates"]]
           : scope === "budgets"
             ? [["budgets"]]
-            : [];
+            : scope === "loans"
+              ? [["loans"], ["journal"], ["budgets"]]
+              : [];
   if (keys.length === 0) {
     // The book itself (name, languages, deletion), or something unknown: reload it all.
     void queryClient.invalidateQueries({ queryKey: ["books"] });

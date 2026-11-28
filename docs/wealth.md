@@ -1,6 +1,8 @@
 # Wealth
 
-Design notes from a brainstorm. Not built.
+Design notes from a brainstorm.
+
+**Built:** loans (the model and API at `/books/:bookId/loans`, the schedule in `packages/domain`, the planned splits of a year, the remaining capital and its check against the journal, the Loans page, the book export, the online help and the README). Holdings, valuations, net worth and performance are not built.
 
 ## Intent
 
@@ -44,35 +46,50 @@ A value at a date, entered by hand: `(holding, date, value, note)`, in the book 
 - No detail of a portfolio: one value for the whole holding.
 - Between two valuations the holding is worth the last one; no index or market price fills the gap.
 
-### Loan
+### Loan (built)
 
-| Field     | Notes                                                                    |
-| --------- | ------------------------------------------------------------------------ |
-| Name      | And the lender                                                           |
-| Amount    | Capital borrowed                                                         |
-| Rate      | Yearly nominal rate                                                      |
-| Term      | Number of monthly payments                                               |
-| Start     | Date of the first payment                                                |
-| Insurance | A rate on the capital borrowed, a rate on the remaining capital, or none |
-| Deferral  | Optional: months with interest only, or with nothing paid                |
-| Account   | The account the payments are taken from                                  |
-| Parts     | The sub-categories of the capital, the interest and the insurance        |
+| Field     | Notes                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------ |
+| Name      | And the lender, and a free note (contract number, contact)                                 |
+| Amount    | Capital borrowed                                                                           |
+| Rate      | Yearly nominal rate                                                                        |
+| Term      | Number of monthly payments, deferred ones included                                         |
+| Start     | Date of the first payment                                                                  |
+| Insurance | A rate on the capital borrowed, a rate on the remaining capital, or none                   |
+| Deferral  | Optional: months with interest only, or with nothing paid (the interest joins the capital) |
+| Account   | The account the payments are taken from                                                    |
+| Parts     | The sub-categories of the capital, the interest and the insurance                          |
 
 Events, dated, change the schedule from their date:
 
 - **Drawdown**: capital released in steps, as in a purchase off plan.
-- **Early repayment**: part of the capital, or all of it.
+- **Early repayment**: part of the capital, or all of it. A part keeps either the payment (the loan is shorter) or the term (the payment is lower).
+- Each event can carry a free **note**.
 - **Buy-back**: a loan is repaid in full by another one. The old loan ends with an early repayment; the new one is a loan of its own.
+- **Penalty**: a repayment or a buy-back can carry a penalty. It is a cost of its own, not part of the capital: a planned entry on the payment account, in the loan's penalty sub-category, which the loan must name to have one.
+- **Change of insurer**: from its date, the insurance has new terms (none, a rate on the capital borrowed, or on the remaining capital). It counts for the payments of that day on, unlike the other events.
 
-The schedule is never stored: `packages/domain` computes it from the loan and its events, like the cash projection.
+The schedule is never stored: `packages/domain` computes it from the loan and its events, like the cash projection (`loanSchedule`, in `loan.ts`).
+
+How it is computed:
+
+- A French constant-payment loan: each month the interest is a twelfth of the yearly rate on the capital left, the rest of the payment repays capital, the last payment takes what is left. Amounts are minor units, rounded to the nearest.
+- The insurance can be **paid apart**: then it is not in the payment (the payment's total leaves it out), and it has its own account, in the loan's currency, which is the payment account by default. A change of insurer can move it in or out of the payment.
+- The insurance is a twelfth of its rate on the capital borrowed, or on the capital left at the start of the month; it is paid during a deferral of interest only, and not during one of nothing paid.
+- Without drawdowns the whole amount is released at the start. With them, only what they release is borrowed, and their total cannot exceed the amount; each one sets a new payment.
+- An event counts after the payments of its date and before the next one. A repayment of all that is left, or a buy-back, ends the loan.
+- A loan whose drawdowns predate the journal is entered with its terms and events as they were: the schedule is computed from its start, so no opening capital is needed.
+- Out of the loan's currency nothing is converted: its amounts are in the currency of its payment account, which cannot change.
 
 ## What the app does with it
 
 ### Loans in the budget
 
 - From its schedule, a loan **generates planned splits** for a year: one per payment, on its account, with capital, interest and insurance as parts. The capital part is in a sub-category of a saving nature: repaying capital is saving.
-- The remainder takes the gap with the statement line, which the import matches as for any planned split.
-- The **remaining capital** at a date comes from the schedule. The capital repaid in the journal is checked against it, and a gap is flagged.
+- The **interest is the remainder**: it takes the gap with the statement line, which the import matches as for any planned split, so the capital stays that of the schedule. A payment with a single part (an early repayment, or interest only with no insurance) is an ordinary planned entry. A buy-back plans nothing: the new lender pays the old one.
+- An insurance paid apart is a planned entry of its own on its account, outside the split, one per payment. So is the penalty of a repayment or a buy-back, on the payment account. `journal_entry.loan_part` tells them from the payment.
+- The entries carry `loan_id`. **Plan** can be run again for a year: it adds the payments the journal lacks, replaces the unreconciled forecasts it planned whose amounts changed (keeping their day), and removes those the schedule no longer has. Reconciled entries are never touched. A payment entered by hand, with the same capital within five days, counts as planned. Deleting a loan unlinks its entries; they stay. Copying the previous year in the budget leaves them out.
+- The **remaining capital** at a date comes from the schedule. The capital repaid in the journal is checked against it: the reconciled entries of the capital sub-category, against the schedules of the loans that share it, month by month from the first entry to the last month reconciled on the payment account (a loan may be older than the journal). A gap of more than one unit of the currency is flagged.
 
 ### Net worth
 
@@ -97,4 +114,3 @@ For a property, a yearly table like the sheets' one: rent, charges, tax, interes
 ## Open questions
 
 - Whether valuations get their own screen, one line per holding with its last value, to fill in at once.
-- How a loan whose drawdowns predate the journal is entered: its events only, or an opening remaining capital.

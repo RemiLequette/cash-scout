@@ -65,13 +65,15 @@ function useViewName(view: BookView): string | undefined {
       ? "book.referenceData"
       : view === "budget"
         ? "book.budget"
-        : view === "dashboard"
-          ? "book.dashboard"
-          : view === "evolution"
-            ? "book.evolution"
-            : view === "import"
-              ? "book.import"
-              : "book.settingsAndMembers",
+        : view === "loans"
+          ? "book.loans"
+          : view === "dashboard"
+            ? "book.dashboard"
+            : view === "evolution"
+              ? "book.evolution"
+              : view === "import"
+                ? "book.import"
+                : "book.settingsAndMembers",
   );
 }
 
@@ -156,6 +158,9 @@ function NavMenu({
             </Menu.Item>
             <Menu.Item leftSection={mark(view === "budget")} onClick={() => open("budget")}>
               {t("book.budget")}
+            </Menu.Item>
+            <Menu.Item leftSection={mark(view === "loans")} onClick={() => open("loans")}>
+              {t("book.loans")}
             </Menu.Item>
             <Menu.Item leftSection={mark(view === "reference")} onClick={() => open("reference")}>
               {t("book.referenceData")}
@@ -323,6 +328,7 @@ const bookRoute = createRoute({
     search.view === "dashboard" ||
     search.view === "evolution" ||
     search.view === "budget" ||
+    search.view === "loans" ||
     search.view === "reference" ||
     search.view === "import" ||
     search.view === "settings"

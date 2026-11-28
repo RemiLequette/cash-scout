@@ -18,7 +18,7 @@ Every feature and decision below serves at least one of these objectives.
 - Yearly budgets, with saving budgeted as a category of its own, and scheduled predictable transactions (O1, O2).
 - A cash projection per account (O2).
 - Pivot views and reports (O3).
-- Wealth, being designed: loans whose schedule feeds the budget, investments and property valued by hand, net worth and returns; see [Wealth](#wealth) (O1–O3).
+- Wealth, being built: loans whose schedule feeds the budget (built), investments and property valued by hand, net worth and returns; see [Wealth](#wealth) (O1–O3).
 - Several users, each working in separate **books**, some private and some shared (O1–O3 for a household as well as for each person).
 - Open source in a public repository; self-hosted with Docker on a private server (virtual machine or home server).
 
@@ -173,10 +173,10 @@ A section at the bottom of the journal, which can be hidden, charts the balance 
 
 ## Wealth
 
-Not built yet; the design notes are in [Wealth](docs/wealth.md). Each book has its own wealth, and nothing is consolidated across books.
+Built step by step; the design notes, and what is built, are in [Wealth](docs/wealth.md). Each book has its own wealth, and nothing is consolidated across books.
 
 - A **holding** is an investment, such as a life insurance, or a property. Its flows are the entries of the sub-categories it lists; its **valuations** are values at a date, entered by hand, with no detail of a portfolio.
-- A **loan** holds its terms and dated events (drawdown, early repayment, buy-back). Its schedule is computed, never stored; it generates the planned splits of its payments, capital as saving, and gives the remaining capital.
+- A **loan** (built) holds its terms and dated events (drawdown, early repayment, buy-back). Its schedule is computed, never stored; it generates the planned splits of its payments, capital as saving, and gives the remaining capital, which is checked against the capital repaid in the journal. Not built yet: the rest of this section.
 - **Net worth** is the accounts' balances, plus the holdings' last valuations, minus the loans' remaining capital. A holding's **return** comes from its flows and its valuations.
 
 ## Reports
@@ -221,7 +221,7 @@ Functional decisions. Technical choices are in [ARCHITECTURE.md](ARCHITECTURE.md
 | Entry               | Manual entry with helpers, and statement import that builds reusable rules                                                                                         | O2, O3                             | Both keep the journal complete and correct                                                                   |
 | Currencies          | Book currency for budgets and reports, currency per account, fixed rate per entry, optional display currency, daily public rates                                   | O1, O2, O3                         | Projection per account in its own currency; analysis in one currency                                         |
 | Per-person spending | Not a dimension inside a book: a member's own spending goes in their own book                                                                                      | O3                                 | Keeps books simple. A virtual common book is a possible [future improvement](#future-improvements)           |
-| Wealth              | Per book: holdings with hand-entered valuations, flows from the journal's sub-categories, loans whose computed schedule generates planned splits                   | O1, O2, O3                         | Accounts stay bank accounts; no market prices, no consolidation across books                                 |
+| Wealth              | Per book: holdings with hand-entered valuations, flows from the journal's sub-categories, loans whose computed schedule generates planned splits (loans built)     | O1, O2, O3                         | Accounts stay bank accounts; no market prices, no consolidation across books                                 |
 | Budget lines        | Virtual month-end entries holding what the grid still expects, reconciled to let it go                                                                             | O1, O2, O3                         | The journal and the projection show the budget without storing entries                                       |
 | Budget revisions    | One amount per category budget, revised freely; past years kept, no history of revisions; free-text assumptions per category and year                              | O1, O3                             | A household tool, not an accounting system                                                                   |
 | Bank data           | File import first: CSV, OFX, QIF, matched against planned entries                                                                                                  | O2, O3                             | Reconciled balances are the starting point of the projection; bank sync can come later                       |

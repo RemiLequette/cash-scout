@@ -68,7 +68,8 @@
     "journal": "Journal",
     "memberUser": "User",
     "memberUserHint": "Search by name or email",
-    "noOtherUser": "No other user. The super user creates users on the Users page."
+    "noOtherUser": "No other user. The super user creates users on the Users page.",
+    "loans": "Loans"
   },
   "admin": {
     "title": "Users",
@@ -97,7 +98,8 @@
       "budgets": "{count, plural, one {# yearly budget} other {# yearly budgets}}",
       "budgetMonths": "{count, plural, one {# reconciled budget month} other {# reconciled budget months}}",
       "entries": "{count, plural, one {# entry} other {# entries}}",
-      "statements": "{count, plural, one {# imported statement} other {# imported statements}}"
+      "statements": "{count, plural, one {# imported statement} other {# imported statements}}",
+      "loans": "{count, plural, one {# loan} other {# loans}}"
     },
     "categories": "Categories",
     "accounts": "Accounts",
@@ -588,5 +590,87 @@
     "otherPart": "Other part",
     "deleteConfirm": "Delete this split and all its parts?",
     "invalid": "Fill in the date, account, bank amount and every part."
+  },
+  "loans": {
+    "title": "Loans",
+    "new": "New loan",
+    "editLoan": "Edit the loan",
+    "edit": "Edit",
+    "none": "No loan yet.",
+    "invalid": "Check this field.",
+    "name": "Name",
+    "lender": "Lender",
+    "account": "Payment account",
+    "amount": "Amount borrowed",
+    "rate": "Yearly rate (%)",
+    "rateColumn": "Rate",
+    "term": "Number of monthly payments",
+    "start": "First payment",
+    "insurance": "Insurance",
+    "insuranceMode": {
+      "none": "None",
+      "initial": "Rate on the capital borrowed",
+      "remaining": "Rate on the remaining capital"
+    },
+    "insuranceRate": "Insurance yearly rate (%)",
+    "deferral": "Deferral",
+    "deferralMode": {
+      "none": "None",
+      "interest": "Interest only",
+      "total": "Nothing paid"
+    },
+    "deferralMonths": "Months of deferral",
+    "capitalPart": "Capital sub-category",
+    "interestPart": "Interest sub-category",
+    "insurancePart": "Insurance sub-category",
+    "remainingAt": "Remaining capital at",
+    "remaining": "Remaining capital",
+    "nextPayment": "Next payment",
+    "end": "Last payment",
+    "gap": "Gap with the journal",
+    "gapText": "From {from} to {to}, the journal holds {journal} of capital repaid and the schedule {schedule}: a gap of {gap}.",
+    "gapShared": "The capital sub-category is shared by {count} loans, compared together.",
+    "events": "Events",
+    "addEvent": "Add an event",
+    "editEvent": "Edit the event",
+    "eventKind": "Event",
+    "event": {
+      "drawdown": "Drawdown",
+      "repayment": "Early repayment",
+      "buyback": "Buy-back",
+      "insurance": "Change of insurer"
+    },
+    "eventAmount": "Amount",
+    "allRemaining": "All that is left",
+    "keeps": "Keeps",
+    "keepsOption": {
+      "payment": "The payment (shorter loan)",
+      "term": "The term (lower payment)"
+    },
+    "deleteEventConfirm": "Delete this event?",
+    "deleteConfirm": "Delete the loan {name}? The entries planned from it stay in the journal.",
+    "schedule": "Schedule",
+    "year": "Year",
+    "plan": "Plan {year}",
+    "planned": "{created, plural, one {# payment planned} other {# payments planned}}, {replaced} replaced, {removed} removed.",
+    "number": "No.",
+    "capital": "Capital",
+    "interest": "Interest",
+    "insuranceColumn": "Insurance",
+    "total": "Total",
+    "journal": "Journal",
+    "inJournal": {
+      "planned": "Planned",
+      "reconciled": "Reconciled"
+    },
+    "insuranceSeparate": "Insurance outside the payment",
+    "insuranceAccount": "Insurance account",
+    "insuranceApart": "Paid apart from the payment",
+    "penalty": "Penalty",
+    "penaltyPart": "Penalty sub-category",
+    "note": "Note",
+    "effectiveRate": "TEG",
+    "effectiveRateText": "Effective annual rate (TEG): {withInsurance} % with the insurance, {withoutInsurance} % without.",
+    "effectiveRateSame": "Effective annual rate (TEG): {rate} %."
   }
 }
