@@ -69,7 +69,7 @@
     "memberUser": "Utilisateur",
     "memberUserHint": "Chercher par nom ou e-mail",
     "noOtherUser": "Aucun autre utilisateur. Le super utilisateur crée les utilisateurs dans la page Utilisateurs.",
-    "loans": "Prêts"
+    "loans": "Emprunts"
   },
   "admin": {
     "title": "Utilisateurs",
@@ -99,7 +99,7 @@
       "budgetMonths": "{count, plural, one {# mois de budget rapproché} other {# mois de budget rapprochés}}",
       "entries": "{count, plural, one {# écriture} other {# écritures}}",
       "statements": "{count, plural, one {# relevé importé} other {# relevés importés}}",
-      "loans": "{count, plural, one {# prêt} other {# prêts}}"
+      "loans": "{count, plural, one {# emprunt} other {# emprunts}}"
     },
     "categories": "Catégories",
     "accounts": "Comptes",
@@ -592,11 +592,11 @@
     "invalid": "Complétez la date, le compte, le montant bancaire et chaque part."
   },
   "loans": {
-    "title": "Prêts",
-    "new": "Nouveau prêt",
-    "editLoan": "Modifier le prêt",
+    "title": "Emprunts",
+    "new": "Nouvel emprunt",
+    "editLoan": "Modifier l'emprunt",
     "edit": "Modifier",
-    "none": "Aucun prêt pour l'instant.",
+    "none": "Aucun emprunt pour l'instant.",
     "invalid": "Vérifiez ce champ.",
     "name": "Nom",
     "lender": "Prêteur",
@@ -629,7 +629,7 @@
     "end": "Dernière échéance",
     "gap": "Écart avec le journal",
     "gapText": "Du {from} au {to}, le journal compte {journal} de capital remboursé et l'échéancier {schedule} : un écart de {gap}.",
-    "gapShared": "La sous-catégorie du capital est partagée par {count} prêts, comparés ensemble.",
+    "gapShared": "La sous-catégorie du capital est partagée par {count} emprunts, comparés ensemble.",
     "events": "Évènements",
     "addEvent": "Ajouter un évènement",
     "editEvent": "Modifier l'évènement",
@@ -643,11 +643,11 @@
     "allRemaining": "Tout ce qui reste",
     "keeps": "Conserve",
     "keepsOption": {
-      "payment": "L'échéance (prêt plus court)",
+      "payment": "L'échéance (emprunt plus court)",
       "term": "La durée (échéance plus basse)"
     },
     "deleteEventConfirm": "Supprimer cet évènement ?",
-    "deleteConfirm": "Supprimer le prêt {name} ? Les écritures prévues à partir de lui restent dans le journal.",
+    "deleteConfirm": "Supprimer l'emprunt {name} ? Les écritures prévues à partir de lui restent dans le journal.",
     "schedule": "Échéancier",
     "year": "Année",
     "plan": "Prévoir {year}",
