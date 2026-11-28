@@ -24,6 +24,7 @@ import { BudgetPage } from "./Budget";
 import { Dashboard } from "./Dashboard";
 import { Evolution } from "./Evolution";
 import { Journal } from "./Journal";
+import { Loans } from "./Loans";
 import { ReferenceData } from "./Reference";
 import { Statements } from "./Statements";
 
@@ -44,7 +45,7 @@ interface BookData {
 
 /** The parts of a book, chosen in the navigation menu. */
 export type BookView =
-  "journal" | "dashboard" | "evolution" | "budget" | "reference" | "import" | "settings";
+  "journal" | "dashboard" | "evolution" | "budget" | "loans" | "reference" | "import" | "settings";
 
 export function useBook(bookId: string | undefined) {
   return useQuery({
@@ -70,6 +71,8 @@ function BookView({ bookId, view }: { bookId: string; view: BookView }) {
       return <Evolution bookId={bookId} bookCurrency={book.data.currency} />;
     case "budget":
       return <BudgetPage bookId={bookId} bookCurrency={book.data.currency} canEdit={canEdit} />;
+    case "loans":
+      return <Loans bookId={bookId} bookCurrency={book.data.currency} canEdit={canEdit} />;
     case "reference":
       return <ReferenceData bookId={bookId} bookCurrency={book.data.currency} canEdit={canEdit} />;
     case "import":

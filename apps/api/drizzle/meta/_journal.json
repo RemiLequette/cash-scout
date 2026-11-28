@@ -274,6 +274,20 @@
       "when": 1795786103933,
       "tag": "0038_splits_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795864703191,
+      "tag": "0039_loans",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795864705311,
+      "tag": "0040_loans_isolation",
+      "breakpoints": true
     }
   ]
 }

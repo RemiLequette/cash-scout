@@ -40,6 +40,7 @@ import {
   categoryGroup,
   importLine,
   journalEntry,
+  loan,
   nature,
   subCategory,
 } from "../db/schema.js";
@@ -693,6 +694,17 @@ export function referenceRoutes(db: Db) {
             .set({ subCategoryId: targetId })
             .where(and(eq(journalEntry.bookId, bookId), eq(journalEntry.subCategoryId, id)))
             .returning({ id: journalEntry.id });
+          // The loans whose parts use it follow.
+          for (const column of [
+            "capitalSubCategoryId",
+            "interestSubCategoryId",
+            "insuranceSubCategoryId",
+          ] as const) {
+            await tx
+              .update(loan)
+              .set({ [column]: targetId })
+              .where(and(eq(loan.bookId, bookId), eq(loan[column], id)));
+          }
           // The choices made in statement reviews follow.
           await tx
             .update(importLine)

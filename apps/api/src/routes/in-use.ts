@@ -11,6 +11,7 @@ import {
   categoryGroup,
   importBatch,
   journalEntry,
+  loan,
   nature,
   subCategory,
 } from "../db/schema.js";
@@ -23,6 +24,7 @@ export type ReferrerType =
   | "budgets"
   | "budgetMonths"
   | "entries"
+  | "loans"
   | "statements";
 
 export interface Referrer {
@@ -68,13 +70,22 @@ const referring = new Map<PgTable, Referring[]>([
       ["budgetMonths", budgetSettlement, budgetSettlement.categoryId],
     ],
   ],
-  [subCategory, [["entries", journalEntry, journalEntry.subCategoryId]]],
+  [
+    subCategory,
+    [
+      ["entries", journalEntry, journalEntry.subCategoryId],
+      ["loans", loan, loan.capitalSubCategoryId],
+      ["loans", loan, loan.interestSubCategoryId],
+      ["loans", loan, loan.insuranceSubCategoryId],
+    ],
+  ],
   [
     bookAccount,
     [
       ["entries", journalEntry, journalEntry.accountId],
       ["budgets", categoryBudget, categoryBudget.accountId],
       ["statements", importBatch, importBatch.accountId],
+      ["loans", loan, loan.accountId],
     ],
   ],
 ]);

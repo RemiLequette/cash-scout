@@ -1,0 +1,379 @@
+/**
+ * Loans (see docs/wealth.md): a loan's schedule is computed from its terms and
+ * its dated events, never stored. Amounts are minor units of the currency of
+ * the loan's payment account.
+ */
+import { z } from "zod";
+import { versionSchema } from "./book.js";
+import { daysBetween, entryDateSchema, positiveAmountSchema, rateSchema } from "./journal.js";
+
+/** The most monthly payments of a loan: 50 years. */
+export const maxLoanTerm = 600;
+
+/** What the insurance rate applies to: nothing, the capital borrowed or the remaining capital. */
+export const insuranceModes = ["none", "initial", "remaining"] as const;
+export type InsuranceMode = (typeof insuranceModes)[number];
+
+/** The first months of a loan: interest only, or nothing paid. */
+export const deferralModes = ["none", "interest", "total"] as const;
+export type DeferralMode = (typeof deferralModes)[number];
+
+export const loanEventKinds = ["drawdown", "repayment", "buyback"] as const;
+export type LoanEventKind = (typeof loanEventKinds)[number];
+
+/** What an early repayment of part of the capital leaves as it was. */
+export const repaymentKeeps = ["payment", "term"] as const;
+export type RepaymentKeeps = (typeof repaymentKeeps)[number];
+
+/** A yearly rate in percent as text: "3.15". */
+export const percentSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{1,2}(\.\d{1,5})?$/, "Invalid rate");
+
+const loanFields = {
+  name: z.string().trim().min(1).max(100),
+  lender: z.string().trim().max(100).default(""),
+  /** Capital borrowed, in the currency of the payment account. */
+  amount: positiveAmountSchema,
+  /** Yearly nominal rate in percent; a month's interest is a twelfth of it. */
+  rate: percentSchema,
+  /** Number of monthly payments, deferred ones included. */
+  term: z.int().min(1).max(maxLoanTerm),
+  /** Date of the first payment. */
+  start: entryDateSchema,
+  insuranceMode: z.enum(insuranceModes).default("none"),
+  /** Yearly rate in percent. */
+  insuranceRate: percentSchema.default("0"),
+  deferralMode: z.enum(deferralModes).default("none"),
+  deferralMonths: z.int().min(0).max(maxLoanTerm).default(0),
+  accountId: z.uuid(),
+  capitalSubCategoryId: z.uuid(),
+  interestSubCategoryId: z.uuid(),
+  insuranceSubCategoryId: z.uuid().nullable().default(null),
+};
+
+interface LoanRules {
+  term: number;
+  insuranceMode: InsuranceMode;
+  insuranceSubCategoryId: string | null;
+  deferralMode: DeferralMode;
+  deferralMonths: number;
+}
+
+function checkLoan(loan: LoanRules, context: z.RefinementCtx) {
+  const issue = (path: string, message: string) =>
+    context.addIssue({ code: "custom", path: [path], message });
+  if (loan.insuranceMode !== "none" && !loan.insuranceSubCategoryId) {
+    issue("insuranceSubCategoryId", "The insurance needs a sub-category");
+  }
+  if ((loan.deferralMode === "none") !== (loan.deferralMonths === 0)) {
+    issue("deferralMonths", "A deferral needs a number of months");
+  }
+  if (loan.deferralMonths >= loan.term) {
+    issue("deferralMonths", "The deferral must be shorter than the loan");
+  }
+}
+
+export const loanInputSchema = z.object(loanFields).superRefine(checkLoan);
+export type LoanInput = z.input<typeof loanInputSchema>;
+
+/** A loan is changed as a whole. */
+export const loanUpdateSchema = z
+  .object({ ...loanFields, version: versionSchema.optional() })
+  .superRefine(checkLoan);
+export type LoanUpdate = z.input<typeof loanUpdateSchema>;
+
+export const loanEventInputSchema = z
+  .object({
+    date: entryDateSchema,
+    kind: z.enum(loanEventKinds),
+    /** Capital released or repaid; none repays all that is left. */
+    amount: positiveAmountSchema.nullable().default(null),
+    keeps: z.enum(repaymentKeeps).default("payment"),
+    version: versionSchema.optional(),
+  })
+  .superRefine((event, context) => {
+    const issue = (message: string) =>
+      context.addIssue({ code: "custom", path: ["amount"], message });
+    if (event.kind === "drawdown" && event.amount === null) issue("A drawdown needs an amount");
+    if (event.kind === "buyback" && event.amount !== null) issue("A buy-back repays all");
+  });
+export type LoanEventInput = z.input<typeof loanEventInputSchema>;
+
+export const loanPlanSchema = z.object({
+  year: z.int().min(1900).max(2200),
+  /** Required when the payment account is not in the book currency. */
+  exchangeRate: rateSchema.optional(),
+});
+export type LoanPlanInput = z.input<typeof loanPlanSchema>;
+
+export const loanQuerySchema = z.object({
+  /** The date the remaining capital is given at. */
+  date: entryDateSchema,
+});
+
+export interface LoanTerms {
+  amount: bigint;
+  rate: string;
+  term: number;
+  start: string;
+  insuranceMode: InsuranceMode;
+  insuranceRate: string;
+  deferralMode: DeferralMode;
+  deferralMonths: number;
+}
+
+export interface LoanEvent {
+  date: string;
+  kind: LoanEventKind;
+  amount: bigint | null;
+  keeps: RepaymentKeeps;
+}
+
+/** One line of a schedule: a monthly payment, or an event. */
+export interface LoanLine {
+  date: string;
+  kind: "payment" | LoanEventKind;
+  /** The number of a monthly payment, from 1. */
+  number: number | null;
+  /** Capital repaid; for a drawdown, capital released. */
+  capital: bigint;
+  /** For a total deferral, the interest is not paid: it joins the capital. */
+  interest: bigint;
+  insurance: bigint;
+  /** What leaves the payment account (nothing for a drawdown). */
+  total: bigint;
+  /** Capital left to repay after the line. */
+  remaining: bigint;
+}
+
+/** The same day `months` later, or the month's last day when the month is shorter. */
+export function addMonths(date: string, months: number): string {
+  const [year, month, day] = date.split("-").map(Number) as [number, number, number];
+  const at = new Date(Date.UTC(year, month - 1 + months, 1));
+  const end = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 0)).getUTCDate();
+  at.setUTCDate(Math.min(day, end));
+  return at.toISOString().slice(0, 10);
+}
+
+/** A share of an amount, rounded to the minor unit. */
+const share = (amount: bigint, rate: number) => BigInt(Math.round(Number(amount) * rate));
+
+/** The constant payment (capital and interest) repaying `balance` in `months`. */
+export function annuity(balance: bigint, monthlyRate: number, months: number): bigint {
+  const payment =
+    monthlyRate === 0
+      ? Number(balance) / months
+      : (Number(balance) * monthlyRate) / (1 - (1 + monthlyRate) ** -months);
+  return BigInt(Math.round(payment));
+}
+
+const smallest = (a: bigint, b: bigint) => (a < b ? a : b);
+
+/** The capital there is to repay before any payment or event. */
+const openingCapital = (loan: LoanTerms, events: readonly LoanEvent[]) =>
+  events.some((event) => event.kind === "drawdown") ? 0n : loan.amount;
+
+/**
+ * The schedule of a loan, as a French constant-payment loan: each month the
+ * interest is a twelfth of the yearly rate on the capital left, and the rest of
+ * the payment repays capital. The last payment takes what is left.
+ *
+ * Without drawdowns the whole amount is released at the start; with them, only
+ * what they release. An event counts after the payments of its date and before
+ * the next one. A drawdown, or a repayment keeping the term, sets a new
+ * payment; a repayment keeping the payment shortens the loan.
+ */
+export function loanSchedule(loan: LoanTerms, events: readonly LoanEvent[]): LoanLine[] {
+  const monthly = Number(loan.rate) / 1200;
+  const insured = loan.insuranceMode === "none" ? 0 : Number(loan.insuranceRate) / 1200;
+  const deferred = loan.deferralMode === "none" ? 0 : loan.deferralMonths;
+  // Events of one day keep their order, drawdowns first.
+  const pending = [...events].sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) || Number(b.kind === "drawdown") - Number(a.kind === "drawdown"),
+  );
+  const lines: LoanLine[] = [];
+  let balance = openingCapital(loan, events);
+  let payment: bigint | null = null;
+  let next = 0;
+  let over = false;
+
+  /** Applies the events dated before `date`; all of them without a date. */
+  const applyEvents = (date?: string) => {
+    while (!over && next < pending.length && (!date || pending[next]!.date < date)) {
+      const event = pending[next++]!;
+      const line = {
+        date: event.date,
+        kind: event.kind,
+        number: null,
+        interest: 0n,
+        insurance: 0n,
+      };
+      if (event.kind === "drawdown") {
+        balance += event.amount ?? 0n;
+        payment = null;
+        lines.push({ ...line, capital: event.amount ?? 0n, total: 0n, remaining: balance });
+        continue;
+      }
+      const repaid = event.amount === null ? balance : smallest(event.amount, balance);
+      if (repaid <= 0n) continue;
+      balance -= repaid;
+      if (event.keeps === "term") payment = null;
+      lines.push({ ...line, capital: repaid, total: repaid, remaining: balance });
+      // Repaid in full, unless more is still to be released.
+      over = balance === 0n && !pending.slice(next).some((later) => later.kind === "drawdown");
+    }
+  };
+
+  for (let number = 1; number <= loan.term && !over; number++) {
+    const date = addMonths(loan.start, number - 1);
+    applyEvents(date);
+    if (over) break;
+    const interest = share(balance, monthly);
+    const insurance = share(loan.insuranceMode === "initial" ? loan.amount : balance, insured);
+    let capital = 0n;
+    if (number <= deferred) {
+      if (loan.deferralMode === "total") {
+        balance += interest;
+        lines.push({
+          date,
+          kind: "payment",
+          number,
+          capital: 0n,
+          interest,
+          insurance: 0n,
+          total: 0n,
+          remaining: balance,
+        });
+        continue;
+      }
+    } else if (balance > 0n) {
+      payment ??= annuity(balance, monthly, loan.term - number + 1);
+      capital = payment - interest;
+      if (number === loan.term || capital >= balance) capital = balance;
+      else if (capital < 0n) capital = 0n;
+    }
+    balance -= capital;
+    lines.push({
+      date,
+      kind: "payment",
+      number,
+      capital,
+      interest,
+      insurance,
+      total: capital + interest + insurance,
+      remaining: balance,
+    });
+    if (capital > 0n && balance === 0n) {
+      over = !pending.slice(next).some((later) => later.kind === "drawdown");
+    }
+  }
+  applyEvents();
+  return lines;
+}
+
+/** The capital left to repay at the end of a day. */
+export function remainingCapital(
+  loan: LoanTerms,
+  events: readonly LoanEvent[],
+  date: string,
+): bigint {
+  let remaining = openingCapital(loan, events);
+  for (const line of loanSchedule(loan, events)) {
+    if (line.date > date) break;
+    remaining = line.remaining;
+  }
+  return remaining;
+}
+
+/**
+ * The lines of a schedule that move money on the payment account: the monthly
+ * payments and the early repayments. A buy-back is paid by the new lender, and
+ * a drawdown goes to the seller.
+ */
+export function paidLines(lines: readonly LoanLine[]): LoanLine[] {
+  return lines.filter(
+    (line) => line.total > 0n && (line.kind === "payment" || line.kind === "repayment"),
+  );
+}
+
+/** How far apart a payment and its journal entry may be and still be the same one. */
+const SAME_PAYMENT_DAYS = 20;
+
+/**
+ * Pairs scheduled payments with what the journal already holds, by date: each
+ * item takes the closest line still free. Returns, for each line, the index of
+ * its item or undefined.
+ */
+export function matchPayments(
+  lines: readonly { date: string; total?: bigint }[],
+  items: readonly { date: string; total?: bigint }[],
+  days = SAME_PAYMENT_DAYS,
+): (number | undefined)[] {
+  const pairs = items
+    .flatMap((item, at) =>
+      lines.map((line, to) => ({
+        at,
+        to,
+        apart: Math.abs(daysBetween(line.date, item.date)),
+        // On the same day, the closest amount: a payment and a repayment may share it.
+        differs: Math.abs(Number((line.total ?? 0n) - (item.total ?? 0n))),
+      })),
+    )
+    .filter((pair) => pair.apart <= days)
+    .sort((a, b) => a.apart - b.apart || a.differs - b.differs || a.to - b.to);
+  const found: (number | undefined)[] = lines.map(() => undefined);
+  const used = new Set<number>();
+  for (const { at, to } of pairs) {
+    if (found[to] !== undefined || used.has(at)) continue;
+    found[to] = at;
+    used.add(at);
+  }
+  return found;
+}
+
+export interface CapitalCheck {
+  /** The months compared, "2026-01". */
+  from: string;
+  to: string;
+  /** Capital repaid over them according to the schedule, and in the journal. */
+  schedule: bigint;
+  journal: bigint;
+}
+
+/**
+ * Compares the capital repaid in the journal with the schedules that share its
+ * sub-category, over the months the journal covers: from the first month with
+ * an entry (the loan may be older than the journal) to the month of
+ * `through`, the last day the journal is reconciled to, which counts only once
+ * it holds an entry. None when there is nothing to compare.
+ */
+export function checkCapital(
+  lines: readonly LoanLine[],
+  entries: readonly { date: string; amount: bigint }[],
+  through: string,
+): CapitalCheck | undefined {
+  // A buy-back is paid by the new lender: nothing of it is in the journal.
+  const due = paidLines(lines).filter((line) => line.capital > 0n);
+  const repaid = entries.filter((entry) => entry.date <= through);
+  const month = (date: string) => date.slice(0, 7);
+  const first = repaid.map((entry) => entry.date).sort()[0];
+  const start = lines.map((line) => line.date).sort()[0];
+  if (!first || !start) return undefined;
+  const from = month(first > start ? first : start);
+  const last = month(through);
+  const holds = repaid.some((entry) => month(entry.date) === last);
+  const to = holds ? last : month(addMonths(`${last}-01`, -1));
+  if (to < from) return undefined;
+  const within = (date: string) => month(date) >= from && month(date) <= to;
+  const total = (amounts: bigint[]) => amounts.reduce((sum, amount) => sum + amount, 0n);
+  return {
+    from,
+    to,
+    schedule: total(due.filter((line) => within(line.date)).map((line) => line.capital)),
+    // Money leaving the account is negative: capital repaid is its negation.
+    journal: -total(repaid.filter((entry) => within(entry.date)).map((entry) => entry.amount)),
+  };
+}

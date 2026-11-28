@@ -20,11 +20,11 @@ Two containers in Docker Compose: one Node container serving the API and the bui
 
 A pnpm workspace, TypeScript everywhere:
 
-| Package           | Content                                                                                                                 |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`        | React front end                                                                                                         |
-| `apps/api`        | HTTP API, authentication, database access, import                                                                       |
-| `packages/domain` | Types, zod validation schemas, and pure calculations: what remains of a month's budget, cash projection, yearly balance |
+| Package           | Content                                                                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`        | React front end                                                                                                                         |
+| `apps/api`        | HTTP API, authentication, database access, import                                                                                       |
+| `packages/domain` | Types, zod validation schemas, and pure calculations: what remains of a month's budget, cash projection, yearly balance, loan schedules |
 
 `packages/domain` has no dependency on the database or the browser. The API and the front end use the same schemas, so a form validates exactly as the server does, and the calculations are tested in isolation.
 
@@ -47,7 +47,7 @@ How the database side works:
 - Migrations run as the database owner. The API then runs every query as the role `cashscout_app`, which is not the table owner and cannot bypass row-level security.
 - Each request touching book data runs in a transaction that sets `app.user_id` (`withUser` in `apps/api/src/db/client.ts`). Without it, no book row is visible.
 - Policies call `app_book_ids(min_role)`, the books of the current user with at least a role. Reading needs membership; changing a book or its members needs the owner role.
-- Every other book-owned table gets the same policies, with `editor` for writes (reference data since `0004_reference_isolation.sql`, the journal since `0006_journal_isolation.sql`, budgets since `0008_budgets_isolation.sql`).
+- Every other book-owned table gets the same policies, with `editor` for writes (reference data since `0004_reference_isolation.sql`, the journal since `0006_journal_isolation.sql`, budgets since `0008_budgets_isolation.sql`, splits since `0038_splits_isolation.sql`, loans since `0040_loans_isolation.sql`).
 - A child item refers to its parent through a composite foreign key `(parent_id, book_id)`, so it cannot point to another book's item even through a bug.
 - Tests check it directly: unfiltered queries, and writes into another user's book that bypass the API.
 
@@ -64,13 +64,14 @@ How the database side works:
 - **Transfers** are a `transfer` row (the delay in days, a version) and two journal entries that point to it with `transfer_id` and `transfer_leg` (`source` or `destination`), at most one of each. `/books/:bookId/transfers` creates, changes and deletes the three in one transaction; deleting the transfer cascades to its entries. The journal API refuses to change or delete a side except its `reconciled` flag. A change is published as a `journal` event.
 - **Opening balance**: an account holds `opening_balance` (minor units of its currency) and `opening_book_amount` (minor units of the book currency, at the rate given when it was set). It is not dated and in no category: an account's balance is its opening balance plus its entries, in the journal balances, the cash projection and the dashboard. `POST /books/:bookId/reference/accounts/:id/opening` sets it, to an amount or from a bank balance (the reconciled entries, up to an optional day, then add up to it).
 - **Journal entries** reserve `schedule_id` for schedules; it stays empty until they exist.
+- **Loans** are a `loan` row (terms, in minor units of the payment account's currency, and the sub-categories of the capital, interest and insurance) and its `loan_event` rows (drawdown, early repayment, buy-back). The schedule is never stored: `loanSchedule` in `packages/domain` computes it, so the API gives the remaining capital at any date. `POST /books/:bookId/loans/:id/plan` writes a year's payments as planned splits, whose entries carry `loan_id`; running it again adds what lacks, replaces the unreconciled forecasts whose amounts changed and removes those the schedule no longer has. The capital repaid in the journal is compared with the schedules sharing its sub-category, over the months the journal covers ([Wealth](docs/wealth.md)).
 
 ### Concurrent use
 
 A book can be open in several windows at once, by one member or several.
 
 - **Versions**: books and every row edited by the app (reference items, journal entries, budgets) carry an integer `version`, raised by each update. A client sends back the `version` it read with its change; if the row has moved on or is gone, the API answers 409 and the client reloads. Without a `version` the change wins, which is what scripts and imports use.
-- **Events**: `GET /api/books/:bookId/events` is a stream of server-sent events, open to members. After each successful change under `/books/:bookId`, a middleware publishes its scope (`book`, `members`, `reference`, `journal`, `budgets`) and the windows reload the matching queries. Events carry no data, so nothing is read with another user's rights. A window that lost its connection reloads the whole book when the browser reconnects.
+- **Events**: `GET /api/books/:bookId/events` is a stream of server-sent events, open to members. After each successful change under `/books/:bookId`, a middleware publishes its scope (`book`, `members`, `reference`, `journal`, `budgets`, `loans`) and the windows reload the matching queries. Events carry no data, so nothing is read with another user's rights. A window that lost its connection reloads the whole book when the browser reconnects.
 - **Limit**: the event bus is in the memory of the API process. Running several API instances needs a relay between them, for example PostgreSQL `LISTEN` / `NOTIFY`.
 
 ### Reports and projection

@@ -1,5 +1,5 @@
 /** What part of a book a change touched, as the event carries it. */
-export const bookScopes = ["book", "members", "reference", "journal", "budgets"] as const;
+export const bookScopes = ["book", "members", "reference", "journal", "budgets", "loans"] as const;
 export type BookScope = (typeof bookScopes)[number];
 
 /**
@@ -10,7 +10,11 @@ export type BookScope = (typeof bookScopes)[number];
 export function scopeOfPath(path: string): BookScope {
   const segment = /\/books\/[^/]+\/([^/]+)/.exec(path)?.[1];
   // A transfer or a compensation is two journal entries, and a plan writes the journal.
-  if (segment === "transfers" || segment === "compensations" || /\/budgets\/plan$/.test(path))
+  if (
+    segment === "transfers" ||
+    segment === "compensations" ||
+    /\/(budgets|loans\/[^/]+)\/plan$/.test(path)
+  )
     return "journal";
   return bookScopes.find((scope) => scope === segment) ?? "book";
 }

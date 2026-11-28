@@ -15,6 +15,8 @@ import {
   importLine,
   importRule,
   journalEntry,
+  loan,
+  loanEvent,
   nature,
   split,
   subCategory,
@@ -43,6 +45,16 @@ export const ARCHIVED: readonly ArchivedTable[] = [
   { table: split, references: {} },
   { table: importBatch, references: { accountId: bookAccount } },
   {
+    table: loan,
+    references: {
+      accountId: bookAccount,
+      capitalSubCategoryId: subCategory,
+      interestSubCategoryId: subCategory,
+      insuranceSubCategoryId: subCategory,
+    },
+  },
+  { table: loanEvent, references: { loanId: loan } },
+  {
     table: journalEntry,
     references: {
       accountId: bookAccount,
@@ -51,6 +63,7 @@ export const ARCHIVED: readonly ArchivedTable[] = [
       compensationId: compensation,
       splitId: split,
       importBatchId: importBatch,
+      loanId: loan,
     },
   },
   { table: importRule, references: { subCategoryId: subCategory } },

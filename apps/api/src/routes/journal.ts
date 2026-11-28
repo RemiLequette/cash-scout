@@ -119,6 +119,7 @@ export const entryColumns = {
   compensationSide: journalEntry.compensationSide,
   splitId: journalEntry.splitId,
   splitRemainder: journalEntry.splitRemainder,
+  loanId: journalEntry.loanId,
   createdAt: journalEntry.createdAt,
   updatedAt: journalEntry.updatedAt,
 };

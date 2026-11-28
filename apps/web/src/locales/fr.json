@@ -68,7 +68,8 @@
     "journal": "Journal",
     "memberUser": "Utilisateur",
     "memberUserHint": "Chercher par nom ou e-mail",
-    "noOtherUser": "Aucun autre utilisateur. Le super utilisateur crée les utilisateurs dans la page Utilisateurs."
+    "noOtherUser": "Aucun autre utilisateur. Le super utilisateur crée les utilisateurs dans la page Utilisateurs.",
+    "loans": "Prêts"
   },
   "admin": {
     "title": "Utilisateurs",
@@ -97,7 +98,8 @@
       "budgets": "{count, plural, one {# budget annuel} other {# budgets annuels}}",
       "budgetMonths": "{count, plural, one {# mois de budget rapproché} other {# mois de budget rapprochés}}",
       "entries": "{count, plural, one {# écriture} other {# écritures}}",
-      "statements": "{count, plural, one {# relevé importé} other {# relevés importés}}"
+      "statements": "{count, plural, one {# relevé importé} other {# relevés importés}}",
+      "loans": "{count, plural, one {# prêt} other {# prêts}}"
     },
     "categories": "Catégories",
     "accounts": "Comptes",
@@ -588,5 +590,77 @@
     "otherPart": "Autre part",
     "deleteConfirm": "Supprimer cette ventilation et toutes ses parts ?",
     "invalid": "Complétez la date, le compte, le montant bancaire et chaque part."
+  },
+  "loans": {
+    "title": "Prêts",
+    "new": "Nouveau prêt",
+    "editLoan": "Modifier le prêt",
+    "edit": "Modifier",
+    "none": "Aucun prêt pour l'instant.",
+    "invalid": "Vérifiez ce champ.",
+    "name": "Nom",
+    "lender": "Prêteur",
+    "account": "Compte des échéances",
+    "amount": "Capital emprunté",
+    "rate": "Taux annuel (%)",
+    "rateColumn": "Taux",
+    "term": "Nombre d'échéances mensuelles",
+    "start": "Première échéance",
+    "insurance": "Assurance",
+    "insuranceMode": {
+      "none": "Aucune",
+      "initial": "Taux sur le capital emprunté",
+      "remaining": "Taux sur le capital restant"
+    },
+    "insuranceRate": "Taux annuel de l'assurance (%)",
+    "deferral": "Différé",
+    "deferralMode": {
+      "none": "Aucun",
+      "interest": "Intérêts seulement",
+      "total": "Rien n'est payé"
+    },
+    "deferralMonths": "Mois de différé",
+    "capitalPart": "Sous-catégorie du capital",
+    "interestPart": "Sous-catégorie des intérêts",
+    "insurancePart": "Sous-catégorie de l'assurance",
+    "remainingAt": "Capital restant au",
+    "remaining": "Capital restant",
+    "nextPayment": "Prochaine échéance",
+    "end": "Dernière échéance",
+    "gap": "Écart avec le journal",
+    "gapText": "Du {from} au {to}, le journal compte {journal} de capital remboursé et l'échéancier {schedule} : un écart de {gap}.",
+    "gapShared": "La sous-catégorie du capital est partagée par {count} prêts, comparés ensemble.",
+    "events": "Évènements",
+    "addEvent": "Ajouter un évènement",
+    "editEvent": "Modifier l'évènement",
+    "eventKind": "Évènement",
+    "event": {
+      "drawdown": "Déblocage",
+      "repayment": "Remboursement anticipé",
+      "buyback": "Rachat"
+    },
+    "eventAmount": "Montant",
+    "allRemaining": "Tout ce qui reste",
+    "keeps": "Conserve",
+    "keepsOption": {
+      "payment": "L'échéance (prêt plus court)",
+      "term": "La durée (échéance plus basse)"
+    },
+    "deleteEventConfirm": "Supprimer cet évènement ?",
+    "deleteConfirm": "Supprimer le prêt {name} ? Les écritures prévues à partir de lui restent dans le journal.",
+    "schedule": "Échéancier",
+    "year": "Année",
+    "plan": "Prévoir {year}",
+    "planned": "{created, plural, one {# échéance prévue} other {# échéances prévues}}, {replaced} remplacée(s), {removed} supprimée(s).",
+    "number": "N°",
+    "capital": "Capital",
+    "interest": "Intérêts",
+    "insuranceColumn": "Assurance",
+    "total": "Total",
+    "journal": "Journal",
+    "inJournal": {
+      "planned": "Prévue",
+      "reconciled": "Rapprochée"
+    }
   }
 }
