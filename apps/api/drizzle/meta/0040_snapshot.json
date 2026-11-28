@@ -1,6 +1,6 @@
 {
-  "id": "846e1fa3-9686-4394-b0e6-a95bf8147661",
-  "prevId": "40d9fe14-67c5-4cef-b847-af5b8c44da86",
+  "id": "ad6e8763-e0ad-49f1-93c0-a8df4b569e4b",
+  "prevId": "6cadf78d-6588-450e-b8b5-b8cea912918a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2340,6 +2340,13 @@
         },
         "lender": {
           "name": "lender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "note": {
+          "name": "note",
           "type": "text",
           "primaryKey": false,
           "notNull": true,

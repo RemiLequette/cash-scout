@@ -8,6 +8,7 @@ CREATE TABLE "loan" (
 	"book_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"lender" text DEFAULT '' NOT NULL,
+	"note" text DEFAULT '' NOT NULL,
 	"amount" bigint NOT NULL,
 	"rate" numeric NOT NULL,
 	"term" integer NOT NULL,

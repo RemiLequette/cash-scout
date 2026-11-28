@@ -4,6 +4,7 @@
 
 ## Conditions
 
+- **Commentaire** : texte libre pour le numéro de contrat, le contact, ce qui a été convenu. Il est affiché sur l'emprunt.
 - **Compte des échéances** : le compte sur lequel les échéances sont prélevées. L'emprunt est dans sa devise.
 - **Capital emprunté**, **taux annuel** (nominal : les intérêts d'un mois en sont un douzième) et **nombre d'échéances mensuelles**, différé compris.
 - **Première échéance** : sa date ; les suivantes tombent le même jour de chaque mois (le dernier jour d'un mois plus court).

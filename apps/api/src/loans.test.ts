@@ -131,6 +131,9 @@ describe("loans", () => {
     const s = await setup();
     const created = await s.create();
     expect(created.amount).toBe("120000.00");
+    expect(created).toMatchObject({ note: "" });
+    const noted = await s.create({ note: "Contrat 123 / A. Martin" });
+    expect(noted).toMatchObject({ note: "Contrat 123 / A. Martin" });
 
     const [before] = await s.loans("2025-12-31");
     expect(before!.remaining).toBe("120000.00");

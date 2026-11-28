@@ -21,6 +21,7 @@ import {
   Switch,
   Table,
   Text,
+  Textarea,
   TextInput,
   Title,
   Tooltip,
@@ -49,6 +50,7 @@ interface LoanDraft {
   version?: number;
   name: string;
   lender: string;
+  note: string;
   amount: string;
   rate: string;
   term: string;
@@ -69,6 +71,7 @@ interface LoanDraft {
 const emptyLoan = (): LoanDraft => ({
   name: "",
   lender: "",
+  note: "",
   amount: "",
   rate: "",
   term: "",
@@ -91,6 +94,7 @@ const draftOf = (loan: Loan): LoanDraft => ({
   version: loan.version,
   name: loan.name,
   lender: loan.lender,
+  note: loan.note,
   amount: loan.amount,
   rate: loan.rate,
   term: String(loan.term),
@@ -113,6 +117,7 @@ function validateLoan(draft: LoanDraft, currency: string | undefined) {
   const candidate = {
     name: draft.name,
     lender: draft.lender,
+    note: draft.note,
     amount: decimalInput(draft.amount),
     rate: decimalInput(draft.rate),
     term: Number(draft.term),
@@ -247,6 +252,15 @@ function LoanForm({
             onChange={(e) => set({ lender: e.currentTarget.value })}
           />
         </Group>
+        <Textarea
+          label={t("loans.note")}
+          autosize
+          minRows={2}
+          maxRows={8}
+          maxLength={2000}
+          value={draft.note}
+          onChange={(e) => set({ note: e.currentTarget.value })}
+        />
         <Select
           label={t("loans.account")}
           required
@@ -942,6 +956,7 @@ function LoanDetail({
           )}
         </Group>
         <ErrorAlert error={change.error} />
+        {loan.note && <Text style={{ whiteSpace: "pre-wrap" }}>{loan.note}</Text>}
         {loan.effectiveRate.withInsurance && (
           <Text size="sm" c="dimmed">
             {loan.effectiveRate.withInsurance === loan.effectiveRate.withoutInsurance

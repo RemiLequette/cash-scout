@@ -264,6 +264,7 @@ async function loanValues(tx: Tx, bookId: string, input: Values, current?: Loan)
   return {
     name: input.name,
     lender: input.lender,
+    note: input.note,
     amount: checked(() => parseAmount(input.amount, account.currency)).minor,
     rate: input.rate,
     term: input.term,

@@ -4,6 +4,7 @@
 
 ## Terms
 
+- **Note**: free text for the contract number, the contact, what was agreed. It is shown on the loan.
 - **Payment account**: the account the payments are taken from. The loan is in its currency.
 - **Amount borrowed**, **yearly rate** (nominal: a month's interest is a twelfth of it) and **number of monthly payments**, deferred ones included.
 - **First payment**: the date of the first payment; the next ones fall on the same day of each month (the last day of a shorter month).

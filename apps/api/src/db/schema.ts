@@ -407,6 +407,8 @@ export const loan = pgTable(
     bookId: bookId(),
     name: text("name").notNull(),
     lender: text("lender").notNull().default(""),
+    /** Free text: contract number, contact, what was agreed. */
+    note: text("note").notNull().default(""),
     /** Capital borrowed, in minor units. */
     amount: bigint("amount", { mode: "bigint" }).notNull(),
     /** Yearly nominal rate, in percent. */

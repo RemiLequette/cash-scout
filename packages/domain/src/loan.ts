@@ -35,6 +35,8 @@ export const percentSchema = z
 const loanFields = {
   name: z.string().trim().min(1).max(100),
   lender: z.string().trim().max(100).default(""),
+  /** Free text: contract number, contact, what was agreed. */
+  note: z.string().trim().max(2000).default(""),
   /** Capital borrowed, in the currency of the payment account. */
   amount: positiveAmountSchema,
   /** Yearly nominal rate in percent; a month's interest is a twelfth of it. */

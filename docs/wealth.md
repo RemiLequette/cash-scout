@@ -50,7 +50,7 @@ A value at a date, entered by hand: `(holding, date, value, note)`, in the book 
 
 | Field     | Notes                                                                                      |
 | --------- | ------------------------------------------------------------------------------------------ |
-| Name      | And the lender                                                                             |
+| Name      | And the lender, and a free note (contract number, contact)                                 |
 | Amount    | Capital borrowed                                                                           |
 | Rate      | Yearly nominal rate                                                                        |
 | Term      | Number of monthly payments, deferred ones included                                         |
