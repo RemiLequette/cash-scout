@@ -52,8 +52,9 @@ The list under the grid is edited in place. It is saved with the grid by **Save*
 - **Copy the previous year** takes all of the category's entries of the year before, planned or not, one year later, with their description, sub-category and account. Their amount becomes the planned amount. An entry already there (same date, sub-category and description) is not copied again. A split is copied whole, once, whichever of its categories you copy it from. Transfers are not copied.
 - **Schedule** creates a series of entries: first and last date, frequency, sub-category, description, account, amount. The series is not remembered: these are ordinary entries. **Add a part** creates a series of [splits](04-journal.md): a line per other sub-category, with its planned amount, and the **remainder** that will take the difference with the bank.
 - **Tick** rows to give them a new amount or another day, change their account or sub-category, duplicate or delete them. Shift+click ticks a range; the box in the titles ticks all the rows the **filter** shows.
+- The **⤓** button of a column title copies the value of the first **ticked** row (the first editable row shown when none is ticked) into all the rows shown below it, ticked or not: tick the row to start from, and the **filter** picks the group. A row that cannot take it is left unchanged (another currency, for an amount or a saved entry).
 - The up and down arrows and Enter go from row to row.
-- **Undo** takes back the last copy, creation or action on the ticked rows.
+- **Undo** takes back the last edit, copy, fill, creation or action on the ticked rows. Several keystrokes in the same field count as one step.
 
 A reconciled entry is not changed here. In this list the amount is the **planned** one: changing it also replaces the expected amount.
 
@@ -76,7 +77,8 @@ The journal does not change until **Save**, which writes all or nothing.
 - **Copy the previous year** takes all the transfers of the year before, planned or not, one year later. The amount becomes the planned amount. A transfer already there (same date, sub-category, description and accounts) is not copied again, nor one using an archived account or sub-category.
 - **Schedule** creates a series of transfers. The series is not remembered: these are ordinary transfers.
 - **Tick** rows to give them a new amount or another day, change their source account, destination account or sub-category, duplicate or delete them. Shift+click ticks a range; the box in the titles ticks all the rows the **filter** shows. The new amount leaves transfers between currencies unchanged: type their two amounts on the row. A change of account is skipped on a row whose two accounts would become the same, or, for a stored transfer, whose currency would change.
-- **Undo** takes back the last copy, creation or action on the ticked rows.
+- The **⤓** button of a column title fills down, as for planned entries. A row is left unchanged when its currencies do not allow the amount or account, or when its two accounts would become the same.
+- **Undo** takes back the last edit, copy, fill, creation or action on the ticked rows. Several keystrokes in the same field count as one step.
 
 A transfer with a reconciled side is not changed here. Changing the planned amount also replaces the expected amount of both sides.
 

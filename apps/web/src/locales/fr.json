@@ -392,6 +392,10 @@
     "createPlanned": "{count, plural, one {Créer # écriture} other {Créer # écritures}}",
     "reload": "Recharger",
     "noPlannedTransfers": "Aucun transfert planifié cette année.",
+    "fillDown": {
+      "button": "Recopier vers le bas : {column}",
+      "skipped": "{count, plural, one {# ligne non modifiée} other {# lignes non modifiées}}"
+    },
     "transfers": {
       "filter": "Filtrer (libellé, sous-catégorie, compte)",
       "count": "{count, plural, =0 {Aucun transfert} one {# transfert} other {# transferts}}",
