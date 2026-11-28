@@ -18,7 +18,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap } from "./api";
-import { DateCell, field, moveRows, newKey, useTicks, wrong, type Option } from "./budgetEntries";
+import {
+  DateCell,
+  field,
+  FillTitle,
+  moveRows,
+  newKey,
+  useTicks,
+  useUndo,
+  wrong,
+  type Option,
+} from "./budgetEntries";
 import {
   decimalInput,
   formatDate,
@@ -249,7 +259,8 @@ function TransfersPlan({
   });
 
   const [filter, setFilter] = useState("");
-  const [history, setHistory] = useState<TransferRow[][]>([]);
+  const history = useUndo(rows, setRows);
+  const { edit } = history;
   const [note, setNote] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [amount, setAmount] = useState("");
@@ -277,8 +288,7 @@ function TransfersPlan({
 
   /** A change of many rows at once, which can be undone. */
   function apply(next: TransferRow[], message = "") {
-    setHistory([...history, rows]);
-    setRows(next);
+    history.apply(next);
     setNote(message);
   }
   const change = (patch: (row: TransferRow) => Partial<TransferRow>, message?: string) =>
@@ -291,8 +301,10 @@ function TransfersPlan({
 
   const onPatch = useCallback(
     (key: string, patch: Partial<TransferRow>) =>
-      setRows((old) => old.map((row) => (row.key === key ? { ...row, ...patch } : row))),
-    [],
+      edit(key, Object.keys(patch), (old) =>
+        old.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+      ),
+    [edit],
   );
 
   const currencyOf = (id: string | null) => reference.accounts.find((a) => a.id === id)?.currency;
@@ -319,6 +331,48 @@ function TransfersPlan({
       skipped ? t("budget.transfers.skipped", { count: skipped }) : "",
     );
   }
+
+  /**
+   * Copies from the first ticked row (else the first one shown) into the ones below it.
+   * `copy` returns null for a row that cannot take the value.
+   */
+  type Copy = (from: TransferRow, to: TransferRow) => Partial<TransferRow> | null;
+  function fillDown(copy: Copy) {
+    // From the first ticked row, else from the first one shown.
+    const start = Math.max(
+      0,
+      tickable.findIndex((row) => ticked.has(row.key)),
+    );
+    const from = tickable[start];
+    if (!from) return;
+    const below = tickable.slice(start + 1);
+    const patches = new Map(below.map((row) => [row.key, copy(from, row)]));
+    const skipped = [...patches.values()].filter((patch) => patch === null).length;
+    apply(
+      rows.map((row) => ({ ...row, ...patches.get(row.key) })),
+      skipped ? t("budget.fillDown.skipped", { count: skipped }) : "",
+    );
+  }
+  const title = (name: string, copy: Copy) => (
+    <FillTitle
+      title={name}
+      disabled={tickable.length < 2}
+      onFill={canEdit && (() => fillDown(copy))}
+    />
+  );
+  /** The account of one side, with its rate when the row changes currency. */
+  const accountTitle = (side: "sourceAccountId" | "destinationAccountId") => {
+    const isSource = side === "sourceAccountId";
+    const other = isSource ? "destinationAccountId" : "sourceAccountId";
+    const rate = isSource ? "sourceRate" : "destinationRate";
+    return title(t(isSource ? "transfer.source" : "transfer.destination"), (from, to) => {
+      const id = from[side];
+      if (id === to[side]) return {};
+      const same = currencyOf(id) === currencyOf(to[side]);
+      if ((id && to[other] === id) || (to.id && !same)) return null;
+      return same ? { [side]: id } : { [side]: id, [rate]: from[rate] };
+    });
+  };
 
   const dayNumber = Number(day);
   function moveDay() {
@@ -444,12 +498,11 @@ function TransfersPlan({
                 </Button>
                 <ActionIcon
                   variant="default"
-                  disabled={history.length === 0}
+                  disabled={!history.canUndo}
                   aria-label={t("budget.tools.undo")}
                   title={t("budget.tools.undo")}
                   onClick={() => {
-                    setRows(history.at(-1)!);
-                    setHistory(history.slice(0, -1));
+                    history.undo();
                     setNote("");
                   }}
                 >
@@ -596,13 +649,27 @@ function TransfersPlan({
                     />
                   </Table.Th>
                   <Table.Th w={110}>{t("journal.date")}</Table.Th>
-                  <Table.Th w={60}>{t("budget.transfers.delay")}</Table.Th>
-                  <Table.Th w={150}>{t("journal.subCategory")}</Table.Th>
-                  <Table.Th>{t("journal.description")}</Table.Th>
-                  <Table.Th w={140}>{t("transfer.source")}</Table.Th>
-                  <Table.Th w={140}>{t("transfer.destination")}</Table.Th>
+                  <Table.Th w={80}>
+                    {title(t("budget.transfers.delay"), (from) => ({ delayDays: from.delayDays }))}
+                  </Table.Th>
+                  <Table.Th w={150}>
+                    {title(t("journal.subCategory"), (from) => ({
+                      subCategoryId: from.subCategoryId,
+                    }))}
+                  </Table.Th>
+                  <Table.Th>
+                    {title(t("journal.description"), (from) => ({ description: from.description }))}
+                  </Table.Th>
+                  <Table.Th w={140}>{accountTitle("sourceAccountId")}</Table.Th>
+                  <Table.Th w={140}>{accountTitle("destinationAccountId")}</Table.Th>
                   <Table.Th w={170} ta="right">
-                    {t("budget.plannedAmount")}
+                    {title(t("budget.plannedAmount"), (from, to) =>
+                      // Amounts only make sense between the same two currencies.
+                      currencyOf(from.sourceAccountId) === currencyOf(to.sourceAccountId) &&
+                      currencyOf(from.destinationAccountId) === currencyOf(to.destinationAccountId)
+                        ? { amount: from.amount, destinationAmount: from.destinationAmount }
+                        : null,
+                    )}
                   </Table.Th>
                 </Table.Tr>
               </Table.Thead>

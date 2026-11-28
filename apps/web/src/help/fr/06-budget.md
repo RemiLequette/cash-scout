@@ -52,8 +52,9 @@ La liste sous la grille se modifie en place. Elle s'enregistre avec la grille pa
 - **Copier l'année précédente** reprend toutes les écritures de la catégorie de l'année d'avant, prévues ou non, un an plus tard, avec leur libellé, sous-catégorie et compte. Leur montant devient le montant prévu. Une écriture déjà là (même date, sous-catégorie et libellé) n'est pas recopiée. Une ventilation est copiée entière, une seule fois, quelle que soit la catégorie d'où vous la copiez. Les transferts ne sont pas copiés.
 - **Échéancier** crée une série d'écritures : première et dernière date, fréquence, sous-catégorie, libellé, compte, montant. La série n'est pas mémorisée : ce sont des écritures ordinaires. **Ajouter une part** crée une série de [ventilations](04-journal.md) : une ligne par autre sous-catégorie, avec son montant prévu, et le **solde** qui prendra l'écart avec la banque.
 - **Cochez** des lignes pour leur donner un nouveau montant ou un autre jour, changer leur compte ou leur sous-catégorie, les dupliquer ou les supprimer. Maj+clic coche une plage ; la case du titre coche toutes les lignes affichées par le **filtre**.
+- Le bouton **⤓** d'un titre de colonne recopie la valeur de la première ligne **cochée** (à défaut, la première ligne modifiable affichée) sur toutes les lignes affichées en dessous, cochées ou non : cochez la ligne de départ, le **filtre** choisit le groupe. Une ligne qui ne peut pas la recevoir n'est pas modifiée (autre devise, pour un montant ou une écriture déjà enregistrée).
 - Les flèches haut et bas et Entrée passent d'une ligne à l'autre.
-- **Annuler** revient sur la dernière copie, création ou action sur les lignes cochées.
+- **Annuler** revient sur la dernière modification, copie, recopie, création ou action sur les lignes cochées. Plusieurs saisies de suite dans un même champ comptent pour une seule étape.
 
 Une écriture rapprochée ne se modifie pas ici. Dans cette liste, le montant est le montant **prévu** : le changer remplace aussi le montant attendu.
 
@@ -76,7 +77,8 @@ Rien ne change dans le journal avant **Enregistrer**, qui écrit tout ou rien.
 - **Copier l'année précédente** reprend tous les transferts de l'année d'avant, prévus ou non, un an plus tard. Le montant devient le montant prévu. Un transfert déjà là (même date, sous-catégorie, libellé et comptes) n'est pas recopié, ni un transfert d'un compte ou d'une sous-catégorie archivés.
 - **Échéancier** crée une série de transferts. La série n'est pas mémorisée : ce sont des transferts ordinaires.
 - **Cochez** des lignes pour leur donner un nouveau montant ou un autre jour, changer leur compte source, leur compte destination ou leur sous-catégorie, les dupliquer ou les supprimer. Maj+clic coche une plage ; la case du titre coche toutes les lignes affichées par le **filtre**. Le nouveau montant ne touche pas les transferts entre devises différentes : saisissez leurs deux montants sur la ligne. Un changement de compte est ignoré sur une ligne dont les deux comptes deviendraient identiques, ou, pour un transfert déjà enregistré, dont la devise changerait.
-- **Annuler** revient sur la dernière copie, création ou action sur les lignes cochées.
+- Le bouton **⤓** d'un titre de colonne recopie vers le bas, comme pour les écritures planifiées. Une ligne n'est pas modifiée si ses devises ne permettent pas le montant ou le compte, ou si ses deux comptes devenaient identiques.
+- **Annuler** revient sur la dernière modification, copie, recopie, création ou action sur les lignes cochées. Plusieurs saisies de suite dans un même champ comptent pour une seule étape.
 
 Un transfert dont un côté est rapproché ne se modifie pas ici. Changer le montant prévu remplace aussi le montant attendu des deux côtés.
 

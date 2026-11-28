@@ -538,6 +538,81 @@ const Row = memo(function Row({
 });
 
 /**
+ * A column title with the button that copies the value of the first row shown
+ * into the others. Without `onFill` the title stands alone.
+ */
+export function FillTitle({
+  title,
+  disabled,
+  onFill,
+}: {
+  title: string;
+  disabled: boolean;
+  onFill: (() => void) | false;
+}) {
+  const { t } = useTranslation();
+  const label = t("budget.fillDown.button", { column: title });
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, whiteSpace: "nowrap" }}>
+      {title}
+      {onFill && (
+        <ActionIcon
+          size="xs"
+          variant="subtle"
+          color="gray"
+          disabled={disabled}
+          aria-label={label}
+          title={label}
+          onClick={onFill}
+        >
+          ⤓
+        </ActionIcon>
+      )}
+    </span>
+  );
+}
+
+/**
+ * What Undo takes back: each bulk action, and each manual edit. Successive
+ * edits of the same fields of the same row (typing) count as one step.
+ */
+export function useUndo<R extends { key: string }>(
+  rows: R[],
+  setRows: Dispatch<SetStateAction<R[]>>,
+) {
+  const [history, setHistory] = useState<R[][]>([]);
+  const current = useRef(rows);
+  const last = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    current.current = rows;
+  });
+  const remember = () => setHistory((old) => [...old, current.current]);
+  /** A change of many rows at once. */
+  const apply = (next: R[]) => {
+    remember();
+    last.current = null;
+    setRows(next);
+  };
+  const edit = useCallback(
+    (key: string, fields: string[], update: (old: R[]) => R[]) => {
+      const id = `${key}/${fields.join()}`;
+      if (last.current !== id) setHistory((old) => [...old, current.current]);
+      last.current = id;
+      setRows(update);
+    },
+    [setRows],
+  );
+  const undo = () => {
+    const previous = history.at(-1);
+    if (!previous) return;
+    last.current = null;
+    setRows(previous);
+    setHistory(history.slice(0, -1));
+  };
+  return { canUndo: history.length > 0, apply, edit, undo };
+}
+
+/**
  * The ticked rows of a list. A Shift+click ticks or unticks all the rows
  * between it and the one clicked before, among those that can be.
  */
@@ -599,7 +674,8 @@ export function PlanEntries({
   const { t, i18n } = useTranslation();
   const nameOf = useNameOf(reference.defaultLanguage);
   const [filter, setFilter] = useState("");
-  const [history, setHistory] = useState<PlanRow[][]>([]);
+  const history = useUndo(rows, setRows);
+  const { edit } = history;
   const [note, setNote] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [amount, setAmount] = useState("");
@@ -650,8 +726,7 @@ export function PlanEntries({
 
   /** A change of many rows at once, which can be undone. */
   function apply(next: PlanRow[]) {
-    setHistory([...history, rows]);
-    setRows(next);
+    history.apply(next);
     setNote("");
   }
   const change = (patch: (row: PlanRow) => Partial<PlanRow>) =>
@@ -663,10 +738,38 @@ export function PlanEntries({
   );
   const add = (added: PlanRow[]) => apply([...rows, ...added].sort(byDate));
 
+  /**
+   * Copies from the first ticked row (else the first one shown) into the ones below it.
+   * `copy` returns null for a row that cannot take the value.
+   */
+  type Copy = (from: PlanRow, to: PlanRow) => Partial<PlanRow> | null;
+  function fillDown(copy: Copy) {
+    // From the first ticked row, else from the first one shown.
+    const start = Math.max(
+      0,
+      tickable.findIndex((row) => ticked.has(row.key)),
+    );
+    const from = tickable[start];
+    if (!from) return;
+    const below = tickable.slice(start + 1);
+    const patches = new Map(below.map((row) => [row.key, copy(from, row)]));
+    const skipped = [...patches.values()].filter((patch) => patch === null).length;
+    apply(patched(rows, new Set(patches.keys()), (row) => patches.get(row.key) ?? {}));
+    if (skipped) setNote(t("budget.fillDown.skipped", { count: skipped }));
+  }
+  const currencyOf = (row: PlanRow) => accounts.get(row.accountId)?.currency;
+  const title = (name: string, copy: Copy) => (
+    <FillTitle
+      title={name}
+      disabled={tickable.length < 2}
+      onFill={canEdit && (() => fillDown(copy))}
+    />
+  );
+
   const onPatch = useCallback(
     (key: string, patch: Partial<PlanRow>) =>
-      setRows((old) => patched(old, new Set([key]), () => patch)),
-    [setRows],
+      edit(key, Object.keys(patch), (old) => patched(old, new Set([key]), () => patch)),
+    [edit],
   );
 
   function copyPrevious() {
@@ -782,12 +885,12 @@ export function PlanEntries({
               </Button>
               <ActionIcon
                 variant="default"
-                disabled={history.length === 0}
+                disabled={!history.canUndo}
                 aria-label={t("budget.tools.undo")}
                 title={t("budget.tools.undo")}
                 onClick={() => {
-                  setRows(history.at(-1)!);
-                  setHistory(history.slice(0, -1));
+                  history.undo();
+                  setNote("");
                 }}
               >
                 ↶
@@ -918,11 +1021,29 @@ export function PlanEntries({
                   />
                 </Table.Th>
                 <Table.Th w={130}>{t("journal.date")}</Table.Th>
-                <Table.Th w={170}>{t("journal.subCategory")}</Table.Th>
-                <Table.Th>{t("journal.description")}</Table.Th>
-                <Table.Th w={150}>{t("journal.account")}</Table.Th>
+                <Table.Th w={170}>
+                  {title(t("journal.subCategory"), (from) => ({
+                    subCategoryId: from.subCategoryId,
+                  }))}
+                </Table.Th>
+                <Table.Th>
+                  {title(t("journal.description"), (from) => ({ description: from.description }))}
+                </Table.Th>
+                <Table.Th w={150}>
+                  {title(t("journal.account"), (from, to) => {
+                    if (from.accountId === to.accountId) return {};
+                    if (currencyOf(from) === currencyOf(to)) return { accountId: from.accountId };
+                    // An entry of the journal keeps its currency.
+                    return to.id
+                      ? null
+                      : { accountId: from.accountId, exchangeRate: from.exchangeRate };
+                  })}
+                </Table.Th>
                 <Table.Th w={130} ta="right">
-                  {t("budget.plannedAmount")}
+                  {title(t("budget.plannedAmount"), (from, to) =>
+                    // An amount is in its account's currency.
+                    currencyOf(from) === currencyOf(to) ? { amount: from.amount } : null,
+                  )}
                 </Table.Th>
               </Table.Tr>
             </Table.Thead>

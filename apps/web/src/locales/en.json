@@ -392,6 +392,10 @@
     "createPlanned": "{count, plural, one {Create # entry} other {Create # entries}}",
     "reload": "Reload",
     "noPlannedTransfers": "No planned transfer this year.",
+    "fillDown": {
+      "button": "Fill down: {column}",
+      "skipped": "{count, plural, one {# row left unchanged} other {# rows left unchanged}}"
+    },
     "transfers": {
       "filter": "Filter (description, sub-category, account)",
       "count": "{count, plural, =0 {No transfer} one {# transfer} other {# transfers}}",
